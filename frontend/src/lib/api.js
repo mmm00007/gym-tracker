@@ -12,16 +12,34 @@ async function authHeaders() {
 
 export async function identifyMachine(images) {
   const headers = await authHeaders()
-  const res = await fetch(`${API_URL}/api/identify-machine`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ images }),
-  })
-  if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`Identify failed: ${err}`)
+  try {
+    const res = await fetch(`${API_URL}/api/identify-machine`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ images }),
+    })
+    if (!res.ok) {
+      const errText = (await res.text()).trim()
+      const detail = errText || `Server error (${res.status})`
+      throw new Error(`Identify failed: ${detail}`)
+    }
+    try {
+      return await res.json()
+    } catch {
+      throw new Error('Identify failed: Invalid JSON response from server.')
+    }
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      throw new Error('Identify failed: Request timed out. Please try again.')
+    }
+    if (err?.message?.startsWith('Identify failed:')) {
+      throw err
+    }
+    if (err instanceof TypeError) {
+      throw new Error('Identify failed: Backend unreachable. Check your connection and API URL.')
+    }
+    throw new Error('Identify failed: Unexpected error. Please try again.')
   }
-  return res.json()
 }
 
 export async function getRecommendations(currentSession, pastSessions, machines, sorenessData) {

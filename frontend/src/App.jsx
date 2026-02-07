@@ -327,15 +327,52 @@ function CameraScreen({ onIdentified, onCancel }) {
   const [images, setImages] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const fileRef = useRef()
+  const cameraRef = useRef()
+  const galleryRef = useRef()
+
+  const readFileAsBase64 = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(new Error('Could not read that image file. Please try again.'))
+    reader.onload = () => {
+      if (typeof reader.result !== 'string') {
+        reject(new Error('Invalid image data. Please choose a different photo.'))
+        return
+      }
+      const base64 = reader.result.split(',')[1]
+      if (!base64) {
+        reject(new Error('Empty image data detected. Please reselect the photo.'))
+        return
+      }
+      resolve(base64)
+    }
+    reader.readAsDataURL(file)
+  })
 
   const handleFiles = async (files) => {
-    const newImgs = []
-    for (const f of Array.from(files)) {
-      const data = await new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result.split(',')[1]); r.readAsDataURL(f) })
-      newImgs.push({ data, media_type: f.type || 'image/jpeg', preview: URL.createObjectURL(f) })
+    if (!files || files.length === 0) return
+    const available = 3 - images.length
+    if (available <= 0) {
+      setError('You can only upload up to 3 photos.')
+      return
     }
-    setImages(prev => [...prev, ...newImgs].slice(0, 3))
+    let lastError = null
+    const newImgs = []
+    for (const f of Array.from(files).slice(0, available)) {
+      try {
+        const data = await readFileAsBase64(f)
+        newImgs.push({ data, media_type: f.type || 'image/jpeg', preview: URL.createObjectURL(f) })
+      } catch (err) {
+        lastError = err
+      }
+    }
+    if (newImgs.length) {
+      setImages(prev => [...prev, ...newImgs].slice(0, 3))
+    }
+    if (lastError) {
+      setError(lastError.message)
+    } else {
+      setError(null)
+    }
   }
 
   const analyze = async () => {
@@ -344,7 +381,7 @@ function CameraScreen({ onIdentified, onCancel }) {
       const result = await identifyMachine(images.map(i => ({ data: i.data, media_type: i.media_type })))
       onIdentified(result)
     } catch (e) {
-      setError('Could not identify. Try clearer photos.')
+      setError(e.message || 'Could not identify. Try clearer photos.')
       console.error(e)
     }
     setLoading(false)
@@ -354,15 +391,27 @@ function CameraScreen({ onIdentified, onCancel }) {
     <div style={{ padding: '20px 16px', minHeight: '100dvh' }}>
       <TopBar left={<BackBtn onClick={onCancel} />} title="IDENTIFY MACHINE" />
 
-      <div onClick={() => fileRef.current?.click()} style={{
-        border: '2px dashed var(--border-light)', borderRadius: 16, padding: 32, textAlign: 'center',
-        marginBottom: 16, cursor: 'pointer', background: 'var(--surface)',
+      <div style={{
+        border: '2px dashed var(--border-light)', borderRadius: 16, padding: 24, textAlign: 'center',
+        marginBottom: 16, background: 'var(--surface)',
       }}>
-        <input ref={fileRef} type="file" accept="image/*" capture="environment" multiple
-          onChange={(e) => handleFiles(e.target.files)} style={{ display: 'none' }} />
+        <input ref={cameraRef} type="file" accept="image/*" capture="environment"
+          onChange={async (e) => { await handleFiles(e.target.files); e.target.value = '' }} style={{ display: 'none' }} />
+        <input ref={galleryRef} type="file" accept="image/*" multiple
+          onChange={async (e) => { await handleFiles(e.target.files); e.target.value = '' }} style={{ display: 'none' }} />
         <div style={{ fontSize: 40, marginBottom: 12 }}>📸</div>
-        <div style={{ fontSize: 16, fontWeight: 600, color: '#ccc' }}>Tap to take photo</div>
-        <div style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 4 }}>or select from gallery · up to 3</div>
+        <div style={{ fontSize: 16, fontWeight: 600, color: '#ccc', marginBottom: 8 }}>Add up to 3 photos</div>
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
+          <button onClick={() => cameraRef.current?.click()} style={{
+            padding: '10px 16px', borderRadius: 10, fontSize: 14, fontWeight: 700,
+            background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--text)',
+          }}>Take Photo</button>
+          <button onClick={() => galleryRef.current?.click()} style={{
+            padding: '10px 16px', borderRadius: 10, fontSize: 14, fontWeight: 700,
+            background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--text)',
+          }}>Gallery</button>
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--text-dim)' }}>{images.length}/3 selected</div>
       </div>
 
       {images.length > 0 && (
