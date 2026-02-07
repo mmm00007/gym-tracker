@@ -19,14 +19,16 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Gym Tracker API")
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
-ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
+raw_allowed_origins = os.environ.get("ALLOWED_ORIGINS", "http://localhost:5173")
+ALLOWED_ORIGINS = [origin.strip() for origin in raw_allowed_origins.split(",") if origin.strip()]
+ALLOW_ALL_ORIGINS = len(ALLOWED_ORIGINS) == 1 and ALLOWED_ORIGINS[0] == "*"
 ANTHROPIC_MODEL = "claude-sonnet-4-20250514"
 MAX_HISTORY_TOKENS = 4000
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
+    allow_origins=["*"] if ALLOW_ALL_ORIGINS else ALLOWED_ORIGINS,
+    allow_credentials=False if ALLOW_ALL_ORIGINS else True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
