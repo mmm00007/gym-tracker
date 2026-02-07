@@ -1664,7 +1664,9 @@ export default function App() {
           return machineSets.length ? buildSessionMetrics(s, machineSets) : null
         }),
       )
-      const filtered = entries.filter(Boolean)
+      const filtered = entries
+        .filter(Boolean)
+        .sort((a, b) => new Date(a.session.started_at) - new Date(b.session.started_at))
       setMachineHistory(prev => ({ ...prev, [machineId]: filtered }))
       setMachineHistoryStatus(prev => ({ ...prev, [machineId]: 'done' }))
     } catch (error) {
