@@ -16,6 +16,68 @@ const fmtTime = (d) => new Date(d).toLocaleTimeString('en-GB', { hour: '2-digit'
 const fmtDur = (ms) => { const m = Math.floor(ms / 60000); return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m` }
 const fmtTimer = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 
+const fmtNumber = (value, digits = 1) => {
+  if (!Number.isFinite(value)) return '0'
+  return value.toLocaleString('en-GB', { maximumFractionDigits: digits, minimumFractionDigits: value % 1 ? digits : 0 })
+}
+
+const estimate1RM = (weight, reps) => weight * (1 + reps / 30)
+
+const buildMetrics = (sets) => {
+  if (!sets.length) {
+    return {
+      totalVolume: 0,
+      totalSets: 0,
+      totalReps: 0,
+      avgLoad: 0,
+      avgRepsPerSet: 0,
+      maxStandardized: 0,
+      estOneRm: 0,
+      hardSets: 0,
+      bestSet: null,
+      maxWeight: 0,
+    }
+  }
+  const totalSets = sets.length
+  const totalReps = sets.reduce((sum, s) => sum + s.reps, 0)
+  const totalVolume = sets.reduce((sum, s) => sum + s.reps * s.weight, 0)
+  const avgLoad = totalReps ? totalVolume / totalReps : 0
+  const avgRepsPerSet = totalSets ? totalReps / totalSets : 0
+  const maxWeight = Math.max(...sets.map(s => s.weight))
+  const standardizedCandidates = sets.filter(s => s.reps >= 5 && s.reps <= 8)
+  const maxStandardized = standardizedCandidates.length
+    ? Math.max(...standardizedCandidates.map(s => s.weight))
+    : maxWeight
+  let bestSet = null
+  let estOneRm = 0
+  sets.forEach((s) => {
+    const estimate = estimate1RM(s.weight, s.reps)
+    if (estimate > estOneRm) {
+      estOneRm = estimate
+      bestSet = s
+    }
+  })
+  const hardSets = sets.filter(s => s.reps <= 8 || s.weight >= maxWeight * 0.9).length
+  return {
+    totalVolume,
+    totalSets,
+    totalReps,
+    avgLoad,
+    avgRepsPerSet,
+    maxStandardized,
+    estOneRm,
+    hardSets,
+    bestSet,
+    maxWeight,
+  }
+}
+
+const buildSessionMetrics = (session, sets) => ({
+  session,
+  sets,
+  metrics: buildMetrics(sets),
+})
+
 const MUSCLE_COLORS = {
   Chest: '#ff6b6b', Back: '#4ecdc4', Shoulders: '#ffe66d', Biceps: '#ff8a5c',
   Triceps: '#a8e6cf', Legs: '#88d8b0', Core: '#ffd93d', Glutes: '#c9b1ff',
@@ -158,6 +220,35 @@ function RestTimer({ seconds }) {
   )
 }
 
+function MiniBarChart({ values, color, height = 60 }) {
+  const max = Math.max(...values, 0)
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height }}>
+      {values.map((v, i) => (
+        <div key={i} style={{
+          flex: 1,
+          height: max ? `${Math.max(8, (v / max) * height)}px` : '8px',
+          background: `linear-gradient(180deg, ${color}cc, ${color}44)`,
+          borderRadius: 6,
+        }} />
+      ))}
+    </div>
+  )
+}
+
+function MetricCard({ label, value, sub }) {
+  return (
+    <div style={{
+      background: 'var(--surface)', borderRadius: 12, padding: 12, border: '1px solid var(--border)',
+      display: 'flex', flexDirection: 'column', gap: 4, minWidth: 120,
+    }}>
+      <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)' }}>{label}</div>
+      <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', fontFamily: 'var(--font-mono)' }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{sub}</div>}
+    </div>
+  )
+}
+
 // ─── Auth Screen ───────────────────────────────────────────
 
 function AuthScreen({ onAuth }) {
@@ -283,7 +374,19 @@ function SorenessPrompt({ session, muscleGroups, onSubmit, onDismiss }) {
 
 // ─── Home Screen ───────────────────────────────────────────
 
-function HomeScreen({ activeSession, pendingSoreness, machines, onStart, onResume, onHistory, onDiagnostics, onSorenessSubmit, onSorenessDismiss, onSignOut }) {
+function HomeScreen({
+  activeSession,
+  pendingSoreness,
+  machines,
+  onStart,
+  onResume,
+  onHistory,
+  onAnalysis,
+  onDiagnostics,
+  onSorenessSubmit,
+  onSorenessDismiss,
+  onSignOut,
+}) {
   return (
     <div style={{ padding: '20px 16px', minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -337,6 +440,13 @@ function HomeScreen({ activeSession, pendingSoreness, machines, onStart, onResum
         }}>
           <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>📊 History & Insights</div>
           <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Past sessions & AI recommendations</div>
+        </button>
+
+        <button onClick={onAnalysis} style={{
+          background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, textAlign: 'left',
+        }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>📈 Analysis</div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Detailed machine metrics and trends</div>
         </button>
 
         <button onClick={onDiagnostics} style={{
@@ -631,7 +741,19 @@ function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
 
 // ─── Session Screen ────────────────────────────────────────
 
-function SessionScreen({ session, sets, machines, onLogSet, onDeleteSet, onEndSession, onBack, onSaveMachine, onDeleteMachine }) {
+function SessionScreen({
+  session,
+  sets,
+  machines,
+  machineHistory,
+  onLoadMachineHistory,
+  onLogSet,
+  onDeleteSet,
+  onEndSession,
+  onBack,
+  onSaveMachine,
+  onDeleteMachine,
+}) {
   const [view, setView] = useState('log')
   const [selectedMachine, setSelectedMachine] = useState(null)
   const [editingMachine, setEditingMachine] = useState(null)
@@ -668,6 +790,12 @@ function SessionScreen({ session, sets, machines, onLogSet, onDeleteSet, onEndSe
     }
     setView('log')
   }
+
+  useEffect(() => {
+    if (selectedMachine) {
+      onLoadMachineHistory(selectedMachine.id)
+    }
+  }, [selectedMachine, onLoadMachineHistory])
 
   const handleLog = async () => {
     if (!selectedMachine || logging) return
@@ -762,6 +890,13 @@ function SessionScreen({ session, sets, machines, onLogSet, onDeleteSet, onEndSe
 
   // Main log view
   const setsForMachine = selectedMachine ? sets.filter(s => s.machine_id === selectedMachine.id) : []
+  const historyForMachine = selectedMachine ? (machineHistory[selectedMachine.id] || []) : []
+  const sessionMetrics = buildMetrics(setsForMachine)
+  const trendHistory = historyForMachine.slice(-5)
+  const trendValues = [
+    ...trendHistory.map(entry => entry.metrics.totalVolume),
+    ...(setsForMachine.length ? [sessionMetrics.totalVolume] : []),
+  ]
 
   return (
     <div style={{ padding: '20px 16px', paddingBottom: 100, minHeight: '100dvh' }}>
@@ -822,6 +957,38 @@ function SessionScreen({ session, sets, machines, onLogSet, onDeleteSet, onEndSe
             fontFamily: 'var(--font-mono)', marginBottom: 24, boxShadow: '0 0 30px var(--accent)33',
             opacity: logging ? 0.6 : 1,
           }}>LOG SET ✓</button>
+
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 2, marginBottom: 10, fontFamily: 'var(--font-code)' }}>
+              MACHINE SNAPSHOT
+            </div>
+            {setsForMachine.length === 0 ? (
+              <div style={{ fontSize: 13, color: 'var(--text-dim)', background: 'var(--surface)', borderRadius: 12, padding: 12, border: '1px solid var(--border)' }}>
+                Log your first set to see live metrics for this machine.
+              </div>
+            ) : (
+              <div style={{ background: 'var(--surface)', borderRadius: 14, padding: 14, border: '1px solid var(--border)' }}>
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Volume load trend</div>
+                  {trendValues.length ? (
+                    <MiniBarChart values={trendValues} color="var(--accent)" height={50} />
+                  ) : (
+                    <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>No history yet.</div>
+                  )}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+                  <MetricCard label="Total volume" value={`${fmtNumber(sessionMetrics.totalVolume, 0)} kg`} />
+                  <MetricCard label="Working sets" value={fmtNumber(sessionMetrics.totalSets, 0)} />
+                  <MetricCard label="Total reps" value={fmtNumber(sessionMetrics.totalReps, 0)} />
+                  <MetricCard label="Avg load/rep" value={`${fmtNumber(sessionMetrics.avgLoad, 1)} kg`} />
+                  <MetricCard label="Avg reps/set" value={fmtNumber(sessionMetrics.avgRepsPerSet, 1)} />
+                  <MetricCard label="Max weight (5-8)" value={`${fmtNumber(sessionMetrics.maxStandardized, 1)} kg`} sub="Fallback: session max" />
+                  <MetricCard label="Est. 1RM" value={`${fmtNumber(sessionMetrics.estOneRm, 1)} kg`} sub={sessionMetrics.bestSet ? `${sessionMetrics.bestSet.weight}×${sessionMetrics.bestSet.reps}` : null} />
+                  <MetricCard label="Hard sets" value={fmtNumber(sessionMetrics.hardSets, 0)} sub="Proxy: ≤8 reps or ≥90% max" />
+                </div>
+              </div>
+            )}
+          </div>
 
           {setsForMachine.length > 0 && (
             <div style={{ marginBottom: 20 }}>
@@ -993,6 +1160,115 @@ function HistoryScreen({ sessions, machines, onBack, onViewSession }) {
             </div>
           ))}
         </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Analysis Screen ───────────────────────────────────────
+
+function AnalysisScreen({ machines, machineHistory, onLoadMachineHistory, onBack }) {
+  const [selectedMachineId, setSelectedMachineId] = useState(machines[0]?.id || '')
+
+  useEffect(() => {
+    if (selectedMachineId) {
+      onLoadMachineHistory(selectedMachineId)
+    }
+  }, [selectedMachineId, onLoadMachineHistory])
+
+  useEffect(() => {
+    if (!selectedMachineId && machines.length) {
+      setSelectedMachineId(machines[0].id)
+    }
+  }, [machines, selectedMachineId])
+
+  const history = selectedMachineId ? (machineHistory[selectedMachineId] || []) : []
+  const metricConfigs = [
+    { key: 'totalVolume', label: 'Total volume load (kg)', color: 'var(--accent)', format: (v) => `${fmtNumber(v, 0)} kg` },
+    { key: 'totalSets', label: 'Total working sets', color: 'var(--blue)', format: (v) => fmtNumber(v, 0) },
+    { key: 'totalReps', label: 'Total reps', color: '#ffe66d', format: (v) => fmtNumber(v, 0) },
+    { key: 'avgLoad', label: 'Average load per rep', color: '#4ecdc4', format: (v) => `${fmtNumber(v, 1)} kg` },
+    { key: 'avgRepsPerSet', label: 'Average reps per set', color: '#ff8a5c', format: (v) => fmtNumber(v, 1) },
+    { key: 'maxStandardized', label: 'Max weight (5–8 reps)', color: '#c9b1ff', format: (v) => `${fmtNumber(v, 1)} kg` },
+    { key: 'estOneRm', label: 'Estimated 1RM (best set)', color: '#88d8b0', format: (v) => `${fmtNumber(v, 1)} kg` },
+    { key: 'hardSets', label: 'Hard sets (proxy)', color: '#ff6b6b', format: (v) => fmtNumber(v, 0) },
+  ]
+
+  return (
+    <div style={{ padding: '20px 16px', minHeight: '100dvh' }}>
+      <TopBar left={<BackBtn onClick={onBack} />} title="ANALYSIS" />
+
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)', marginBottom: 6 }}>MACHINE</div>
+        <select value={selectedMachineId} onChange={(e) => setSelectedMachineId(e.target.value)} style={{
+          width: '100%', padding: 12, borderRadius: 10, border: '1px solid var(--border)',
+          background: 'var(--surface)', color: 'var(--text)', fontSize: 14,
+        }}>
+          {machines.map((m) => (
+            <option key={m.id} value={m.id}>{m.movement}</option>
+          ))}
+        </select>
+      </div>
+
+      {history.length === 0 ? (
+        <div style={{ background: 'var(--surface)', borderRadius: 14, padding: 16, border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
+          No logged sessions for this machine yet.
+        </div>
+      ) : (
+        <>
+          {metricConfigs.map((metric) => {
+            const values = history.map(h => h.metrics[metric.key])
+            const lastEntry = history[history.length - 1]
+            const lastValue = lastEntry?.metrics[metric.key] ?? 0
+            const previousValue = history.length > 1 ? history[history.length - 2].metrics[metric.key] : null
+            const delta = previousValue !== null ? lastValue - previousValue : null
+            return (
+              <div key={metric.key} style={{ background: 'var(--surface)', borderRadius: 14, padding: 14, border: '1px solid var(--border)', marginBottom: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{metric.label}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    Latest: {metric.format(lastValue)}
+                    {delta !== null && (
+                      <span style={{ marginLeft: 8, color: delta >= 0 ? 'var(--accent)' : 'var(--red)' }}>
+                        {delta >= 0 ? '+' : ''}{metric.format(delta)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <MiniBarChart values={values} color={metric.color} height={70} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 11, color: 'var(--text-dim)' }}>
+                  <span>{fmt(history[0].session.started_at)}</span>
+                  <span>{fmt(history[history.length - 1].session.started_at)}</span>
+                </div>
+              </div>
+            )
+          })}
+
+          <div style={{ background: 'var(--surface)', borderRadius: 14, padding: 14, border: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 12, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)', marginBottom: 8 }}>
+              SESSION BREAKDOWN (LATEST 6)
+            </div>
+            {history.slice(-6).reverse().map((entry) => (
+              <div key={entry.session.id} style={{
+                borderRadius: 12, border: '1px solid var(--border)', padding: 12, marginBottom: 8,
+                background: 'var(--surface2)',
+              }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>
+                  {fmtFull(entry.session.started_at)}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
+                  <MetricCard label="Volume" value={`${fmtNumber(entry.metrics.totalVolume, 0)} kg`} />
+                  <MetricCard label="Working sets" value={fmtNumber(entry.metrics.totalSets, 0)} />
+                  <MetricCard label="Total reps" value={fmtNumber(entry.metrics.totalReps, 0)} />
+                  <MetricCard label="Avg load/rep" value={`${fmtNumber(entry.metrics.avgLoad, 1)} kg`} />
+                  <MetricCard label="Max 5–8" value={`${fmtNumber(entry.metrics.maxStandardized, 1)} kg`} />
+                  <MetricCard label="Est. 1RM" value={`${fmtNumber(entry.metrics.estOneRm, 1)} kg`} />
+                  <MetricCard label="Hard sets" value={fmtNumber(entry.metrics.hardSets, 0)} sub="Proxy rule" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   )
@@ -1200,6 +1476,8 @@ export default function App() {
   const [summarySession, setSummarySession] = useState(null)
   const [summarySets, setSummarySets] = useState([])
   const [recommendations, setRecommendations] = useState(null)
+  const [machineHistory, setMachineHistory] = useState({})
+  const [machineHistoryStatus, setMachineHistoryStatus] = useState({})
 
   // Auth listener
   useEffect(() => {
@@ -1251,6 +1529,11 @@ export default function App() {
   }, [user])
 
   useEffect(() => { if (user) loadData() }, [user, loadData])
+
+  useEffect(() => {
+    setMachineHistory({})
+    setMachineHistoryStatus({})
+  }, [sessions.length])
 
   // ─── Actions ─────────────────────────────────────────────
   const handleStartSession = async () => {
@@ -1369,6 +1652,27 @@ export default function App() {
     setScreen('summary')
   }
 
+  const loadMachineHistory = useCallback(async (machineId) => {
+    if (!machineId) return
+    if (machineHistory[machineId] || machineHistoryStatus[machineId] === 'loading') return
+    setMachineHistoryStatus(prev => ({ ...prev, [machineId]: 'loading' }))
+    try {
+      const entries = await Promise.all(
+        sessions.map(async (s) => {
+          const sets = await getSetsForSession(s.id)
+          const machineSets = sets.filter(st => st.machine_id === machineId)
+          return machineSets.length ? buildSessionMetrics(s, machineSets) : null
+        }),
+      )
+      const filtered = entries.filter(Boolean)
+      setMachineHistory(prev => ({ ...prev, [machineId]: filtered }))
+      setMachineHistoryStatus(prev => ({ ...prev, [machineId]: 'done' }))
+    } catch (error) {
+      addLog({ level: 'error', event: 'machine_history.failed', message: error?.message || 'Failed to load machine history.' })
+      setMachineHistoryStatus(prev => ({ ...prev, [machineId]: 'error' }))
+    }
+  }, [machineHistory, machineHistoryStatus, sessions])
+
   // ─── Loading / Auth ──────────────────────────────────────
   if (user === undefined) {
     return (
@@ -1387,6 +1691,7 @@ export default function App() {
           activeSession={activeSession} pendingSoreness={pendingSoreness}
           machines={machines} onStart={handleStartSession}
           onResume={() => setScreen('session')} onHistory={() => setScreen('history')}
+          onAnalysis={() => setScreen('analysis')}
           onDiagnostics={() => setScreen('diagnostics')}
           onSorenessSubmit={handleSorenessSubmit} onSorenessDismiss={handleSorenessDismiss}
           onSignOut={async () => { await signOut(); setUser(null); setScreen('home') }}
@@ -1395,6 +1700,7 @@ export default function App() {
       {screen === 'session' && activeSession && (
         <SessionScreen
           session={activeSession} sets={currentSets} machines={machines}
+          machineHistory={machineHistory} onLoadMachineHistory={loadMachineHistory}
           onLogSet={handleLogSet} onDeleteSet={handleDeleteSet}
           onEndSession={handleEndSession} onBack={() => setScreen('home')}
           onSaveMachine={handleSaveMachine} onDeleteMachine={handleDeleteMachine}
@@ -1412,6 +1718,14 @@ export default function App() {
           sessions={sessions} machines={machines}
           onBack={() => setScreen('home')}
           onViewSession={handleViewHistorySession}
+        />
+      )}
+      {screen === 'analysis' && (
+        <AnalysisScreen
+          machines={machines}
+          machineHistory={machineHistory}
+          onLoadMachineHistory={loadMachineHistory}
+          onBack={() => setScreen('home')}
         />
       )}
       {screen === 'diagnostics' && (
