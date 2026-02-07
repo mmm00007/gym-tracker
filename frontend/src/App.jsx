@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   supabase, signUp, signIn, signOut, getSession,
   getMachines, upsertMachine, deleteMachine as dbDeleteMachine,
@@ -859,6 +859,9 @@ function DiagnosticsScreen({ user, onBack }) {
   const [healthStatus, setHealthStatus] = useState(null)
   const [authInfo, setAuthInfo] = useState({ state: 'loading', session: null, error: null })
   const [copyStatus, setCopyStatus] = useState(null)
+  const [copyFallback, setCopyFallback] = useState('')
+  const [levelFilter, setLevelFilter] = useState('all')
+  const [eventFilter, setEventFilter] = useState('')
 
   useEffect(() => {
     const unsubscribe = subscribeLogs(setLogs)
@@ -874,6 +877,7 @@ function DiagnosticsScreen({ user, onBack }) {
         setAuthInfo({ state: session ? 'authenticated' : 'anonymous', session, error: null })
       } catch (error) {
         if (!active) return
+        addLog({ level: 'error', event: 'auth.session_error', message: error?.message || 'Failed to load session.' })
         setAuthInfo({ state: 'error', session: null, error })
       }
     }
@@ -895,7 +899,7 @@ function DiagnosticsScreen({ user, onBack }) {
 
   const handleCopyLogs = async () => {
     const payload = logs.map((entry) => (
-      `${entry.timestamp} [${entry.level}] ${entry.event} ${entry.message} ${Object.keys(entry.meta || {}).length ? JSON.stringify(entry.meta) : ''}`
+      `${entry.timestamp} [${entry.level}] ${entry.event} ${entry.message} ${Object.keys(entry.meta || {}).length ? JSON.stringify(entry.meta) : ''}${entry.count > 1 ? ` (x${entry.count})` : ''}`
     )).join('\n')
     if (!payload) {
       setCopyStatus('No logs to copy.')
@@ -905,17 +909,28 @@ function DiagnosticsScreen({ user, onBack }) {
       if (navigator?.clipboard?.writeText) {
         await navigator.clipboard.writeText(payload)
         setCopyStatus('Logs copied to clipboard.')
+        setCopyFallback('')
         addLog({ level: 'info', event: 'logs.copied', message: 'Logs copied to clipboard.' })
       } else {
         setCopyStatus('Clipboard not available on this device.')
+        setCopyFallback(payload)
       }
     } catch (error) {
       setCopyStatus('Failed to copy logs.')
+      setCopyFallback(payload)
       addLog({ level: 'error', event: 'logs.copy_failed', message: error?.message || 'Copy failed.' })
     }
   }
 
-  const recentLogs = logs.slice(-20).reverse()
+  const filteredLogs = useMemo(() => {
+    const normalizedEvent = eventFilter.trim().toLowerCase()
+    return logs.filter((entry) => {
+      const levelOk = levelFilter === 'all' || entry.level === levelFilter
+      const eventOk = !normalizedEvent || entry.event.toLowerCase().includes(normalizedEvent)
+      return levelOk && eventOk
+    })
+  }, [logs, levelFilter, eventFilter])
+  const recentLogs = filteredLogs.slice(-20).reverse()
   const session = authInfo.session
   const expiresAt = session?.expires_at ? new Date(session.expires_at * 1000).toLocaleString() : 'n/a'
 
@@ -967,7 +982,32 @@ function DiagnosticsScreen({ user, onBack }) {
             color: 'var(--text)', fontSize: 12, fontWeight: 600,
           }}>Copy logs</button>
         </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+          {['all', 'info', 'error'].map((level) => (
+            <button key={level} onClick={() => setLevelFilter(level)} style={{
+              padding: '4px 10px', borderRadius: 999, border: '1px solid var(--border)',
+              background: levelFilter === level ? 'var(--surface2)' : 'transparent',
+              color: levelFilter === level ? 'var(--text)' : 'var(--text-dim)', fontSize: 11,
+            }}>{level.toUpperCase()}</button>
+          ))}
+          <input value={eventFilter} onChange={(e) => setEventFilter(e.target.value)}
+            placeholder="Filter by event"
+            style={{
+              flex: 1, minWidth: 140, padding: '4px 10px', borderRadius: 999, border: '1px solid var(--border)',
+              background: 'var(--surface2)', color: 'var(--text)', fontSize: 11,
+            }} />
+        </div>
         {copyStatus && <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 8 }}>{copyStatus}</div>}
+        {copyFallback && (
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 6 }}>Select and copy the logs below:</div>
+            <textarea readOnly value={copyFallback} rows={4}
+              style={{
+                width: '100%', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface2)',
+                color: 'var(--text)', fontSize: 11, padding: 8, boxSizing: 'border-box',
+              }} />
+          </div>
+        )}
         {recentLogs.length === 0 ? (
           <div style={{ fontSize: 13, color: 'var(--text-dim)' }}>No logs captured yet.</div>
         ) : (
@@ -978,7 +1018,7 @@ function DiagnosticsScreen({ user, onBack }) {
                 fontSize: 12, color: 'var(--text)',
               }}>
                 <div style={{ fontFamily: 'var(--font-code)', color: 'var(--text-dim)', marginBottom: 4 }}>
-                  {new Date(entry.timestamp).toLocaleString()} · {entry.level.toUpperCase()}
+                  {new Date(entry.timestamp).toLocaleString()} · {entry.level.toUpperCase()}{entry.count > 1 ? ` · x${entry.count}` : ''}
                 </div>
                 <div style={{ fontWeight: 600, marginBottom: 4 }}>{entry.event}</div>
                 <div style={{ color: 'var(--text-muted)', marginBottom: entry.meta && Object.keys(entry.meta).length ? 6 : 0 }}>
@@ -1017,11 +1057,25 @@ export default function App() {
 
   // Auth listener
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => setUser(user || null))
+    let active = true
+    const loadUser = async () => {
+      const { data, error } = await supabase.auth.getUser()
+      if (!active) return
+      if (error) {
+        addLog({ level: 'error', event: 'auth.get_user_failed', message: error.message })
+        setUser(null)
+        return
+      }
+      setUser(data?.user || null)
+    }
+    loadUser()
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user || null)
     })
-    return () => subscription.unsubscribe()
+    return () => {
+      active = false
+      subscription.unsubscribe()
+    }
   }, [])
 
   // Load data when user is authenticated
@@ -1045,6 +1099,7 @@ export default function App() {
       }))
       setPendingSoreness(enriched)
     } catch (e) {
+      addLog({ level: 'error', event: 'data.load_failed', message: e?.message || 'Failed to load data.' })
       console.error('Load error:', e)
     }
   }, [user])
@@ -1139,6 +1194,7 @@ export default function App() {
       // Save recs to session
       await dbEndSession(activeSession.id, recs)
     } catch (e) {
+      addLog({ level: 'error', event: 'recs.failed', message: e?.message || 'Failed to generate recommendations.' })
       console.error('Recs error:', e)
       setRecommendations({ summary: 'Could not generate insights.', highlights: [], suggestions: [], nextSession: '' })
     }

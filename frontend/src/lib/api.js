@@ -85,20 +85,45 @@ export async function pingHealth() {
 }
 
 export async function getRecommendations(currentSession, pastSessions, machines, sorenessData) {
-  const headers = await authHeaders()
-  const res = await fetch(`${API_URL}/api/recommendations`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      current_session: currentSession,
-      past_sessions: pastSessions,
-      machines,
-      soreness_data: sorenessData || [],
-    }),
+  const requestId = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  const startTime = Date.now()
+  addLog({
+    level: 'info',
+    event: 'recs.start',
+    message: 'Recommendations request started.',
+    meta: { requestId, url: `${API_URL}/api/recommendations` },
   })
-  if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`Recommendations failed: ${err}`)
+  const headers = await authHeaders()
+  try {
+    const res = await fetch(`${API_URL}/api/recommendations`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        current_session: currentSession,
+        past_sessions: pastSessions,
+        machines,
+        soreness_data: sorenessData || [],
+      }),
+    })
+    addLog({
+      level: res.ok ? 'info' : 'error',
+      event: 'recs.response',
+      message: res.ok ? 'Recommendations response received.' : 'Recommendations response error.',
+      meta: { requestId, status: res.status, ok: res.ok, duration_ms: Date.now() - startTime },
+    })
+    if (!res.ok) {
+      const err = (await res.text()).trim()
+      const detail = err || `Server error (${res.status})`
+      throw new Error(`Recommendations failed: ${detail}`)
+    }
+    return res.json()
+  } catch (error) {
+    addLog({
+      level: 'error',
+      event: 'recs.error',
+      message: error?.message || 'Recommendations request failed.',
+      meta: { requestId, duration_ms: Date.now() - startTime },
+    })
+    throw error
   }
-  return res.json()
 }
