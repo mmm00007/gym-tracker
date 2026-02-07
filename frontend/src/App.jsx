@@ -98,25 +98,46 @@ function QuickAdjust({ value, onChange, step, color, min = 0 }) {
 
 function MachineCard({ machine, onSelect, onEdit, compact }) {
   const primaryColor = mc(machine.muscle_groups?.[0])
+  const thumbnails = machine.thumbnails || []
+  const thumb = thumbnails[0]
   return (
     <div onClick={onSelect} style={{
       background: 'linear-gradient(135deg, var(--surface), var(--surface2))', border: '1px solid var(--border)',
       borderRadius: 14, padding: compact ? 12 : 16, cursor: 'pointer', borderLeft: `3px solid ${primaryColor}`,
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--font-mono)', marginBottom: 4 }}>{machine.name}</div>
-          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 6 }}>{machine.movement}</div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {machine.muscle_groups?.map((m, i) => <Pill key={i} text={m} color={mc(m)} />)}
-          </div>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+        <div style={{
+          width: compact ? 48 : 60, height: compact ? 48 : 60, borderRadius: 12, overflow: 'hidden', flexShrink: 0,
+          background: 'var(--surface2)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: 'var(--text-dim)', fontSize: 20, position: 'relative',
+        }}>
+          {thumb ? (
+            <img src={thumb} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          ) : (
+            <span>🏋️</span>
+          )}
+          {thumbnails.length > 1 && (
+            <div style={{
+              position: 'absolute', bottom: 4, right: 4, background: 'rgba(0,0,0,0.6)', color: '#fff',
+              fontSize: 10, padding: '2px 6px', borderRadius: 999, fontWeight: 700,
+            }}>+{thumbnails.length - 1}</div>
+          )}
         </div>
-        {onEdit && (
-          <button onClick={(e) => { e.stopPropagation(); onEdit() }} style={{
-            border: '1px solid var(--border-light)', borderRadius: 8, color: 'var(--text-muted)',
-            padding: '4px 10px', fontSize: 12,
-          }}>✎</button>
-        )}
+        <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--font-mono)', marginBottom: 4 }}>{machine.name}</div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 6 }}>{machine.movement}</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {machine.muscle_groups?.map((m, i) => <Pill key={i} text={m} color={mc(m)} />)}
+            </div>
+          </div>
+          {onEdit && (
+            <button onClick={(e) => { e.stopPropagation(); onEdit() }} style={{
+              border: '1px solid var(--border-light)', borderRadius: 8, color: 'var(--text-muted)',
+              padding: '4px 10px', fontSize: 12, height: 'fit-content',
+            }}>✎</button>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -402,7 +423,8 @@ function CameraScreen({ onIdentified, onCancel }) {
     setLoading(true); setError(null)
     try {
       const result = await identifyMachine(images.map(i => ({ data: i.data, media_type: i.media_type })))
-      onIdentified(result)
+      const thumbnails = images.map((img) => `data:${img.media_type};base64,${img.data}`)
+      onIdentified({ ...result, thumbnails })
     } catch (e) {
       setError(e.message || 'Could not identify. Try clearer photos.')
       console.error(e)
@@ -473,6 +495,48 @@ function CameraScreen({ onIdentified, onCancel }) {
 function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
   const [form, setForm] = useState({ ...machine })
   const upd = (k, v) => setForm({ ...form, [k]: v })
+  const thumbRef = useRef(null)
+  const instructionRef = useRef(null)
+
+  const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(new Error('Could not read image file.'))
+    reader.onload = () => {
+      if (typeof reader.result !== 'string') {
+        reject(new Error('Invalid image data.'))
+        return
+      }
+      resolve(reader.result)
+    }
+    reader.readAsDataURL(file)
+  })
+
+  const addThumbnails = async (files) => {
+    if (!files?.length) return
+    const existing = form.thumbnails || []
+    const incoming = Array.from(files).slice(0, 4 - existing.length)
+    const dataUrls = []
+    for (const file of incoming) {
+      try {
+        dataUrls.push(await readFileAsDataUrl(file))
+      } catch (err) {
+        console.error(err)
+      }
+    }
+    if (dataUrls.length) {
+      upd('thumbnails', [...existing, ...dataUrls])
+    }
+  }
+
+  const setInstructionImage = async (file) => {
+    if (!file) return
+    try {
+      const dataUrl = await readFileAsDataUrl(file)
+      upd('instruction_image', dataUrl)
+    } catch (err) {
+      console.error(err)
+    }
+  }
 
   const fields = [
     ['name', 'Machine Name', 'text'],
@@ -505,6 +569,51 @@ function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
           style={{ width: '100%', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 12, color: 'var(--text)', fontSize: 16, boxSizing: 'border-box' }} />
       </div>
 
+      <div style={{ marginBottom: 16 }}>
+        <label style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6, fontFamily: 'var(--font-code)' }}>Machine Thumbnails</label>
+        <input ref={thumbRef} type="file" accept="image/*" multiple
+          onChange={async (e) => { await addThumbnails(e.target.files); e.target.value = '' }}
+          style={{ display: 'none' }} />
+        <button onClick={() => thumbRef.current?.click()} style={{
+          padding: '10px 14px', borderRadius: 10, fontSize: 14, fontWeight: 700,
+          background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--text)',
+        }}>Add thumbnails</button>
+        <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 6 }}>{(form.thumbnails || []).length}/4 selected</div>
+        {(form.thumbnails || []).length > 0 && (
+          <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+            {form.thumbnails.map((thumb, i) => (
+              <div key={i} style={{ position: 'relative' }}>
+                <img src={thumb} alt="" style={{ width: 78, height: 78, objectFit: 'cover', borderRadius: 12, border: '1px solid var(--border)' }} />
+                <button onClick={() => upd('thumbnails', form.thumbnails.filter((_, idx) => idx !== i))} style={{
+                  position: 'absolute', top: -6, right: -6, width: 22, height: 22, borderRadius: 11,
+                  background: 'var(--red)', color: '#fff', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>×</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <label style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6, fontFamily: 'var(--font-code)' }}>Instruction Image</label>
+        <input ref={instructionRef} type="file" accept="image/*"
+          onChange={async (e) => { await setInstructionImage(e.target.files?.[0]); e.target.value = '' }}
+          style={{ display: 'none' }} />
+        <button onClick={() => instructionRef.current?.click()} style={{
+          padding: '10px 14px', borderRadius: 10, fontSize: 14, fontWeight: 700,
+          background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--text)',
+        }}>{form.instruction_image ? 'Replace instruction image' : 'Add instruction image'}</button>
+        {form.instruction_image && (
+          <div style={{ marginTop: 10, position: 'relative', width: '100%', maxWidth: 320 }}>
+            <img src={form.instruction_image} alt="" style={{ width: '100%', borderRadius: 12, border: '1px solid var(--border)', objectFit: 'cover' }} />
+            <button onClick={() => upd('instruction_image', null)} style={{
+              position: 'absolute', top: 8, right: 8, width: 26, height: 26, borderRadius: 13,
+              background: 'var(--red)', color: '#fff', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>×</button>
+          </div>
+        )}
+      </div>
+
       <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
         <button onClick={() => onSave(form)} style={{
           flex: 1, padding: 16, borderRadius: 12, background: 'var(--accent)', color: '#000',
@@ -526,6 +635,7 @@ function SessionScreen({ session, sets, machines, onLogSet, onDeleteSet, onEndSe
   const [view, setView] = useState('log')
   const [selectedMachine, setSelectedMachine] = useState(null)
   const [editingMachine, setEditingMachine] = useState(null)
+  const [muscleFilter, setMuscleFilter] = useState('All')
   const [reps, setReps] = useState(10)
   const [weight, setWeight] = useState(20)
   const [restSeconds, setRestSeconds] = useState(0)
@@ -583,6 +693,7 @@ function SessionScreen({ session, sets, machines, onLogSet, onDeleteSet, onEndSe
         default_weight: data.defaultWeight || 20,
         default_reps: data.defaultReps || 10,
         notes: data.notes || '',
+        thumbnails: data.thumbnails || [],
       }
       const saved = await onSaveMachine(machineData)
       selectMachine(saved)
@@ -600,6 +711,10 @@ function SessionScreen({ session, sets, machines, onLogSet, onDeleteSet, onEndSe
 
   // Select view
   if (view === 'select') {
+    const muscleGroups = Array.from(new Set(machines.flatMap(m => m.muscle_groups || []))).sort()
+    const filteredMachines = muscleFilter === 'All'
+      ? machines
+      : machines.filter(m => m.muscle_groups?.includes(muscleFilter))
     return (
       <div style={{ padding: '20px 16px', minHeight: '100dvh' }}>
         <TopBar left={<BackBtn onClick={() => setView('log')} />} title="SELECT MACHINE" />
@@ -608,6 +723,23 @@ function SessionScreen({ session, sets, machines, onLogSet, onDeleteSet, onEndSe
           background: 'var(--accent)11', color: 'var(--accent)', fontSize: 16, fontWeight: 700,
           marginBottom: 16, fontFamily: 'var(--font-mono)',
         }}>📸 Identify New Machine</button>
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, marginBottom: 8, fontFamily: 'var(--font-code)' }}>
+            FILTER BY MAIN MUSCLE GROUP
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {['All', ...muscleGroups].map((group) => {
+              const active = muscleFilter === group
+              return (
+                <button key={group} onClick={() => setMuscleFilter(group)} style={{
+                  padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                  background: active ? 'var(--accent)22' : 'var(--surface2)', color: active ? 'var(--accent)' : 'var(--text-muted)',
+                  fontSize: 12, fontWeight: 700,
+                }}>{group}</button>
+              )
+            })}
+          </div>
+        </div>
         {machines.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-dim)' }}>
             <div style={{ fontSize: 40, marginBottom: 12 }}>🏋️</div>
@@ -615,7 +747,12 @@ function SessionScreen({ session, sets, machines, onLogSet, onDeleteSet, onEndSe
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {machines.map(m => <MachineCard key={m.id} machine={m} onSelect={() => selectMachine(m)}
+            {filteredMachines.length === 0 && (
+              <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-dim)', fontSize: 13 }}>
+                No machines for that muscle group yet.
+              </div>
+            )}
+            {filteredMachines.map(m => <MachineCard key={m.id} machine={m} onSelect={() => selectMachine(m)}
               onEdit={() => { setEditingMachine(m); setView('edit') }} />)}
           </div>
         )}
@@ -659,6 +796,15 @@ function SessionScreen({ session, sets, machines, onLogSet, onDeleteSet, onEndSe
           {selectedMachine.notes && (
             <div style={{ background: '#1a1a2e', borderRadius: 12, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#88a', borderLeft: '3px solid #4444ff' }}>
               💡 {selectedMachine.notes}
+            </div>
+          )}
+          {selectedMachine.instruction_image && (
+            <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 12, marginBottom: 16, border: '1px solid var(--border)' }}>
+              <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, marginBottom: 8, fontFamily: 'var(--font-code)' }}>
+                INSTRUCTION IMAGE
+              </div>
+              <img src={selectedMachine.instruction_image} alt="" style={{ width: '100%', borderRadius: 10, objectFit: 'cover', border: '1px solid var(--border)' }} />
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>{selectedMachine.movement}</div>
             </div>
           )}
 
