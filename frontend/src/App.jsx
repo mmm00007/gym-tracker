@@ -6,7 +6,8 @@ import {
   getSetsForSession, logSet as dbLogSet, deleteSet as dbDeleteSet,
   getPendingSoreness, submitSoreness, getRecentSoreness,
 } from './lib/supabase'
-import { identifyMachine, getRecommendations } from './lib/api'
+import { identifyMachine, getRecommendations, API_BASE_URL, pingHealth } from './lib/api'
+import { addLog, subscribeLogs } from './lib/logs'
 
 // ─── Helpers ───────────────────────────────────────────────
 const fmt = (d) => new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
@@ -261,7 +262,7 @@ function SorenessPrompt({ session, muscleGroups, onSubmit, onDismiss }) {
 
 // ─── Home Screen ───────────────────────────────────────────
 
-function HomeScreen({ activeSession, pendingSoreness, machines, onStart, onResume, onHistory, onSorenessSubmit, onSorenessDismiss, onSignOut }) {
+function HomeScreen({ activeSession, pendingSoreness, machines, onStart, onResume, onHistory, onDiagnostics, onSorenessSubmit, onSorenessDismiss, onSignOut }) {
   return (
     <div style={{ padding: '20px 16px', minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -315,6 +316,13 @@ function HomeScreen({ activeSession, pendingSoreness, machines, onStart, onResum
         }}>
           <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>📊 History & Insights</div>
           <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Past sessions & AI recommendations</div>
+        </button>
+
+        <button onClick={onDiagnostics} style={{
+          background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, textAlign: 'left',
+        }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>🧰 Diagnostics</div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Check API health and share logs</div>
         </button>
       </div>
     </div>
@@ -844,6 +852,155 @@ function HistoryScreen({ sessions, machines, onBack, onViewSession }) {
   )
 }
 
+// ─── Diagnostics Screen ────────────────────────────────────
+
+function DiagnosticsScreen({ user, onBack }) {
+  const [logs, setLogs] = useState([])
+  const [healthStatus, setHealthStatus] = useState(null)
+  const [authInfo, setAuthInfo] = useState({ state: 'loading', session: null, error: null })
+  const [copyStatus, setCopyStatus] = useState(null)
+
+  useEffect(() => {
+    const unsubscribe = subscribeLogs(setLogs)
+    return () => unsubscribe()
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    const loadSession = async () => {
+      try {
+        const session = await getSession()
+        if (!active) return
+        setAuthInfo({ state: session ? 'authenticated' : 'anonymous', session, error: null })
+      } catch (error) {
+        if (!active) return
+        setAuthInfo({ state: 'error', session: null, error })
+      }
+    }
+    loadSession()
+    return () => { active = false }
+  }, [])
+
+  const handleHealthCheck = async () => {
+    setHealthStatus({ state: 'loading' })
+    try {
+      const result = await pingHealth()
+      setHealthStatus({ state: result.ok ? 'ok' : 'error', ...result })
+    } catch (error) {
+      const message = error?.message || 'Health check failed.'
+      addLog({ level: 'error', event: 'health.error', message })
+      setHealthStatus({ state: 'error', ok: false, status: 'n/a', body: message })
+    }
+  }
+
+  const handleCopyLogs = async () => {
+    const payload = logs.map((entry) => (
+      `${entry.timestamp} [${entry.level}] ${entry.event} ${entry.message} ${Object.keys(entry.meta || {}).length ? JSON.stringify(entry.meta) : ''}`
+    )).join('\n')
+    if (!payload) {
+      setCopyStatus('No logs to copy.')
+      return
+    }
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(payload)
+        setCopyStatus('Logs copied to clipboard.')
+        addLog({ level: 'info', event: 'logs.copied', message: 'Logs copied to clipboard.' })
+      } else {
+        setCopyStatus('Clipboard not available on this device.')
+      }
+    } catch (error) {
+      setCopyStatus('Failed to copy logs.')
+      addLog({ level: 'error', event: 'logs.copy_failed', message: error?.message || 'Copy failed.' })
+    }
+  }
+
+  const recentLogs = logs.slice(-20).reverse()
+  const session = authInfo.session
+  const expiresAt = session?.expires_at ? new Date(session.expires_at * 1000).toLocaleString() : 'n/a'
+
+  return (
+    <div style={{ padding: '20px 16px', minHeight: '100dvh' }}>
+      <TopBar left={<BackBtn onClick={onBack} />} title="DIAGNOSTICS" />
+
+      <div style={{ background: 'var(--surface)', borderRadius: 14, padding: 16, border: '1px solid var(--border)', marginBottom: 16 }}>
+        <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)', marginBottom: 6 }}>API BASE URL</div>
+        <div style={{ fontSize: 14, color: 'var(--text)', wordBreak: 'break-all' }}>{API_BASE_URL}</div>
+      </div>
+
+      <div style={{ background: 'var(--surface)', borderRadius: 14, padding: 16, border: '1px solid var(--border)', marginBottom: 16 }}>
+        <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)', marginBottom: 6 }}>AUTH STATE</div>
+        <div style={{ fontSize: 14, color: 'var(--text)' }}>
+          {authInfo.state === 'loading' && 'Checking session...'}
+          {authInfo.state === 'error' && `Error: ${authInfo.error?.message || 'Unknown'}`}
+          {authInfo.state !== 'loading' && authInfo.state !== 'error' && (
+            <>
+              <div>Status: {authInfo.state}</div>
+              <div>User ID: {user?.id || 'n/a'}</div>
+              <div>Session expires: {expiresAt}</div>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div style={{ background: 'var(--surface)', borderRadius: 14, padding: 16, border: '1px solid var(--border)', marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)' }}>API HEALTH CHECK</div>
+          <button onClick={handleHealthCheck} style={{
+            padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface2)',
+            color: 'var(--text)', fontSize: 12, fontWeight: 600,
+          }}>Ping</button>
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--text)' }}>
+          {healthStatus?.state === 'loading' && 'Checking...'}
+          {!healthStatus && 'No health check run yet.'}
+          {healthStatus?.state === 'ok' && `OK (${healthStatus.status})`}
+          {healthStatus?.state === 'error' && `Error (${healthStatus.status || 'n/a'}): ${healthStatus.body || ''}`}
+        </div>
+      </div>
+
+      <div style={{ background: 'var(--surface)', borderRadius: 14, padding: 16, border: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)' }}>RECENT LOGS (last 20)</div>
+          <button onClick={handleCopyLogs} style={{
+            padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface2)',
+            color: 'var(--text)', fontSize: 12, fontWeight: 600,
+          }}>Copy logs</button>
+        </div>
+        {copyStatus && <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 8 }}>{copyStatus}</div>}
+        {recentLogs.length === 0 ? (
+          <div style={{ fontSize: 13, color: 'var(--text-dim)' }}>No logs captured yet.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {recentLogs.map((entry) => (
+              <div key={entry.id} style={{
+                borderRadius: 10, background: 'var(--surface2)', padding: 10, border: '1px solid var(--border)',
+                fontSize: 12, color: 'var(--text)',
+              }}>
+                <div style={{ fontFamily: 'var(--font-code)', color: 'var(--text-dim)', marginBottom: 4 }}>
+                  {new Date(entry.timestamp).toLocaleString()} · {entry.level.toUpperCase()}
+                </div>
+                <div style={{ fontWeight: 600, marginBottom: 4 }}>{entry.event}</div>
+                <div style={{ color: 'var(--text-muted)', marginBottom: entry.meta && Object.keys(entry.meta).length ? 6 : 0 }}>
+                  {entry.message}
+                </div>
+                {entry.meta && Object.keys(entry.meta).length > 0 && (
+                  <pre style={{
+                    margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'var(--font-code)',
+                    fontSize: 11, color: 'var(--text-dim)',
+                  }}>
+                    {JSON.stringify(entry.meta, null, 2)}
+                  </pre>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Main App ──────────────────────────────────────────────
 
 export default function App() {
@@ -1028,6 +1185,7 @@ export default function App() {
           activeSession={activeSession} pendingSoreness={pendingSoreness}
           machines={machines} onStart={handleStartSession}
           onResume={() => setScreen('session')} onHistory={() => setScreen('history')}
+          onDiagnostics={() => setScreen('diagnostics')}
           onSorenessSubmit={handleSorenessSubmit} onSorenessDismiss={handleSorenessDismiss}
           onSignOut={async () => { await signOut(); setUser(null); setScreen('home') }}
         />
@@ -1052,6 +1210,12 @@ export default function App() {
           sessions={sessions} machines={machines}
           onBack={() => setScreen('home')}
           onViewSession={handleViewHistorySession}
+        />
+      )}
+      {screen === 'diagnostics' && (
+        <DiagnosticsScreen
+          user={user}
+          onBack={() => setScreen('home')}
         />
       )}
     </>
