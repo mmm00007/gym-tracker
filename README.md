@@ -61,7 +61,10 @@ Mobile-first gym tracker with AI machine identification and smart recommendation
 
 ### 4. Update CORS
 
-Update Render's `ALLOWED_ORIGINS` to your Netlify URL.
+Update Render's `ALLOWED_ORIGINS` to your Netlify **site origin** (scheme + host only, no path), e.g. `https://your-app.netlify.app`.
+
+**Troubleshooting**
+- If Render logs show `OPTIONS /api/health` returning `400`, the browser CORS preflight is being rejected. Double-check that `ALLOWED_ORIGINS` is set to the Netlify site origin (not the Render API URL) and redeploy the backend.
 
 ## Local Development
 
