@@ -15,6 +15,8 @@ create table public.machines (
   movement text not null,
   muscle_groups text[] default '{}',
   variations text[] default '{}',
+  thumbnails text[] default '{}',
+  instruction_image text,
   default_weight real default 20,
   default_reps int default 10,
   notes text,
