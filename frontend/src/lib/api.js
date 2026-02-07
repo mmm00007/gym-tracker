@@ -12,11 +12,14 @@ async function authHeaders() {
 
 export async function identifyMachine(images) {
   const headers = await authHeaders()
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 15000)
   try {
     const res = await fetch(`${API_URL}/api/identify-machine`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ images }),
+      signal: controller.signal,
     })
     if (!res.ok) {
       const errText = (await res.text()).trim()
@@ -39,6 +42,8 @@ export async function identifyMachine(images) {
       throw new Error('Identify failed: Backend unreachable. Check your connection and API URL.')
     }
     throw new Error('Identify failed: Unexpected error. Please try again.')
+  } finally {
+    clearTimeout(timeoutId)
   }
 }
 

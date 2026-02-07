@@ -329,6 +329,21 @@ function CameraScreen({ onIdentified, onCancel }) {
   const [error, setError] = useState(null)
   const cameraRef = useRef()
   const galleryRef = useRef()
+  const imagesRef = useRef([])
+
+  useEffect(() => {
+    imagesRef.current = images
+  }, [images])
+
+  useEffect(() => {
+    return () => {
+      imagesRef.current.forEach((img) => {
+        if (img.preview) {
+          URL.revokeObjectURL(img.preview)
+        }
+      })
+    }
+  }, [])
 
   const readFileAsBase64 = (file) => new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -355,24 +370,24 @@ function CameraScreen({ onIdentified, onCancel }) {
       setError('You can only upload up to 3 photos.')
       return
     }
-    let lastError = null
+    const errors = []
     const newImgs = []
-    for (const f of Array.from(files).slice(0, available)) {
+    const selectedFiles = Array.from(files)
+    if (selectedFiles.length > available) {
+      errors.push(`Only ${available} photo${available === 1 ? '' : 's'} added; extra selections were ignored.`)
+    }
+    for (const f of selectedFiles.slice(0, available)) {
       try {
         const data = await readFileAsBase64(f)
         newImgs.push({ data, media_type: f.type || 'image/jpeg', preview: URL.createObjectURL(f) })
       } catch (err) {
-        lastError = err
+        errors.push(err?.message || 'Could not read one of the selected photos.')
       }
     }
     if (newImgs.length) {
       setImages(prev => [...prev, ...newImgs].slice(0, 3))
     }
-    if (lastError) {
-      setError(lastError.message)
-    } else {
-      setError(null)
-    }
+    setError(errors.length ? errors.join(' ') : null)
   }
 
   const analyze = async () => {
@@ -419,7 +434,10 @@ function CameraScreen({ onIdentified, onCancel }) {
           {images.map((img, i) => (
             <div key={i} style={{ position: 'relative', flexShrink: 0 }}>
               <img src={img.preview} alt="" style={{ width: 100, height: 100, objectFit: 'cover', borderRadius: 12, border: '1px solid var(--border)' }} />
-              <button onClick={() => setImages(images.filter((_, j) => j !== i))} style={{
+              <button onClick={() => {
+                URL.revokeObjectURL(img.preview)
+                setImages(images.filter((_, j) => j !== i))
+              }} style={{
                 position: 'absolute', top: -6, right: -6, width: 24, height: 24, borderRadius: 12,
                 background: 'var(--red)', color: '#fff', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>×</button>
