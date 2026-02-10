@@ -1553,11 +1553,9 @@ export default function App() {
       }
       // Check pending soreness
       const pending = await getPendingSoreness()
-      // Enrich with sets data for muscle group extraction
-      const enriched = await Promise.all(pending.map(async (p) => {
-        const sets = await getSetsForSession(p.id)
-        return { ...p, _sets: sets }
-      }))
+      // Pending soreness entries are bucketed by training_bucket_id and already carry _sets.
+      // Keep any existing _sets to avoid querying session_id with bucket identifiers.
+      const enriched = pending.map((p) => ({ ...p, _sets: p._sets || [] }))
       setPendingSoreness(enriched)
     } catch (e) {
       addLog({ level: 'error', event: 'data.load_failed', message: e?.message || 'Failed to load data.' })
