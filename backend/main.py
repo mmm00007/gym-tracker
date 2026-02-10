@@ -8,7 +8,7 @@ import os
 import json
 import logging
 import time
-from typing import Optional
+from typing import Any, Optional
 from fastapi import FastAPI, HTTPException, Header, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -180,7 +180,7 @@ async def call_anthropic(messages: list, max_tokens: int = 1000) -> str:
     return text
 
 
-def parse_json_response(text: str) -> dict:
+def parse_json_response(text: str) -> Any:
     cleaned = text.strip()
     if cleaned.startswith("```"):
         cleaned = cleaned.split("\n", 1)[-1]
@@ -365,6 +365,8 @@ Return ONLY valid JSON:
         text = await call_anthropic([{"role": "user", "content": prompt}])
         response = parse_json_response(text)
         if req.scope_id:
+            if not isinstance(response, dict):
+                raise HTTPException(502, "LLM response must be a JSON object when scope_id is provided")
             response["scope_id"] = req.scope_id
         return response
     except json.JSONDecodeError:
