@@ -775,6 +775,7 @@ function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
 }
 
 function LibraryScreen({ machines, onSaveMachine, onDeleteMachine, onBack }) {
+  const [editingMachine, setEditingMachine] = useState(null)
 
   if (editingMachine) {
     return (
