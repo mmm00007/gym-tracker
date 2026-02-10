@@ -7,11 +7,15 @@ All CRUD goes directly from frontend -> Supabase.
 import os
 import json
 import logging
+import time
 from typing import Optional
-from fastapi import FastAPI, HTTPException, Header
+from fastapi import FastAPI, HTTPException, Header, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import httpx
+import jwt
+from jwt import PyJWKClient
+from jwt.exceptions import InvalidTokenError, PyJWKClientError
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -24,6 +28,20 @@ ALLOWED_ORIGINS = [origin.strip() for origin in raw_allowed_origins.split(",") i
 ALLOW_ALL_ORIGINS = len(ALLOWED_ORIGINS) == 1 and ALLOWED_ORIGINS[0] == "*"
 ANTHROPIC_MODEL = "claude-sonnet-4-20250514"
 MAX_HISTORY_TOKENS = 4000
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
+SUPABASE_JWT_SECRET = os.environ.get("SUPABASE_JWT_SECRET")
+SUPABASE_JWT_AUDIENCE = os.environ.get("SUPABASE_JWT_AUDIENCE")
+SUPABASE_JWT_ISSUER = os.environ.get("SUPABASE_JWT_ISSUER") or (
+    f"{SUPABASE_URL}/auth/v1" if SUPABASE_URL else None
+)
+SUPABASE_JWKS_URL = os.environ.get("SUPABASE_JWKS_URL") or (
+    f"{SUPABASE_URL}/auth/v1/.well-known/jwks.json" if SUPABASE_URL else None
+)
+
+_jwks_client: Optional[PyJWKClient] = None
+_jwks_client_url: Optional[str] = None
+_last_jwks_refresh = 0.0
+JWKS_REFRESH_SECONDS = 300
 
 
 def read_bool_env(name: str, default: bool = False) -> bool:
@@ -54,10 +72,72 @@ app.add_middleware(
 )
 
 
-def verify_auth(authorization: Optional[str]) -> bool:
+def _get_jwks_client() -> PyJWKClient:
+    global _jwks_client, _jwks_client_url, _last_jwks_refresh
+    if not SUPABASE_JWKS_URL:
+        raise HTTPException(500, "SUPABASE_JWKS_URL or SUPABASE_URL must be configured")
+    now = time.time()
+    if (
+        _jwks_client is None
+        or _jwks_client_url != SUPABASE_JWKS_URL
+        or now - _last_jwks_refresh > JWKS_REFRESH_SECONDS
+    ):
+        _jwks_client = PyJWKClient(SUPABASE_JWKS_URL)
+        _jwks_client_url = SUPABASE_JWKS_URL
+        _last_jwks_refresh = now
+    return _jwks_client
+
+
+def verify_auth(authorization: Optional[str]) -> str:
     if not authorization or not authorization.startswith("Bearer "):
-        return False
-    return True
+        raise HTTPException(401, "Unauthorized")
+
+    token = authorization.split(" ", 1)[1].strip()
+    if not token:
+        raise HTTPException(401, "Unauthorized")
+
+    decode_options = {
+        "require": ["exp"],
+        "verify_signature": True,
+        "verify_aud": bool(SUPABASE_JWT_AUDIENCE),
+        "verify_iss": bool(SUPABASE_JWT_ISSUER),
+    }
+    decode_kwargs = {
+        "algorithms": ["HS256"],
+        "options": decode_options,
+    }
+    if SUPABASE_JWT_AUDIENCE:
+        decode_kwargs["audience"] = SUPABASE_JWT_AUDIENCE
+    if SUPABASE_JWT_ISSUER:
+        decode_kwargs["issuer"] = SUPABASE_JWT_ISSUER
+
+    if SUPABASE_JWT_SECRET:
+        payload = jwt.decode(token, SUPABASE_JWT_SECRET, **decode_kwargs)
+    else:
+        jwks_client = _get_jwks_client()
+        signing_key = jwks_client.get_signing_key_from_jwt(token)
+        decode_kwargs["algorithms"] = ["RS256", "ES256"]
+        payload = jwt.decode(
+            token,
+            signing_key.key,
+            **decode_kwargs,
+        )
+
+    user_id = payload.get("user_id") or payload.get("sub")
+    if not user_id:
+        raise HTTPException(401, "Unauthorized")
+    return str(user_id)
+
+
+def get_current_user_id(request: Request, authorization: str = Header(None)) -> str:
+    try:
+        user_id = verify_auth(authorization)
+    except HTTPException:
+        raise
+    except (InvalidTokenError, PyJWKClientError, ValueError):
+        raise HTTPException(401, "Unauthorized")
+    request.state.user_id = user_id
+    return user_id
 
 
 async def call_anthropic(messages: list, max_tokens: int = 1000) -> str:
@@ -102,13 +182,13 @@ class IdentifyRequest(BaseModel):
 
 
 @app.post("/api/identify-machine")
-async def identify_machine(req: IdentifyRequest, authorization: str = Header(None)):
-    if not verify_auth(authorization):
-        raise HTTPException(401, "Unauthorized")
+async def identify_machine(req: IdentifyRequest, user_id: str = Depends(get_current_user_id)):
     if not req.images or len(req.images) == 0:
         raise HTTPException(400, "At least one image required")
     if len(req.images) > 3:
         raise HTTPException(400, "Maximum 3 images")
+
+    logger.debug("identify-machine request authorized for user_id=%s", user_id)
 
     content = []
     for img in req.images:
@@ -217,9 +297,9 @@ def normalize_recommendation_request(req: RecommendationRequest) -> tuple[dict, 
 
 
 @app.post("/api/recommendations")
-async def get_recommendations(req: RecommendationRequest, authorization: str = Header(None)):
-    if not verify_auth(authorization):
-        raise HTTPException(401, "Unauthorized")
+async def get_recommendations(req: RecommendationRequest, user_id: str = Depends(get_current_user_id)):
+
+    logger.debug("recommendations request authorized for user_id=%s", user_id)
 
     scope, grouped_training, equipment = normalize_recommendation_request(req)
     trimmed_training = trim_history_to_token_budget(grouped_training, MAX_HISTORY_TOKENS)
