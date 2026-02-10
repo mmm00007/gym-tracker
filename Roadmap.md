@@ -95,15 +95,17 @@ Task : Update `frontend/src/App.jsx` and `frontend/src/lib/api.js` usage so reco
 
 # Implementation Plan of Above Improvements
 
+Assumption update: there are currently no users and no historical production data to preserve, so this plan uses a **single SQL schema cutover** (no data migration/backfill track).
+
 
 ## Phase 0 — Stabilization baseline (must-do first)
-Goal: stop partial session behavior from causing inconsistent UX/data while migration continues.
-    1. Define migration mode flags (frontend + backend)
+Goal: stop partial session behavior from causing inconsistent UX/data while shipping the schema reset.
+    1. Define rollout mode flags (frontend + backend)
     • Add feature flags for:
         ◦ setCentricLogging
         ◦ libraryScreenEnabled
         ◦ analysisOnDemandOnly
-    • Reason: current app still has active session UX paths mixed with new grouped paths.
+    • Reason: current app still has active session UX paths mixed with new grouped paths; flags let us cut over cleanly.
     2. Data contract lock doc
     • Create a single schema/API contract doc for:
         ◦ set logging payload
@@ -113,17 +115,17 @@ Goal: stop partial session behavior from causing inconsistent UX/data while mig
 
 
 
-## Phase 1 — Data model completion (DB-first)
+## Phase 1 — Data model completion (DB-first, no legacy migration)
 1.1 Canonical entity taxonomy (machine vs freeweight vs bodyweight)
 Goal: formalize “exercise/equipment” model where freeweight/bodyweight are first-class (not machine aliases).
     1. Rename conceptual model in app layer
-    • Keep DB table name machines temporarily for backward compatibility.
+    • Keep DB table name machines for now to minimize application churn.
     • Introduce app-level type alias equipment everywhere in frontend + API payload mapping.
-    • Reason: DB still named machines, but semantics need to be neutral.
+    • Reason: semantics need to be neutral even if table names stay as-is.
     2. Harden equipment_type semantics
     • Keep/check enum values:
         ◦ machine, freeweight, bodyweight, cable, etc.
-    • Add DB check to disallow machine-only fields when not machine (soft at first via trigger warnings/log table; hard validation after migration).
+    • Add DB check constraints to disallow machine-only fields when not machine (hard validation immediately).
     • Current schema has equipment_type but no type-specific constraints yet.
     3. Canonical metadata schema
     • Validate fields by equipment type:
@@ -133,6 +135,7 @@ Goal: formalize “exercise/equipment” model where freeweight/bodyweight are 
             ▪ freeweight/bodyweight: media optional, no machine prompts
     • Reason: UI currently still machine-centric prompts always shown.
 1.2 Set-centric ownership + grouping hardening
+    Note: because there are currently no users, this phase is a direct SQL schema update (no backfill or dual-write transition needed).
     1. Ensure training_date/training_bucket_id are always computed
     • Add DB trigger on sets insert/update:
         ◦ derive from logged_at and user_preferences.day_start_hour
@@ -140,17 +143,15 @@ Goal: formalize “exercise/equipment” model where freeweight/bodyweight are 
     2. Introduce optional gap-clustering key
     • Add workout_cluster_id (or deterministic bucket_id) to support same training day multiple clusters.
     • Keep training-day grouping as primary; use gap-cluster as secondary grouping for specific analyses.
-    3. Session deprecation runway
-    • Keep session_id nullable and readable for transition.
-    • Add migration checklist:
-        ◦ % rows with session_id null and user_id present
-        ◦ API endpoints/flows still using sessions
-    • Reason: current policies allow fallback; needs monitored phase-out.
+    3. Session dependency removal (one-step cutover)
+    • Remove strict reliance on session_id from schema/RLS in the same SQL update.
+    • Require and enforce sets.user_id ownership + grouped keys for authorization/read paths.
+    • Reason: no production data/users means we can do a clean break instead of a phased fallback.
 1.3 Soreness and recommendation grouping keys
     1. Finalize soreness schema
     • Make training_bucket_id primary linkage in soreness flows.
-    • Keep nullable session_id only transitional.
-    • Reason: partially migrated now.
+    • Drop session-based linkage from soreness flows in this same schema change.
+    • Reason: no migration window is required.
     2. Recommendation scope schema
     • Persist explicit scope object:
         ◦ { grouping: "training_day|cluster", date_range, included_set_types }
@@ -280,11 +281,11 @@ Goal: formalize “exercise/equipment” model where freeweight/bodyweight are 
         ◦ date range
         ◦ format selector
         ◦ download action + manifest preview
-    3. Migration observability
+    3. Schema and data quality observability
     • Add health/admin metrics:
-        ◦ legacy session dependency counts
         ◦ % sets missing set_type/duration/training bucket
         ◦ report generation success rate
+        ◦ export job success/failure counts
 
 
 # Acceptance criteria checklist (what “done” means)
@@ -295,6 +296,4 @@ Goal: formalize “exercise/equipment” model where freeweight/bodyweight are 
     • Analytics can include/exclude set types and never infer duration.
     • Training-day boundary (day_start_hour) is applied consistently across history/dashboard/analysis.
     • Export available for all required domains.
-
-
 
