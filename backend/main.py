@@ -256,6 +256,7 @@ class RecommendationRequest(BaseModel):
     grouped_training: Optional[list[dict]] = None
     equipment: Optional[dict] = None
     soreness_data: list[dict] = []
+    scope_id: Optional[str] = None
 
     # Backward compatibility for older clients
     current_session: Optional[dict] = None
@@ -362,7 +363,10 @@ Return ONLY valid JSON:
 
     try:
         text = await call_anthropic([{"role": "user", "content": prompt}])
-        return parse_json_response(text)
+        response = parse_json_response(text)
+        if req.scope_id:
+            response["scope_id"] = req.scope_id
+        return response
     except json.JSONDecodeError:
         raise HTTPException(502, "Failed to parse LLM response")
 

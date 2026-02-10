@@ -243,6 +243,34 @@ export async function submitSoreness(trainingBucketId, reports) {
   if (error) throw error
 }
 
+export async function createRecommendationScope(scope, metadata = null) {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user?.id) throw new Error('Not authenticated')
+
+  const payload = {
+    user_id: user.id,
+    grouping: scope?.grouping || 'training_day',
+    date_start: scope?.date_start || null,
+    date_end: scope?.date_end || null,
+    included_set_types: Array.isArray(scope?.included_set_types) && scope.included_set_types.length
+      ? scope.included_set_types
+      : ['working'],
+  }
+
+  if (metadata && typeof metadata === 'object') {
+    payload.metadata = metadata
+  }
+
+  const { data, error } = await supabase
+    .from('recommendation_scopes')
+    .insert(payload)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
 export async function getRecentSoreness() {
   const twoWeeksAgo = new Date(Date.now() - 14 * 86400000).toISOString()
   const { data, error } = await supabase

@@ -140,6 +140,7 @@ DB table name remains `machines`, but app-level semantics are `equipment`.
     "date_end": "2026-02-10",
     "included_set_types": ["working"]
   },
+  "scope_id": "<uuid>",
   "grouped_training": [
     {
       "training_bucket_id": "training_day:2026-02-10",
@@ -167,3 +168,4 @@ DB table name remains `machines`, but app-level semantics are `equipment`.
 - `/api/recommendations` must consume the set-grouped request contract above.
 - Persisted scope must always include grouping basis and set-type inclusion policy.
 - Scope rows are used for explainability and reproducibility of recommendations/analysis.
+- Clients should persist `public.recommendation_scopes` before recommendation calls and include `scope_id` in analysis/report payloads.
