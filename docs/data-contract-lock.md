@@ -1,12 +1,12 @@
-# Data Contract Lock (Phase 0 Stabilization Baseline)
+# Data Contract Lock (Phase 1 Data Model Completion)
 
-This document is the single source of truth for payload compatibility during the session-to-set-centric transition.
+This document is the single source of truth for payload compatibility after the Phase 1 DB-first cutover.
 
 ## Contract version
 
-- **Version:** `2026-02-phase0`
-- **Status:** Locked for Phase 0 rollout
-- **Compatibility goal:** Frontend and backend can safely coexist while feature flags control behavioral cutovers.
+- **Version:** `2026-02-phase1`
+- **Status:** Locked for Phase 1 rollout
+- **Compatibility goal:** Set-centric ownership and training-bucket grouping are now authoritative, with no legacy migration path.
 
 ## Rollout flags contract
 
@@ -14,7 +14,7 @@ The backend exposes `GET /api/rollout-flags`.
 
 ```json
 {
-  "setCentricLogging": false,
+  "setCentricLogging": true,
   "libraryScreenEnabled": false,
   "analysisOnDemandOnly": false
 }
@@ -23,14 +23,11 @@ The backend exposes `GET /api/rollout-flags`.
 ### Flag semantics
 
 - `setCentricLogging`
-  - `false`: session lifecycle remains primary logging path.
-  - `true`: clients may route users directly to set logging without active session dependency.
+  - `true`: set writes are authorized by `sets.user_id` and grouped by training bucket.
 - `libraryScreenEnabled`
-  - `false`: current machine management UX remains in place.
-  - `true`: top-level library flow can be used as authoritative CRUD surface.
+  - `false`: existing management UX remains in place until the dedicated library screen ships.
 - `analysisOnDemandOnly`
-  - `false`: existing post-workout auto-analysis flow may run.
-  - `true`: auto-analysis at session end must be skipped; analysis is user-initiated only.
+  - `false`: unchanged in Phase 1; redesigned analysis workflow is Phase 4.
 
 ---
 
@@ -40,27 +37,60 @@ The backend exposes `GET /api/rollout-flags`.
 
 ```json
 {
-  "session_id": "uuid",
+  "user_id": "uuid",
+  "session_id": "uuid-or-null",
   "machine_id": "uuid",
   "reps": 10,
   "weight": 60,
+  "set_type": "working",
   "duration_seconds": 42,
-  "rest_seconds": 90
+  "rest_seconds": 90,
+  "logged_at": "2026-02-10T20:15:00Z"
 }
 ```
 
 ### Rules
 
+- `user_id` is required and is the primary authorization key.
+- `session_id` is optional and non-authoritative.
+- `set_type` defaults to `working`.
 - `duration_seconds` is optional and may be `null` when timing is not used.
 - Missing timing data must remain unknown (`null`) and **must not be imputed**.
-- `rest_seconds` is optional and may be `null`.
-- During stabilization, `session_id` remains accepted while set-centric migration is prepared.
+- `training_date` and `training_bucket_id` are DB-computed from `logged_at`, `user_preferences.day_start_hour`, and `user_preferences.timezone`.
+
+---
+
+## Equipment payload contract
+
+DB table name remains `machines`, but app-level semantics are `equipment`.
+
+```json
+{
+  "id": "uuid",
+  "user_id": "uuid",
+  "name": "Incline Dumbbell Press",
+  "movement": "Horizontal Push",
+  "equipment_type": "freeweight",
+  "muscle_groups": ["Chest", "Shoulders", "Triceps"],
+  "thumbnails": [],
+  "instruction_image": null,
+  "source": null,
+  "notes": "Neutral grip"
+}
+```
+
+### Rules
+
+- Required for all equipment: `name`, `movement`, `equipment_type`, `muscle_groups`.
+- Allowed equipment types: `machine`, `freeweight`, `bodyweight`, `cable`, `band`, `other`.
+- For non-machine equipment, machine-specific media fields are disallowed by DB constraint:
+  - `thumbnails` must be empty.
+  - `instruction_image` must be `null`.
+  - `source` must be `null`.
 
 ---
 
 ## Training-day grouping payload contract
-
-Stabilization contract for grouped analytics payloads (used by analysis and later history/dashboard rollups):
 
 ```json
 {
@@ -76,40 +106,64 @@ Stabilization contract for grouped analytics payloads (used by analysis and late
 
 ### Rules
 
-- `training_date` is derived from `logged_at` with user day-boundary preference.
-- `training_bucket_id` is the stable grouping key.
-- `workout_cluster_id` is optional in Phase 0; reserved for gap-based clustering support.
+- `training_date` and `training_bucket_id` are always present on every set.
+- `workout_cluster_id` is optional and reserved for gap-clustering logic.
+- `training_bucket_id` is the primary grouping key for reporting and soreness prompts.
 
 ---
 
-## Analysis report payload with evidence contract
+## Soreness payload contract
 
 ```json
 {
-  "summary": "Volume increased compared with prior training days.",
-  "highlights": ["Pressing volume is trending upward"],
-  "suggestions": ["Reduce pushing accessories if elbow soreness rises"],
-  "nextSession": "Prioritize horizontal pull volume",
-  "progressNotes": "Estimated strength is stable week-over-week.",
-  "evidence": [
-    {
-      "claim": "Pressing volume increased",
-      "metric": "total_volume",
-      "period": "last_30d_vs_prev_30d",
-      "delta": 0.11,
-      "source": {
-        "grouping": "training_day",
-        "included_set_types": ["working"],
-        "sample_size": 9
-      }
-    }
-  ]
+  "user_id": "uuid",
+  "training_bucket_id": "training_day:2026-02-10",
+  "muscle_group": "Chest",
+  "level": 2
 }
 ```
 
 ### Rules
 
-- Reports should include `evidence` objects for explainability.
-- `source.grouping` must identify the aggregation basis (`training_day` or `cluster`).
-- `included_set_types` must be explicit so results are reproducible.
+- Soreness is linked to `training_bucket_id` (not session id).
+- One soreness row per `(user_id, training_bucket_id, muscle_group)`.
 
+---
+
+## Recommendation request + scope contract
+
+```json
+{
+  "scope": {
+    "grouping": "training_day",
+    "date_start": "2026-01-10",
+    "date_end": "2026-02-10",
+    "included_set_types": ["working"]
+  },
+  "grouped_training": [
+    {
+      "training_bucket_id": "training_day:2026-02-10",
+      "training_date": "2026-02-10",
+      "workout_cluster_id": null,
+      "started_at": "2026-02-10T20:00:00Z",
+      "ended_at": "2026-02-10T21:10:00Z",
+      "sets": []
+    }
+  ],
+  "equipment": {
+    "<equipment_id>": {
+      "name": "Incline Dumbbell Press",
+      "movement": "Horizontal Push",
+      "muscle_groups": ["Chest", "Triceps"],
+      "equipment_type": "freeweight"
+    }
+  },
+  "soreness_data": []
+}
+```
+
+### Rules
+
+- `/api/recommendations` must consume the set-grouped request contract above.
+- Persisted scope must always include grouping basis and set-type inclusion policy.
+- Scope rows are used for explainability and reproducibility of recommendations/analysis.

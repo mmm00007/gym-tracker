@@ -148,56 +148,121 @@ Return ONLY valid JSON (no markdown, no backticks):
 
 # --- Recommendations ---
 
-class SessionData(BaseModel):
-    current_session: dict
-    past_sessions: list[dict]
-    machines: dict
+class RecommendationScope(BaseModel):
+    grouping: str = "training_day"
+    date_start: Optional[str] = None
+    date_end: Optional[str] = None
+    included_set_types: list[str] = ["working"]
+
+
+class RecommendationRequest(BaseModel):
+    # Phase 1 canonical payload
+    scope: Optional[RecommendationScope] = None
+    grouped_training: Optional[list[dict]] = None
+    equipment: Optional[dict] = None
     soreness_data: list[dict] = []
 
+    # Backward compatibility for older clients
+    current_session: Optional[dict] = None
+    past_sessions: Optional[list[dict]] = None
+    machines: Optional[dict] = None
 
-def trim_history_to_token_budget(sessions: list[dict], budget: int) -> list[dict]:
+
+def trim_history_to_token_budget(items: list[dict], budget: int) -> list[dict]:
     result = []
     used = 0
-    for s in reversed(sessions):
-        text = json.dumps(s)
+    for item in reversed(items):
+        text = json.dumps(item)
         est_tokens = len(text) // 4
         if used + est_tokens > budget:
             break
-        result.insert(0, s)
+        result.insert(0, item)
         used += est_tokens
     return result
 
 
+def normalize_recommendation_request(req: RecommendationRequest) -> tuple[dict, list[dict], dict]:
+    if req.scope and req.grouped_training is not None:
+        scope = req.scope.model_dump()
+        grouped_training = req.grouped_training
+        equipment = req.equipment or {}
+        return scope, grouped_training, equipment
+
+    # Backward-compatible transformation from session payloads.
+    past_sessions = req.past_sessions or []
+    current_session = req.current_session or {}
+    grouped = [
+        {
+            "training_bucket_id": "session:current",
+            "training_date": current_session.get("started_at", "unknown")[:10],
+            "sets": current_session.get("sets", []),
+        },
+        *[
+            {
+                "training_bucket_id": f"session:{s.get('started_at', '')}",
+                "training_date": s.get("started_at", "unknown")[:10],
+                "sets": s.get("sets", []),
+            }
+            for s in past_sessions
+        ],
+    ]
+    scope = {
+        "grouping": "training_day",
+        "date_start": None,
+        "date_end": None,
+        "included_set_types": ["working"],
+    }
+    equipment = req.machines or req.equipment or {}
+    return scope, grouped, equipment
+
+
 @app.post("/api/recommendations")
-async def get_recommendations(req: SessionData, authorization: str = Header(None)):
+async def get_recommendations(req: RecommendationRequest, authorization: str = Header(None)):
     if not verify_auth(authorization):
         raise HTTPException(401, "Unauthorized")
 
-    trimmed = trim_history_to_token_budget(req.past_sessions, MAX_HISTORY_TOKENS)
+    scope, grouped_training, equipment = normalize_recommendation_request(req)
+    trimmed_training = trim_history_to_token_budget(grouped_training, MAX_HISTORY_TOKENS)
+
     soreness_ctx = ""
     if req.soreness_data:
         soreness_ctx = f"\n\nRECENT SORENESS REPORTS:\n{json.dumps(req.soreness_data, indent=2)}"
 
-    prompt = f"""You are an expert personal trainer analyzing workout data.
+    prompt = f"""You are an expert personal trainer analyzing set-based training data.
 
-CURRENT SESSION:
-{json.dumps(req.current_session, indent=2)}
+ANALYSIS SCOPE:
+{json.dumps(scope, indent=2)}
 
-PAST SESSIONS ({len(trimmed)} of {len(req.past_sessions)} total):
-{json.dumps(trimmed, indent=2)}
+GROUPED TRAINING DATA ({len(trimmed_training)} buckets):
+{json.dumps(trimmed_training, indent=2)}
 
-MACHINES:
-{json.dumps(req.machines, indent=2)}{soreness_ctx}
+EQUIPMENT CATALOG:
+{json.dumps(equipment, indent=2)}{soreness_ctx}
 
+Use the scope fields exactly as constraints. Prioritize explainable, evidence-based insights.
 Consider volume progression, muscle balance, rest patterns, soreness feedback, and exercise variety.
+Do not infer set duration if duration_seconds is missing.
 
 Return ONLY valid JSON:
 {{
-  "summary": "2-3 sentence session summary",
+  "summary": "2-3 sentence summary",
   "highlights": ["2-3 positives"],
   "suggestions": ["2-3 actionable improvements"],
   "nextSession": "what to focus on next",
-  "progressNotes": "notable trends in strength/volume"
+  "progressNotes": "notable trends in strength/volume",
+  "evidence": [
+    {{
+      "claim": "short claim",
+      "metric": "metric_name",
+      "period": "scope-aligned period",
+      "delta": 0.0,
+      "source": {{
+        "grouping": "training_day|cluster",
+        "included_set_types": ["working"],
+        "sample_size": 0
+      }}
+    }}
+  ]
 }}"""
 
     try:

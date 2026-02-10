@@ -42,28 +42,34 @@ export async function getSession() {
   return session
 }
 
-// ─── Machine CRUD ──────────────────────────────────────────
-export async function getMachines() {
+// ─── Equipment CRUD (machines table at DB level) ───────────
+export async function getEquipment() {
   const { data, error } = await supabase
     .from('machines').select('*').order('created_at', { ascending: false })
   if (error) throw error
   return data
 }
 
-export async function upsertMachine(machine) {
+export async function upsertEquipment(equipment) {
   const { data: { user } } = await supabase.auth.getUser()
-  const payload = { ...machine, user_id: user.id, updated_at: new Date().toISOString() }
+  const payload = { ...equipment, user_id: user.id, updated_at: new Date().toISOString() }
   if (!payload.created_at) payload.created_at = new Date().toISOString()
+  if (!payload.equipment_type) payload.equipment_type = 'machine'
   const { data, error } = await supabase
     .from('machines').upsert(payload, { onConflict: 'id' }).select().single()
   if (error) throw error
   return data
 }
 
-export async function deleteMachine(id) {
+export async function deleteEquipment(id) {
   const { error } = await supabase.from('machines').delete().eq('id', id)
   if (error) throw error
 }
+
+// Backwards-compatible aliases while the UI is still machine-labeled.
+export const getMachines = getEquipment
+export const upsertMachine = upsertEquipment
+export const deleteMachine = deleteEquipment
 
 // ─── Session CRUD ──────────────────────────────────────────
 export async function getSessions() {
@@ -100,21 +106,30 @@ export async function getActiveSession() {
 
 // ─── Set CRUD ──────────────────────────────────────────────
 export async function getSetsForSession(sessionId) {
-  const { data, error } = await supabase
-    .from('sets').select('*').eq('session_id', sessionId).order('logged_at')
+  const query = supabase.from('sets').select('*').order('logged_at')
+  const { data, error } = sessionId
+    ? await query.eq('session_id', sessionId)
+    : await query
   if (error) throw error
   return data
 }
 
-export async function logSet(sessionId, machineId, reps, weight, durationSeconds, restSeconds) {
+export async function logSet(sessionId, machineId, reps, weight, durationSeconds, restSeconds, setType = 'working') {
+  const { data: { user } } = await supabase.auth.getUser()
+  const payload = {
+    user_id: user.id,
+    machine_id: machineId,
+    reps,
+    weight,
+    set_type: setType || 'working',
+    duration_seconds: durationSeconds || null,
+    rest_seconds: restSeconds || null,
+  }
+
+  if (sessionId) payload.session_id = sessionId
+
   const { data, error } = await supabase
-    .from('sets').insert({
-      session_id: sessionId,
-      machine_id: machineId,
-      reps, weight,
-      duration_seconds: durationSeconds || null,
-      rest_seconds: restSeconds || null,
-    }).select().single()
+    .from('sets').insert(payload).select().single()
   if (error) throw error
   return data
 }
@@ -126,36 +141,59 @@ export async function deleteSet(id) {
 
 // ─── Soreness ──────────────────────────────────────────────
 export async function getPendingSoreness() {
-  // Get sessions from 1-3 days ago that don't have soreness reports
+  // Get training buckets from 1-3 days ago without soreness reports.
   const { data: { user } } = await supabase.auth.getUser()
   const threeDaysAgo = new Date(Date.now() - 3 * 86400000).toISOString()
   const oneDayAgo = new Date(Date.now() - 1 * 86400000).toISOString()
 
-  const { data: sessions } = await supabase
-    .from('sessions').select('id, started_at, ended_at')
+  const { data: sets, error: setsError } = await supabase
+    .from('sets')
+    .select('training_bucket_id, training_date, logged_at, machine_id')
     .eq('user_id', user.id)
-    .not('ended_at', 'is', null)
-    .gte('ended_at', threeDaysAgo)
-    .lte('ended_at', oneDayAgo)
+    .gte('logged_at', threeDaysAgo)
+    .lte('logged_at', oneDayAgo)
+    .order('logged_at', { ascending: true })
 
-  if (!sessions?.length) return []
+  if (setsError) throw setsError
+  if (!sets?.length) return []
 
-  // Check which have soreness reports
-  const sessionIds = sessions.map(s => s.id)
-  const { data: existing } = await supabase
+  const buckets = new Map()
+  for (const row of sets) {
+    const existing = buckets.get(row.training_bucket_id)
+    if (!existing) {
+      buckets.set(row.training_bucket_id, {
+        id: row.training_bucket_id,
+        training_bucket_id: row.training_bucket_id,
+        training_date: row.training_date,
+        started_at: row.logged_at,
+        ended_at: row.logged_at,
+        _sets: [row],
+      })
+      continue
+    }
+
+    if (new Date(row.logged_at) < new Date(existing.started_at)) existing.started_at = row.logged_at
+    if (new Date(row.logged_at) > new Date(existing.ended_at)) existing.ended_at = row.logged_at
+    existing._sets.push(row)
+  }
+
+  const bucketIds = [...buckets.keys()]
+  const { data: existing, error: sorenessError } = await supabase
     .from('soreness_reports')
-    .select('session_id')
-    .in('session_id', sessionIds)
+    .select('training_bucket_id')
+    .in('training_bucket_id', bucketIds)
 
-  const reportedIds = new Set((existing || []).map(r => r.session_id))
-  return sessions.filter(s => !reportedIds.has(s.id))
+  if (sorenessError) throw sorenessError
+
+  const reportedIds = new Set((existing || []).map((r) => r.training_bucket_id))
+  return [...buckets.values()].filter((bucket) => !reportedIds.has(bucket.training_bucket_id))
 }
 
-export async function submitSoreness(sessionId, reports) {
+export async function submitSoreness(trainingBucketId, reports) {
   const { data: { user } } = await supabase.auth.getUser()
-  const rows = reports.map(r => ({
+  const rows = reports.map((r) => ({
     user_id: user.id,
-    session_id: sessionId,
+    training_bucket_id: trainingBucketId,
     muscle_group: r.muscleGroup,
     level: r.level,
   }))
