@@ -22,7 +22,7 @@ function parseBooleanFlag(value, fallback) {
   return fallback
 }
 
-function withEnvOverrides(baseFlags = DEFAULT_FLAGS) {
+function withEnvDefaults(baseFlags = DEFAULT_FLAGS) {
   return {
     setCentricLogging: parseBooleanFlag(ENV_FLAG_MAP.setCentricLogging, baseFlags.setCentricLogging),
     libraryScreenEnabled: parseBooleanFlag(ENV_FLAG_MAP.libraryScreenEnabled, baseFlags.libraryScreenEnabled),
@@ -40,16 +40,18 @@ export async function getFeatureFlags() {
       signal: controller.signal,
     })
 
-    if (!res.ok) return withEnvOverrides(DEFAULT_FLAGS)
+    if (!res.ok) return withEnvDefaults(DEFAULT_FLAGS)
+
+    const envDefaultFlags = withEnvDefaults(DEFAULT_FLAGS)
 
     const remoteFlags = await res.json()
-    return withEnvOverrides({
-      setCentricLogging: parseBooleanFlag(remoteFlags?.setCentricLogging, DEFAULT_FLAGS.setCentricLogging),
-      libraryScreenEnabled: parseBooleanFlag(remoteFlags?.libraryScreenEnabled, DEFAULT_FLAGS.libraryScreenEnabled),
-      analysisOnDemandOnly: parseBooleanFlag(remoteFlags?.analysisOnDemandOnly, DEFAULT_FLAGS.analysisOnDemandOnly),
-    })
+    return {
+      setCentricLogging: parseBooleanFlag(remoteFlags?.setCentricLogging, envDefaultFlags.setCentricLogging),
+      libraryScreenEnabled: parseBooleanFlag(remoteFlags?.libraryScreenEnabled, envDefaultFlags.libraryScreenEnabled),
+      analysisOnDemandOnly: parseBooleanFlag(remoteFlags?.analysisOnDemandOnly, envDefaultFlags.analysisOnDemandOnly),
+    }
   } catch {
-    return withEnvOverrides(DEFAULT_FLAGS)
+    return withEnvDefaults(DEFAULT_FLAGS)
   } finally {
     clearTimeout(timeoutId)
   }
