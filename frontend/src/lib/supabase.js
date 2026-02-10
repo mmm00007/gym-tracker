@@ -42,6 +42,48 @@ export async function getSession() {
   return session
 }
 
+export async function bootstrapDefaultEquipmentCatalog() {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user?.id) return
+
+  const bootstrapKey = `library-seeded:v1:${user.id}`
+  const alreadyBootstrapped = typeof window !== 'undefined' && window.localStorage.getItem(bootstrapKey) === 'done'
+  if (alreadyBootstrapped) return
+
+  const markDone = () => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(bootstrapKey, 'done')
+    }
+  }
+
+  // Primary expected RPC (phase roadmap contract).
+  const { error: seedError } = await supabase.rpc('seed_default_equipment_catalog')
+  if (!seedError) {
+    markDone()
+    return
+  }
+
+  // Fallback for older DBs that may still expose the legacy machine-named RPC.
+  if (seedError.code === '42883') {
+    const { error: legacyError } = await supabase.rpc('seed_default_machine_catalog')
+    if (legacyError && legacyError.code !== '42883') {
+      throw legacyError
+    }
+    if (!legacyError) {
+      markDone()
+      return
+    }
+  }
+
+  // If both RPCs are missing, do not block app usage.
+  if (seedError.code === '42883') {
+    markDone()
+    return
+  }
+
+  throw seedError
+}
+
 // ─── Equipment CRUD (machines table at DB level) ───────────
 export async function getEquipment() {
   const { data, error } = await supabase
