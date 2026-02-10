@@ -79,6 +79,41 @@ const buildSessionMetrics = (session, sets) => ({
   metrics: buildMetrics(sets),
 })
 
+
+const buildTrainingBuckets = (sets, machines) => {
+  const buckets = new Map()
+
+  sets.forEach((set) => {
+    const bucketId = set.training_bucket_id || `training_day:${new Date(set.logged_at).toISOString().slice(0, 10)}`
+    const existing = buckets.get(bucketId) || {
+      training_bucket_id: bucketId,
+      training_date: set.training_date || bucketId.replace('training_day:', ''),
+      workout_cluster_id: set.workout_cluster_id || null,
+      started_at: set.logged_at,
+      ended_at: set.logged_at,
+      sets: [],
+    }
+
+    existing.sets.push({
+      machine_id: set.machine_id,
+      machine_name: machines.find((m) => m.id === set.machine_id)?.movement || 'Unknown',
+      reps: set.reps,
+      weight: set.weight,
+      set_type: set.set_type || 'working',
+      duration_seconds: set.duration_seconds ?? null,
+      rest_seconds: set.rest_seconds ?? null,
+      logged_at: set.logged_at,
+    })
+
+    if (new Date(set.logged_at) < new Date(existing.started_at)) existing.started_at = set.logged_at
+    if (new Date(set.logged_at) > new Date(existing.ended_at)) existing.ended_at = set.logged_at
+
+    buckets.set(bucketId, existing)
+  })
+
+  return [...buckets.values()].sort((a, b) => new Date(a.started_at) - new Date(b.started_at))
+}
+
 const MUSCLE_COLORS = {
   Chest: '#ff6b6b', Back: '#4ecdc4', Shoulders: '#ffe66d', Biceps: '#ff8a5c',
   Triceps: '#a8e6cf', Legs: '#88d8b0', Core: '#ffd93d', Glutes: '#c9b1ff',
@@ -324,7 +359,7 @@ function SorenessPrompt({ session, muscleGroups, onSubmit, onDismiss }) {
 
   const handleSubmit = () => {
     const reports = Object.entries(levels).map(([muscleGroup, level]) => ({ muscleGroup, level }))
-    onSubmit(session.id, reports)
+    onSubmit(session.training_bucket_id, reports)
   }
 
   return (
@@ -412,7 +447,7 @@ function HomeScreen({
         if (!sessionMuscles.length) return null
         return (
           <SorenessPrompt key={s.id} session={s} muscleGroups={sessionMuscles}
-            onSubmit={onSorenessSubmit} onDismiss={() => onSorenessDismiss(s.id)} />
+            onSubmit={onSorenessSubmit} onDismiss={() => onSorenessDismiss(s.training_bucket_id)} />
         )
       })}
 
@@ -1594,19 +1629,6 @@ export default function App() {
       return
     }
 
-    // Build summary data
-    const sessionData = {
-      ...activeSession,
-      sets: currentSets.map(s => ({
-        machine_id: s.machine_id,
-        reps: s.reps,
-        weight: s.weight,
-        rest_seconds: s.rest_seconds,
-        logged_at: s.logged_at,
-        machine_name: machines.find(m => m.id === s.machine_id)?.movement || 'Unknown',
-      })),
-    }
-
     setSummarySession(activeSession)
     setSummarySets(currentSets)
     setRecommendations(null)
@@ -1631,26 +1653,30 @@ export default function App() {
 
     // Get recs
     try {
-      const pastData = await Promise.all(sessions.slice(0, 50).map(async (s) => {
-        const sets = await getSetsForSession(s.id)
-        return {
-          started_at: s.started_at,
-          ended_at: s.ended_at,
-          sets: sets.map(st => ({
-            reps: st.reps, weight: st.weight, rest_seconds: st.rest_seconds,
-            machine_name: machines.find(m => m.id === st.machine_id)?.movement || 'Unknown',
-          })),
-        }
-      }))
+      const allSets = await getSetsForSession()
+      const groupedTraining = buildTrainingBuckets(allSets, machines)
+      const scope = {
+        grouping: 'training_day',
+        date_start: groupedTraining[0]?.training_date || null,
+        date_end: groupedTraining[groupedTraining.length - 1]?.training_date || null,
+        included_set_types: ['working'],
+      }
 
-      const machinesMap = {}
-      machines.forEach(m => { machinesMap[m.id] = { name: m.name, movement: m.movement, muscle_groups: m.muscle_groups } })
+      const equipment = {}
+      machines.forEach((m) => {
+        equipment[m.id] = {
+          name: m.name,
+          movement: m.movement,
+          muscle_groups: m.muscle_groups,
+          equipment_type: m.equipment_type || 'machine',
+        }
+      })
 
       const soreness = await getRecentSoreness()
-      const recs = await getRecommendations(sessionData, pastData, machinesMap, soreness)
+      const recs = await getRecommendations(scope, groupedTraining, equipment, soreness)
       setRecommendations(recs)
 
-      // Save recs to session
+      // Save recs to session for current summary compatibility.
       await dbEndSession(activeSession.id, recs)
     } catch (e) {
       addLog({ level: 'error', event: 'recs.failed', message: e?.message || 'Failed to generate recommendations.' })
@@ -1665,13 +1691,13 @@ export default function App() {
     setSessions(updated.filter(s => s.ended_at))
   }
 
-  const handleSorenessSubmit = async (sessionId, reports) => {
-    await submitSoreness(sessionId, reports)
-    setPendingSoreness(prev => prev.filter(s => s.id !== sessionId))
+  const handleSorenessSubmit = async (trainingBucketId, reports) => {
+    await submitSoreness(trainingBucketId, reports)
+    setPendingSoreness(prev => prev.filter((s) => s.training_bucket_id !== trainingBucketId))
   }
 
-  const handleSorenessDismiss = (sessionId) => {
-    setPendingSoreness(prev => prev.filter(s => s.id !== sessionId))
+  const handleSorenessDismiss = (trainingBucketId) => {
+    setPendingSoreness(prev => prev.filter((s) => s.training_bucket_id !== trainingBucketId))
   }
 
   const handleViewHistorySession = async (session) => {

@@ -84,14 +84,14 @@ export async function pingHealth() {
   return { ok: res.ok, status: res.status, body: text }
 }
 
-export async function getRecommendations(currentSession, pastSessions, machines, sorenessData) {
+export async function getRecommendations(scope, groupedTraining, equipment, sorenessData) {
   const requestId = `${Date.now()}-${Math.random().toString(16).slice(2)}`
   const startTime = Date.now()
   addLog({
     level: 'info',
     event: 'recs.start',
     message: 'Recommendations request started.',
-    meta: { requestId, url: `${API_URL}/api/recommendations` },
+    meta: { requestId, url: `${API_URL}/api/recommendations`, grouping: scope?.grouping },
   })
   const headers = await authHeaders()
   try {
@@ -99,9 +99,9 @@ export async function getRecommendations(currentSession, pastSessions, machines,
       method: 'POST',
       headers,
       body: JSON.stringify({
-        current_session: currentSession,
-        past_sessions: pastSessions,
-        machines,
+        scope,
+        grouped_training: groupedTraining,
+        equipment,
         soreness_data: sorenessData || [],
       }),
     })
