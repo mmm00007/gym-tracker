@@ -1056,18 +1056,21 @@ function LogSetScreen({
   }, [selectedMachine, onLoadMachineHistory])
 
   const handleLog = async (durationSeconds = null, machineIdOverride = null) => {
-    if (!selectedMachine || logging) return
+    if (logging) return
+    const targetMachineId = machineIdOverride || selectedMachine?.id
+    if (!targetMachineId) return
+    const targetMachine = machines.find((m) => m.id === targetMachineId) || selectedMachine
     setLogging(true)
     const rest = restTimerEnabled && lastSetTime.current
       ? Math.floor((Date.now() - lastSetTime.current) / 1000)
       : null
     try {
-      await onLogSet(machineIdOverride || selectedMachine.id, reps, weight, durationSeconds, rest, setType)
-      setSetTypeByMachine((prev) => ({ ...prev, [selectedMachine.id]: setType }))
+      await onLogSet(targetMachineId, reps, weight, durationSeconds, rest, setType)
+      setSetTypeByMachine((prev) => ({ ...prev, [targetMachineId]: setType }))
       lastSetTime.current = Date.now()
       setRestSeconds(0)
       if (navigator.vibrate) navigator.vibrate(50)
-      const weightLabel = isBodyweightExercise(selectedMachine) ? `${weight}kg additional` : `${weight}kg`
+      const weightLabel = isBodyweightExercise(targetMachine) ? `${weight}kg additional` : `${weight}kg`
       showFeedback(`Logged ${reps} × ${weightLabel} (${setType})`, 'success')
     } catch (error) {
       addLog({ level: 'error', event: 'set.log_failed', message: error?.message || 'Failed to log set.' })
