@@ -992,6 +992,7 @@ function LogSetScreen({
   const restRef = useRef(null)
   const activeSetRef = useRef(null)
   const setStartTime = useRef(null)
+  const setMachineIdRef = useRef(null)
   const lastSetTime = useRef(null)
   const feedbackTimeoutRef = useRef(null)
 
@@ -1054,14 +1055,14 @@ function LogSetScreen({
     }
   }, [selectedMachine, onLoadMachineHistory])
 
-  const handleLog = async (durationSeconds = null) => {
+  const handleLog = async (durationSeconds = null, machineIdOverride = null) => {
     if (!selectedMachine || logging) return
     setLogging(true)
     const rest = restTimerEnabled && lastSetTime.current
       ? Math.floor((Date.now() - lastSetTime.current) / 1000)
       : null
     try {
-      await onLogSet(selectedMachine.id, reps, weight, durationSeconds, rest, setType)
+      await onLogSet(machineIdOverride || selectedMachine.id, reps, weight, durationSeconds, rest, setType)
       setSetTypeByMachine((prev) => ({ ...prev, [selectedMachine.id]: setType }))
       lastSetTime.current = Date.now()
       setRestSeconds(0)
@@ -1078,6 +1079,7 @@ function LogSetScreen({
 
   const handleStartSet = () => {
     if (!selectedMachine || logging || setInProgress) return
+    setMachineIdRef.current = selectedMachine.id
     setStartTime.current = Date.now()
     setActiveSetSeconds(0)
     setSetInProgress(true)
@@ -1086,10 +1088,12 @@ function LogSetScreen({
   const handleStopSet = async () => {
     if (!setInProgress || !setStartTime.current) return
     const durationSeconds = Math.max(1, Math.floor((Date.now() - setStartTime.current) / 1000))
+    const machineId = setMachineIdRef.current || selectedMachine.id
     setSetInProgress(false)
     setStartTime.current = null
+    setMachineIdRef.current = null
     setActiveSetSeconds(0)
-    await handleLog(durationSeconds)
+    await handleLog(durationSeconds, machineId)
   }
 
   // Select view
@@ -1172,11 +1176,12 @@ function LogSetScreen({
       </div>
 
       {/* Machine selector button */}
-      <button onClick={() => setView('select')} style={{
+      <button onClick={() => { if (!setInProgress) setView('select') }} disabled={setInProgress} style={{
         width: '100%', padding: 16, borderRadius: 14, cursor: 'pointer', textAlign: 'left', marginBottom: 16,
         border: selectedMachine ? `2px solid ${mc(selectedMachine.muscle_groups?.[0])}44` : '2px dashed var(--text-dim)',
         background: selectedMachine ? 'var(--surface)' : 'var(--surface)',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        opacity: setInProgress ? 0.65 : 1,
       }}>
         {selectedMachine ? (
           <div>
@@ -1247,6 +1252,7 @@ function LogSetScreen({
           {setInProgress && (
             <div style={{ marginBottom: 12, fontSize: 13, color: 'var(--blue)', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
               Set in progress: {fmtTimer(activeSetSeconds)}
+              <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>Exercise selection is locked until you stop this set.</div>
             </div>
           )}
 
