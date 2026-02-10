@@ -110,7 +110,10 @@ begin
     seed.default_weight,
     seed.default_reps,
     seed.notes,
-    'default_catalog'
+    case
+      when seed.equipment_type = 'machine' then 'default_catalog'
+      else null
+    end
   from (
     values
       ('Barbell Back Squat', 'Squat', 'freeweight', array['Quadriceps','Glutes','Core']::text[], 'Legs', 60::real, 5, 'Brace and keep bar path over mid-foot'),
