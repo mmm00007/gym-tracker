@@ -2,12 +2,10 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   supabase, signUp, signIn, signOut, getSession,
   getMachines, upsertMachine, deleteMachine as dbDeleteMachine,
-  getSessions, createSession, endSession as dbEndSession, getActiveSession,
   getSetsForSession, logSet as dbLogSet, deleteSet as dbDeleteSet,
-  getPendingSoreness, submitSoreness, getRecentSoreness,
+  getPendingSoreness, submitSoreness,
 } from './lib/supabase'
-import { identifyMachine, getRecommendations, API_BASE_URL, pingHealth } from './lib/api'
-import { DEFAULT_FLAGS, getFeatureFlags } from './lib/featureFlags'
+import { identifyMachine, API_BASE_URL, pingHealth } from './lib/api'
 import { addLog, subscribeLogs } from './lib/logs'
 
 // ─── Helpers ───────────────────────────────────────────────
@@ -23,6 +21,12 @@ const fmtNumber = (value, digits = 1) => {
 }
 
 const estimate1RM = (weight, reps) => weight * (1 + reps / 30)
+const SET_TYPE_OPTIONS = ['warmup', 'working', 'top', 'drop', 'backoff', 'failure']
+
+const filterSetsByType = (sets, setTypes) => {
+  if (!setTypes?.length) return sets
+  return sets.filter((set) => setTypes.includes(set.set_type || 'working'))
+}
 
 const buildMetrics = (sets) => {
   if (!sets.length) {
@@ -37,6 +41,8 @@ const buildMetrics = (sets) => {
       hardSets: 0,
       bestSet: null,
       maxWeight: 0,
+      avgTimedDuration: null,
+      timedSetCount: 0,
     }
   }
   const totalSets = sets.length
@@ -59,6 +65,10 @@ const buildMetrics = (sets) => {
     }
   })
   const hardSets = sets.filter(s => s.reps <= 8 || s.weight >= maxWeight * 0.9).length
+  const timedSets = sets.filter((s) => s.duration_seconds !== null && s.duration_seconds !== undefined)
+  const avgTimedDuration = timedSets.length
+    ? timedSets.reduce((sum, s) => sum + s.duration_seconds, 0) / timedSets.length
+    : null
   return {
     totalVolume,
     totalSets,
@@ -70,15 +80,10 @@ const buildMetrics = (sets) => {
     hardSets,
     bestSet,
     maxWeight,
+    avgTimedDuration,
+    timedSetCount: timedSets.length,
   }
 }
-
-const buildSessionMetrics = (session, sets) => ({
-  session,
-  sets,
-  metrics: buildMetrics(sets),
-})
-
 
 const buildTrainingBuckets = (sets, machines) => {
   const buckets = new Map()
@@ -411,13 +416,12 @@ function SorenessPrompt({ session, muscleGroups, onSubmit, onDismiss }) {
 // ─── Home Screen ───────────────────────────────────────────
 
 function HomeScreen({
-  activeSession,
   pendingSoreness,
   machines,
-  onStart,
-  onResume,
-  onHistory,
+  onLogSets,
+  onLibrary,
   onAnalysis,
+  onHistory,
   onDiagnostics,
   onSorenessSubmit,
   onSorenessDismiss,
@@ -436,7 +440,6 @@ function HomeScreen({
         <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 8, letterSpacing: 3, fontFamily: 'var(--font-code)' }}>AI-POWERED GYM LOG</div>
       </div>
 
-      {/* Soreness prompts */}
       {pendingSoreness.map(s => {
         const sessionMuscles = [...new Set(
           (s._sets || []).flatMap(set => {
@@ -452,37 +455,33 @@ function HomeScreen({
       })}
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {activeSession ? (
-          <button onClick={onResume} style={{
-            background: 'var(--accent)11', border: '2px solid var(--accent)',
-            borderRadius: 16, padding: 24, textAlign: 'left',
-          }}>
-            <div style={{ fontSize: 12, color: 'var(--accent)', letterSpacing: 2, marginBottom: 8, fontFamily: 'var(--font-code)' }}>● ACTIVE SESSION</div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>Resume Workout</div>
-            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Started {fmtTime(activeSession.started_at)}</div>
-          </button>
-        ) : (
-          <button onClick={onStart} style={{
-            background: 'linear-gradient(135deg, var(--accent), var(--accent-dark))', borderRadius: 16,
-            padding: 28, textAlign: 'center', boxShadow: '0 0 40px var(--accent)33',
-          }}>
-            <div style={{ fontSize: 32, marginBottom: 8 }}>💪</div>
-            <div style={{ fontSize: 20, fontWeight: 900, color: '#000', fontFamily: 'var(--font-mono)' }}>START WORKOUT</div>
-          </button>
-        )}
+        <button onClick={onLogSets} style={{
+          background: 'linear-gradient(135deg, var(--accent), var(--accent-dark))', borderRadius: 16,
+          padding: 22, textAlign: 'left', boxShadow: '0 0 40px var(--accent)22',
+        }}>
+          <div style={{ fontSize: 18, fontWeight: 900, color: '#000', fontFamily: 'var(--font-mono)' }}>📝 Log Sets</div>
+          <div style={{ fontSize: 13, color: '#022', marginTop: 4 }}>Capture sets directly without starting a session</div>
+        </button>
 
-        <button onClick={onHistory} style={{
+        <button onClick={onLibrary} style={{
           background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, textAlign: 'left',
         }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>📊 History & Insights</div>
-          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Past sessions & AI recommendations</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>📚 Library</div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Manage exercises and defaults</div>
         </button>
 
         <button onClick={onAnalysis} style={{
           background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, textAlign: 'left',
         }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>📈 Analysis</div>
-          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Detailed machine metrics and trends</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>📈 Analyze</div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Detailed progression and set-type insights</div>
+        </button>
+
+        <button onClick={onHistory} style={{
+          background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, textAlign: 'left',
+        }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>📊 History</div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Training-day timeline and recent sets</div>
         </button>
 
         <button onClick={onDiagnostics} style={{
@@ -775,31 +774,74 @@ function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
   )
 }
 
-// ─── Session Screen ────────────────────────────────────────
+function LibraryScreen({ machines, onSaveMachine, onDeleteMachine, onBack }) {
+  const [editingMachine, setEditingMachine] = useState(null)
 
-function SessionScreen({
-  session,
+  if (editingMachine) {
+    return (
+      <EditMachineScreen
+        machine={editingMachine}
+        onSave={async (machine) => { await onSaveMachine(machine); setEditingMachine(null) }}
+        onCancel={() => setEditingMachine(null)}
+        onDelete={async (id) => { await onDeleteMachine(id); setEditingMachine(null) }}
+      />
+    )
+  }
+
+  return (
+    <div style={{ padding: '20px 16px', minHeight: '100dvh' }}>
+      <TopBar left={<BackBtn onClick={onBack} />} title="LIBRARY" right={<button onClick={() => setEditingMachine({})} style={{ fontSize: 13, color: 'var(--accent)' }}>+ Add</button>} />
+      {machines.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-dim)' }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>🏋️</div>
+          <div>No exercises in your library yet.</div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {machines.map((machine) => (
+            <MachineCard key={machine.id} machine={machine} compact onSelect={() => setEditingMachine(machine)} onEdit={() => setEditingMachine(machine)} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Log Set Screen ────────────────────────────────────────
+
+function LogSetScreen({
   sets,
   machines,
   machineHistory,
   onLoadMachineHistory,
   onLogSet,
   onDeleteSet,
-  onEndSession,
   onBack,
-  onSaveMachine,
-  onDeleteMachine,
+  onOpenLibrary,
 }) {
   const [view, setView] = useState('log')
   const [selectedMachine, setSelectedMachine] = useState(null)
-  const [editingMachine, setEditingMachine] = useState(null)
   const [muscleFilter, setMuscleFilter] = useState('All')
   const [reps, setReps] = useState(10)
   const [weight, setWeight] = useState(20)
+  const [setType, setSetType] = useState('working')
+  const [setTypeByMachine, setSetTypeByMachine] = useState({})
   const [restSeconds, setRestSeconds] = useState(0)
   const [logging, setLogging] = useState(false)
+  const [feedback, setFeedback] = useState(null)
   const restRef = useRef(null)
   const lastSetTime = useRef(null)
+  const feedbackTimeoutRef = useRef(null)
+
+  const showFeedback = useCallback((message, tone = 'success') => {
+    setFeedback({ message, tone })
+    if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current)
+    feedbackTimeoutRef.current = setTimeout(() => setFeedback(null), 1600)
+  }, [])
+
+  useEffect(() => () => {
+    if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current)
+  }, [])
 
   // Rest timer
   useEffect(() => {
@@ -821,8 +863,10 @@ function SessionScreen({
     if (machineSets.length) {
       const last = machineSets[machineSets.length - 1]
       setReps(last.reps); setWeight(last.weight)
+      setSetType(setTypeByMachine[m.id] || last.set_type || 'working')
     } else {
       setReps(m.default_reps || 10); setWeight(m.default_weight || 20)
+      setSetType(setTypeByMachine[m.id] || 'working')
     }
     setView('log')
   }
@@ -837,40 +881,19 @@ function SessionScreen({
     if (!selectedMachine || logging) return
     setLogging(true)
     const rest = lastSetTime.current ? Math.floor((Date.now() - lastSetTime.current) / 1000) : null
-    await onLogSet(selectedMachine.id, reps, weight, null, rest)
-    lastSetTime.current = Date.now()
-    setRestSeconds(0)
-    if (navigator.vibrate) navigator.vibrate(50)
-    setLogging(false)
-  }
-
-  // Camera view
-  if (view === 'camera') {
-    return <CameraScreen onCancel={() => setView('log')} onIdentified={async (data) => {
-      // Transform LLM response keys to DB column names
-      const machineData = {
-        name: data.name,
-        movement: data.movement,
-        exercise_type: data.exerciseType,
-        muscle_groups: data.muscleGroups || [],
-        variations: data.variations || [],
-        default_weight: data.defaultWeight || 20,
-        default_reps: data.defaultReps || 10,
-        notes: data.notes || '',
-        thumbnails: data.thumbnails || [],
-      }
-      const saved = await onSaveMachine(machineData)
-      selectMachine(saved)
-    }} />
-  }
-
-  // Edit view
-  if (view === 'edit' && editingMachine) {
-    return <EditMachineScreen machine={editingMachine}
-      onSave={async (m) => { const saved = await onSaveMachine(m); selectMachine(saved); setEditingMachine(null); setView('log') }}
-      onCancel={() => { setEditingMachine(null); setView('log') }}
-      onDelete={async (id) => { await onDeleteMachine(id); if (selectedMachine?.id === id) setSelectedMachine(null); setEditingMachine(null); setView('log') }}
-    />
+    try {
+      await onLogSet(selectedMachine.id, reps, weight, null, rest, setType)
+      setSetTypeByMachine((prev) => ({ ...prev, [selectedMachine.id]: setType }))
+      lastSetTime.current = Date.now()
+      setRestSeconds(0)
+      if (navigator.vibrate) navigator.vibrate(50)
+      showFeedback(`Logged ${reps} × ${weight}kg (${setType})`, 'success')
+    } catch (error) {
+      addLog({ level: 'error', event: 'set.log_failed', message: error?.message || 'Failed to log set.' })
+      showFeedback('Could not log set. Please try again.', 'error')
+    } finally {
+      setLogging(false)
+    }
   }
 
   // Select view
@@ -881,12 +904,12 @@ function SessionScreen({
       : machines.filter(m => m.muscle_groups?.includes(muscleFilter))
     return (
       <div style={{ padding: '20px 16px', minHeight: '100dvh' }}>
-        <TopBar left={<BackBtn onClick={() => setView('log')} />} title="SELECT MACHINE" />
-        <button onClick={() => setView('camera')} style={{
-          width: '100%', padding: 18, borderRadius: 14, border: '2px dashed var(--accent)66',
-          background: 'var(--accent)11', color: 'var(--accent)', fontSize: 16, fontWeight: 700,
-          marginBottom: 16, fontFamily: 'var(--font-mono)',
-        }}>📸 Identify New Machine</button>
+        <TopBar left={<BackBtn onClick={() => setView('log')} />} title="SELECT EXERCISE" />
+        <button onClick={onOpenLibrary} style={{
+          width: '100%', padding: 14, borderRadius: 12, border: '1px solid var(--border)',
+          background: 'var(--surface2)', color: 'var(--text)', fontSize: 13, fontWeight: 700,
+          marginBottom: 16,
+        }}>Go to Library</button>
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, marginBottom: 8, fontFamily: 'var(--font-code)' }}>
             FILTER BY MAIN MUSCLE GROUP
@@ -907,17 +930,16 @@ function SessionScreen({
         {machines.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-dim)' }}>
             <div style={{ fontSize: 40, marginBottom: 12 }}>🏋️</div>
-            <div>No machines yet. Take a photo!</div>
+            <div>No exercises yet. Add one from Library.</div>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {filteredMachines.length === 0 && (
               <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-dim)', fontSize: 13 }}>
-                No machines for that muscle group yet.
+                No exercises for that muscle group yet.
               </div>
             )}
-            {filteredMachines.map(m => <MachineCard key={m.id} machine={m} onSelect={() => selectMachine(m)}
-              onEdit={() => { setEditingMachine(m); setView('edit') }} />)}
+            {filteredMachines.map(m => <MachineCard key={m.id} machine={m} onSelect={() => selectMachine(m)} />)}
           </div>
         )}
       </div>
@@ -939,8 +961,8 @@ function SessionScreen({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <BackBtn onClick={onBack} />
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 11, color: 'var(--accent)', letterSpacing: 2, fontFamily: 'var(--font-code)', animation: 'pulse 2s infinite' }}>● LIVE</div>
-          <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>{fmtDur(Date.now() - new Date(session.started_at).getTime())}</div>
+          <div style={{ fontSize: 11, color: 'var(--accent)', letterSpacing: 2, fontFamily: 'var(--font-code)' }}>SET-FIRST LOGGING</div>
+          <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>{sets.length} sets logged</div>
         </div>
       </div>
 
@@ -957,13 +979,30 @@ function SessionScreen({
             <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>{selectedMachine.name}</div>
           </div>
         ) : (
-          <div style={{ color: 'var(--text-muted)', fontSize: 15 }}>Tap to select a machine</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 15 }}>Tap to select an exercise</div>
         )}
         <span style={{ color: 'var(--text-dim)', fontSize: 20 }}>›</span>
       </button>
 
       {selectedMachine && (
         <>
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, marginBottom: 8, fontFamily: 'var(--font-code)' }}>SET TYPE</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {SET_TYPE_OPTIONS.map((type) => {
+                const active = setType === type
+                return (
+                  <button key={type} onClick={() => setSetType(type)} style={{
+                    textTransform: 'capitalize',
+                    padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                    background: active ? 'var(--accent)22' : 'var(--surface2)', color: active ? 'var(--accent)' : 'var(--text-muted)',
+                    fontSize: 12, fontWeight: 700,
+                  }}>{type}</button>
+                )
+              })}
+            </div>
+          </div>
+
           {selectedMachine.notes && (
             <div style={{ background: '#1a1a2e', borderRadius: 12, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#88a', borderLeft: '3px solid #4444ff' }}>
               💡 {selectedMachine.notes}
@@ -1014,7 +1053,7 @@ function SessionScreen({
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
                   <MetricCard label="Total volume" value={`${fmtNumber(sessionMetrics.totalVolume, 0)} kg`} />
-                  <MetricCard label="Working sets" value={fmtNumber(sessionMetrics.totalSets, 0)} />
+                  <MetricCard label="Total sets" value={fmtNumber(sessionMetrics.totalSets, 0)} />
                   <MetricCard label="Total reps" value={fmtNumber(sessionMetrics.totalReps, 0)} />
                   <MetricCard label="Avg load/rep" value={`${fmtNumber(sessionMetrics.avgLoad, 1)} kg`} />
                   <MetricCard label="Avg reps/set" value={fmtNumber(sessionMetrics.avgRepsPerSet, 1)} />
@@ -1084,13 +1123,28 @@ function SessionScreen({
         </div>
       )}
 
-      <button onClick={onEndSession} style={{
-        position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)',
-        width: 'calc(100% - 32px)', maxWidth: 448, padding: 16, borderRadius: 14,
-        border: '2px solid var(--red)44', background: '#1a0a0aee', color: 'var(--red)',
-        fontSize: 16, fontWeight: 700, fontFamily: 'var(--font-mono)',
-        backdropFilter: 'blur(10px)', zIndex: 10,
-      }}>END SESSION</button>
+      {feedback && (
+        <div style={{
+          position: 'fixed',
+          left: '50%',
+          bottom: 22,
+          transform: 'translateX(-50%)',
+          padding: '10px 14px',
+          borderRadius: 10,
+          border: `1px solid ${feedback.tone === 'error' ? 'var(--red)88' : 'var(--accent)66'}`,
+          background: feedback.tone === 'error' ? 'rgba(40, 10, 10, 0.95)' : 'rgba(15, 30, 20, 0.95)',
+          color: feedback.tone === 'error' ? 'var(--red)' : 'var(--accent)',
+          fontSize: 12,
+          fontWeight: 700,
+          fontFamily: 'var(--font-mono)',
+          letterSpacing: 0.3,
+          boxShadow: '0 6px 24px rgba(0,0,0,0.4)',
+          zIndex: 30,
+        }}>
+          {feedback.message}
+        </div>
+      )}
+
     </div>
   )
 }
@@ -1171,30 +1225,41 @@ function SummaryScreen({ session, sets, machines, recommendations, onDone }) {
 
 // ─── History Screen ────────────────────────────────────────
 
-function HistoryScreen({ sessions, machines, onBack, onViewSession }) {
+function HistoryScreen({ trainingBuckets, machines, onBack }) {
   return (
     <div style={{ padding: '20px 16px', minHeight: '100dvh' }}>
       <TopBar left={<BackBtn onClick={onBack} />} title="HISTORY" />
-      {sessions.length === 0 ? (
+      {trainingBuckets.length === 0 ? (
         <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-dim)' }}>
           <div style={{ fontSize: 48, marginBottom: 12 }}>📋</div>
-          <div style={{ fontSize: 16 }}>No sessions yet</div>
+          <div style={{ fontSize: 16 }}>No sets logged yet</div>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {sessions.map(s => (
-            <div key={s.id} onClick={() => onViewSession(s)} style={{
-              background: 'var(--surface)', borderRadius: 14, padding: 16, cursor: 'pointer', border: '1px solid var(--border)',
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{fmtFull(s.started_at)}</div>
-                {s.ended_at && <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{fmtDur(new Date(s.ended_at) - new Date(s.started_at))}</div>}
+          {trainingBuckets.slice().reverse().map((bucket) => {
+            const durationMs = new Date(bucket.ended_at) - new Date(bucket.started_at)
+            const setCount = bucket.sets.length
+            const uniqueMovements = [...new Set(bucket.sets.map((set) => set.machine_name))]
+            return (
+              <div key={bucket.training_bucket_id} style={{
+                background: 'var(--surface)', borderRadius: 14, padding: 16, border: '1px solid var(--border)',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{fmtFull(bucket.started_at)}</div>
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{fmtDur(durationMs)}</div>
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>
+                  {setCount} sets · {uniqueMovements.length} exercises
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {uniqueMovements.map((movement) => {
+                    const machine = machines.find((m) => m.movement === movement)
+                    return <Pill key={movement} text={movement} color={mc(machine?.muscle_groups?.[0])} />
+                  })}
+                </div>
               </div>
-              {s.recommendations?.summary && (
-                <div style={{ fontSize: 12, color: 'var(--text-dim)', fontStyle: 'italic', lineHeight: 1.4, marginTop: 4 }}>{s.recommendations.summary}</div>
-              )}
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
@@ -1205,6 +1270,8 @@ function HistoryScreen({ sessions, machines, onBack, onViewSession }) {
 
 function AnalysisScreen({ machines, machineHistory, onLoadMachineHistory, onBack }) {
   const [selectedMachineId, setSelectedMachineId] = useState(machines[0]?.id || '')
+  const [setTypeMode, setSetTypeMode] = useState('working')
+  const [customSetTypes, setCustomSetTypes] = useState(['working'])
 
   useEffect(() => {
     if (selectedMachineId) {
@@ -1218,16 +1285,33 @@ function AnalysisScreen({ machines, machineHistory, onLoadMachineHistory, onBack
     }
   }, [machines, selectedMachineId])
 
-  const history = selectedMachineId ? (machineHistory[selectedMachineId] || []) : []
+  const historyEntries = selectedMachineId ? (machineHistory[selectedMachineId] || []) : []
+  const includedSetTypes = setTypeMode === 'all'
+    ? SET_TYPE_OPTIONS
+    : setTypeMode === 'working'
+      ? ['working']
+      : customSetTypes
+
+  const history = historyEntries
+    .map((entry) => {
+      const filteredSets = filterSetsByType(entry.sets, includedSetTypes)
+      return {
+        ...entry,
+        metrics: buildMetrics(filteredSets),
+      }
+    })
+    .filter((entry) => entry.metrics.totalSets > 0)
+
   const metricConfigs = [
     { key: 'totalVolume', label: 'Total volume load (kg)', color: 'var(--accent)', format: (v) => `${fmtNumber(v, 0)} kg` },
-    { key: 'totalSets', label: 'Total working sets', color: 'var(--blue)', format: (v) => fmtNumber(v, 0) },
+    { key: 'totalSets', label: 'Total sets', color: 'var(--blue)', format: (v) => fmtNumber(v, 0) },
     { key: 'totalReps', label: 'Total reps', color: '#ffe66d', format: (v) => fmtNumber(v, 0) },
     { key: 'avgLoad', label: 'Average load per rep', color: '#4ecdc4', format: (v) => `${fmtNumber(v, 1)} kg` },
     { key: 'avgRepsPerSet', label: 'Average reps per set', color: '#ff8a5c', format: (v) => fmtNumber(v, 1) },
     { key: 'maxStandardized', label: 'Max weight (5–8 reps)', color: '#c9b1ff', format: (v) => `${fmtNumber(v, 1)} kg` },
     { key: 'estOneRm', label: 'Estimated 1RM (best set)', color: '#88d8b0', format: (v) => `${fmtNumber(v, 1)} kg` },
     { key: 'hardSets', label: 'Hard sets (proxy)', color: '#ff6b6b', format: (v) => fmtNumber(v, 0) },
+    { key: 'avgTimedDuration', label: 'Average timed set duration', color: '#f7b267', format: (v) => v === null ? 'Unknown' : `${fmtNumber(v, 1)} s` },
   ]
 
   return (
@@ -1235,7 +1319,7 @@ function AnalysisScreen({ machines, machineHistory, onLoadMachineHistory, onBack
       <TopBar left={<BackBtn onClick={onBack} />} title="ANALYSIS" />
 
       <div style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)', marginBottom: 6 }}>MACHINE</div>
+        <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)', marginBottom: 6 }}>EXERCISE</div>
         <select value={selectedMachineId} onChange={(e) => setSelectedMachineId(e.target.value)} style={{
           width: '100%', padding: 12, borderRadius: 10, border: '1px solid var(--border)',
           background: 'var(--surface)', color: 'var(--text)', fontSize: 14,
@@ -1246,14 +1330,58 @@ function AnalysisScreen({ machines, machineHistory, onLoadMachineHistory, onBack
         </select>
       </div>
 
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, marginBottom: 8, fontFamily: 'var(--font-code)' }}>SET TYPE FILTER</div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+          {[
+            { key: 'all', label: 'Include all' },
+            { key: 'working', label: 'Working only' },
+            { key: 'custom', label: 'Custom' },
+          ].map((mode) => {
+            const active = setTypeMode === mode.key
+            return (
+              <button key={mode.key} onClick={() => setSetTypeMode(mode.key)} style={{
+                padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                background: active ? 'var(--accent)22' : 'var(--surface2)', color: active ? 'var(--accent)' : 'var(--text-muted)',
+                fontSize: 12, fontWeight: 700,
+              }}>{mode.label}</button>
+            )
+          })}
+        </div>
+        {setTypeMode === 'custom' && (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {SET_TYPE_OPTIONS.map((type) => {
+              const active = customSetTypes.includes(type)
+              return (
+                <button key={type} onClick={() => {
+                  setCustomSetTypes((prev) => {
+                    if (prev.includes(type)) return prev.filter((value) => value !== type)
+                    return [...prev, type]
+                  })
+                }} style={{
+                  textTransform: 'capitalize',
+                  padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--blue)' : 'var(--border)'}`,
+                  background: active ? 'var(--blue)22' : 'var(--surface2)', color: active ? 'var(--blue)' : 'var(--text-muted)',
+                  fontSize: 12, fontWeight: 700,
+                }}>{type}</button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      <div title="Duration metrics exclude sets where duration was not timed." style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 16 }}>
+        ⓘ Duration unknown if not timed.
+      </div>
+
       {history.length === 0 ? (
         <div style={{ background: 'var(--surface)', borderRadius: 14, padding: 16, border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
-          No logged sessions for this machine yet.
+          No logged sets for this exercise with the selected filter.
         </div>
       ) : (
         <>
           {metricConfigs.map((metric) => {
-            const values = history.map(h => h.metrics[metric.key])
+            const values = history.map(h => h.metrics[metric.key] ?? 0)
             const lastEntry = history[history.length - 1]
             const lastValue = lastEntry?.metrics[metric.key] ?? 0
             const previousValue = history.length > 1 ? history[history.length - 2].metrics[metric.key] : null
@@ -1273,37 +1401,12 @@ function AnalysisScreen({ machines, machineHistory, onLoadMachineHistory, onBack
                 </div>
                 <MiniBarChart values={values} color={metric.color} height={70} />
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 11, color: 'var(--text-dim)' }}>
-                  <span>{fmt(history[0].session.started_at)}</span>
-                  <span>{fmt(history[history.length - 1].session.started_at)}</span>
+                  <span>{fmt(history[0].started_at)}</span>
+                  <span>{fmt(history[history.length - 1].started_at)}</span>
                 </div>
               </div>
             )
           })}
-
-          <div style={{ background: 'var(--surface)', borderRadius: 14, padding: 14, border: '1px solid var(--border)' }}>
-            <div style={{ fontSize: 12, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)', marginBottom: 8 }}>
-              SESSION BREAKDOWN (LATEST 6)
-            </div>
-            {history.slice(-6).reverse().map((entry) => (
-              <div key={entry.session.id} style={{
-                borderRadius: 12, border: '1px solid var(--border)', padding: 12, marginBottom: 8,
-                background: 'var(--surface2)',
-              }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>
-                  {fmtFull(entry.session.started_at)}
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
-                  <MetricCard label="Volume" value={`${fmtNumber(entry.metrics.totalVolume, 0)} kg`} />
-                  <MetricCard label="Working sets" value={fmtNumber(entry.metrics.totalSets, 0)} />
-                  <MetricCard label="Total reps" value={fmtNumber(entry.metrics.totalReps, 0)} />
-                  <MetricCard label="Avg load/rep" value={`${fmtNumber(entry.metrics.avgLoad, 1)} kg`} />
-                  <MetricCard label="Max 5–8" value={`${fmtNumber(entry.metrics.maxStandardized, 1)} kg`} />
-                  <MetricCard label="Est. 1RM" value={`${fmtNumber(entry.metrics.estOneRm, 1)} kg`} />
-                  <MetricCard label="Hard sets" value={fmtNumber(entry.metrics.hardSets, 0)} sub="Proxy rule" />
-                </div>
-              </div>
-            ))}
-          </div>
         </>
       )}
     </div>
@@ -1505,16 +1608,10 @@ export default function App() {
   const [user, setUser] = useState(undefined) // undefined=loading, null=logged out
   const [screen, setScreen] = useState('home')
   const [machines, setMachines] = useState([])
-  const [activeSession, setActiveSession] = useState(null)
-  const [currentSets, setCurrentSets] = useState([])
-  const [sessions, setSessions] = useState([])
+  const [sets, setSets] = useState([])
   const [pendingSoreness, setPendingSoreness] = useState([])
-  const [summarySession, setSummarySession] = useState(null)
-  const [summarySets, setSummarySets] = useState([])
-  const [recommendations, setRecommendations] = useState(null)
   const [machineHistory, setMachineHistory] = useState({})
   const [machineHistoryStatus, setMachineHistoryStatus] = useState({})
-  const [featureFlags, setFeatureFlags] = useState(DEFAULT_FLAGS)
 
   // Auth listener
   useEffect(() => {
@@ -1539,22 +1636,14 @@ export default function App() {
     }
   }, [])
 
-  // Load data when user is authenticated
   const loadData = useCallback(async () => {
     if (!user) return
     try {
-      const [m, s, active] = await Promise.all([getMachines(), getSessions(), getActiveSession()])
+      const [m, allSets] = await Promise.all([getMachines(), getSetsForSession()])
       setMachines(m)
-      setSessions(s.filter(se => se.ended_at))
-      setActiveSession(active)
-      if (active) {
-        const sets = await getSetsForSession(active.id)
-        setCurrentSets(sets)
-      }
-      // Check pending soreness
+      setSets(allSets)
+
       const pending = await getPendingSoreness()
-      // Pending soreness entries are bucketed by training_bucket_id and already carry _sets.
-      // Keep any existing _sets to avoid querying session_id with bucket identifiers.
       const enriched = pending.map((p) => ({ ...p, _sets: p._sets || [] }))
       setPendingSoreness(enriched)
     } catch (e) {
@@ -1568,38 +1657,17 @@ export default function App() {
   useEffect(() => {
     setMachineHistory({})
     setMachineHistoryStatus({})
-  }, [sessions.length])
-
-  useEffect(() => {
-    let active = true
-    const loadFlags = async () => {
-      const flags = await getFeatureFlags()
-      if (!active) return
-      setFeatureFlags(flags)
-      addLog({ level: 'info', event: 'flags.loaded', message: 'Rollout flags loaded.', meta: flags })
-    }
-    loadFlags()
-    return () => {
-      active = false
-    }
-  }, [])
+  }, [sets.length])
 
   // ─── Actions ─────────────────────────────────────────────
-  const handleStartSession = async () => {
-    const s = await createSession()
-    setActiveSession(s)
-    setCurrentSets([])
-    setScreen('session')
-  }
-
-  const handleLogSet = async (machineId, reps, weight, duration, rest) => {
-    const s = await dbLogSet(activeSession.id, machineId, reps, weight, duration, rest)
-    setCurrentSets(prev => [...prev, s])
+  const handleLogSet = async (machineId, reps, weight, duration, rest, setType = 'working') => {
+    const s = await dbLogSet(null, machineId, reps, weight, duration, rest, setType)
+    setSets(prev => [...prev, s])
   }
 
   const handleDeleteSet = async (id) => {
     await dbDeleteSet(id)
-    setCurrentSets(prev => prev.filter(s => s.id !== id))
+    setSets(prev => prev.filter(s => s.id !== id))
   }
 
   const handleSaveMachine = async (machineData) => {
@@ -1616,79 +1684,6 @@ export default function App() {
     setMachines(prev => prev.filter(m => m.id !== id))
   }
 
-  const handleEndSession = async () => {
-    if (!activeSession) return
-    if (currentSets.length === 0) {
-      // Empty session, just delete it
-      await dbEndSession(activeSession.id, null)
-      setActiveSession(null)
-      setCurrentSets([])
-      setScreen('home')
-      return
-    }
-
-    setSummarySession(activeSession)
-    setSummarySets(currentSets)
-    setRecommendations(null)
-    setScreen('summary')
-
-    // End in DB
-    await dbEndSession(activeSession.id, null)
-
-    if (featureFlags.analysisOnDemandOnly) {
-      setRecommendations({
-        summary: 'AI insights are set to on-demand mode. Run analysis manually from the Analysis screen.',
-        highlights: [],
-        suggestions: [],
-        nextSession: '',
-      })
-      setActiveSession(null)
-      setCurrentSets([])
-      const updated = await getSessions()
-      setSessions(updated.filter(s => s.ended_at))
-      return
-    }
-
-    // Get recs
-    try {
-      const allSets = await getSetsForSession()
-      const groupedTraining = buildTrainingBuckets(allSets, machines)
-      const scope = {
-        grouping: 'training_day',
-        date_start: groupedTraining[0]?.training_date || null,
-        date_end: groupedTraining[groupedTraining.length - 1]?.training_date || null,
-        included_set_types: ['working'],
-      }
-
-      const equipment = {}
-      machines.forEach((m) => {
-        equipment[m.id] = {
-          name: m.name,
-          movement: m.movement,
-          muscle_groups: m.muscle_groups,
-          equipment_type: m.equipment_type || 'machine',
-        }
-      })
-
-      const soreness = await getRecentSoreness()
-      const recs = await getRecommendations(scope, groupedTraining, equipment, soreness)
-      setRecommendations(recs)
-
-      // Save recs to session for current summary compatibility.
-      await dbEndSession(activeSession.id, recs)
-    } catch (e) {
-      addLog({ level: 'error', event: 'recs.failed', message: e?.message || 'Failed to generate recommendations.' })
-      console.error('Recs error:', e)
-      setRecommendations({ summary: 'Could not generate insights.', highlights: [], suggestions: [], nextSession: '' })
-    }
-
-    setActiveSession(null)
-    setCurrentSets([])
-    // Refresh sessions list
-    const updated = await getSessions()
-    setSessions(updated.filter(s => s.ended_at))
-  }
-
   const handleSorenessSubmit = async (trainingBucketId, reports) => {
     await submitSoreness(trainingBucketId, reports)
     setPendingSoreness(prev => prev.filter((s) => s.training_bucket_id !== trainingBucketId))
@@ -1698,36 +1693,35 @@ export default function App() {
     setPendingSoreness(prev => prev.filter((s) => s.training_bucket_id !== trainingBucketId))
   }
 
-  const handleViewHistorySession = async (session) => {
-    const sets = await getSetsForSession(session.id)
-    setSummarySession(session)
-    setSummarySets(sets)
-    setRecommendations(session.recommendations || null)
-    setScreen('summary')
-  }
-
   const loadMachineHistory = useCallback(async (machineId) => {
     if (!machineId) return
     if (machineHistory[machineId] || machineHistoryStatus[machineId] === 'loading') return
     setMachineHistoryStatus(prev => ({ ...prev, [machineId]: 'loading' }))
     try {
-      const entries = await Promise.all(
-        sessions.map(async (s) => {
-          const sets = await getSetsForSession(s.id)
-          const machineSets = sets.filter(st => st.machine_id === machineId)
-          return machineSets.length ? buildSessionMetrics(s, machineSets) : null
-        }),
-      )
-      const filtered = entries
+      const buckets = buildTrainingBuckets(sets, machines)
+      const entries = buckets
+        .map((bucket) => {
+          const machineSets = bucket.sets.filter((set) => set.machine_id === machineId)
+          if (!machineSets.length) return null
+          return {
+            training_bucket_id: bucket.training_bucket_id,
+            training_date: bucket.training_date,
+            started_at: bucket.started_at,
+            ended_at: bucket.ended_at,
+            sets: machineSets,
+          }
+        })
         .filter(Boolean)
-        .sort((a, b) => new Date(a.session.started_at) - new Date(b.session.started_at))
-      setMachineHistory(prev => ({ ...prev, [machineId]: filtered }))
+
+      setMachineHistory(prev => ({ ...prev, [machineId]: entries }))
       setMachineHistoryStatus(prev => ({ ...prev, [machineId]: 'done' }))
     } catch (error) {
       addLog({ level: 'error', event: 'machine_history.failed', message: error?.message || 'Failed to load machine history.' })
       setMachineHistoryStatus(prev => ({ ...prev, [machineId]: 'error' }))
     }
-  }, [machineHistory, machineHistoryStatus, sessions])
+  }, [machineHistory, machineHistoryStatus, sets, machines])
+
+  const trainingBuckets = useMemo(() => buildTrainingBuckets(sets, machines), [sets, machines])
 
   // ─── Loading / Auth ──────────────────────────────────────
   if (user === undefined) {
@@ -1744,36 +1738,43 @@ export default function App() {
     <>
       {screen === 'home' && (
         <HomeScreen
-          activeSession={activeSession} pendingSoreness={pendingSoreness}
-          machines={machines} onStart={handleStartSession}
-          onResume={() => setScreen('session')} onHistory={() => setScreen('history')}
+          pendingSoreness={pendingSoreness}
+          machines={machines}
+          onLogSets={() => setScreen('log')}
+          onLibrary={() => setScreen('library')}
+          onHistory={() => setScreen('history')}
           onAnalysis={() => setScreen('analysis')}
           onDiagnostics={() => setScreen('diagnostics')}
-          onSorenessSubmit={handleSorenessSubmit} onSorenessDismiss={handleSorenessDismiss}
+          onSorenessSubmit={handleSorenessSubmit}
+          onSorenessDismiss={handleSorenessDismiss}
           onSignOut={async () => { await signOut(); setUser(null); setScreen('home') }}
         />
       )}
-      {screen === 'session' && activeSession && (
-        <SessionScreen
-          session={activeSession} sets={currentSets} machines={machines}
-          machineHistory={machineHistory} onLoadMachineHistory={loadMachineHistory}
-          onLogSet={handleLogSet} onDeleteSet={handleDeleteSet}
-          onEndSession={handleEndSession} onBack={() => setScreen('home')}
-          onSaveMachine={handleSaveMachine} onDeleteMachine={handleDeleteMachine}
+      {screen === 'log' && (
+        <LogSetScreen
+          sets={sets}
+          machines={machines}
+          machineHistory={machineHistory}
+          onLoadMachineHistory={loadMachineHistory}
+          onLogSet={handleLogSet}
+          onDeleteSet={handleDeleteSet}
+          onBack={() => setScreen('home')}
+          onOpenLibrary={() => setScreen('library')}
         />
       )}
-      {screen === 'summary' && summarySession && (
-        <SummaryScreen
-          session={summarySession} sets={summarySets} machines={machines}
-          recommendations={recommendations}
-          onDone={() => { setScreen('home'); setSummarySession(null); setRecommendations(null) }}
+      {screen === 'library' && (
+        <LibraryScreen
+          machines={machines}
+          onSaveMachine={handleSaveMachine}
+          onDeleteMachine={handleDeleteMachine}
+          onBack={() => setScreen('home')}
         />
       )}
       {screen === 'history' && (
         <HistoryScreen
-          sessions={sessions} machines={machines}
+          trainingBuckets={trainingBuckets}
+          machines={machines}
           onBack={() => setScreen('home')}
-          onViewSession={handleViewHistorySession}
         />
       )}
       {screen === 'analysis' && (
