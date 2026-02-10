@@ -7,6 +7,7 @@ import {
   getPendingSoreness, submitSoreness,
 } from './lib/supabase'
 import { identifyMachine, API_BASE_URL, pingHealth } from './lib/api'
+import { getFeatureFlags, DEFAULT_FLAGS } from './lib/featureFlags'
 import { addLog, subscribeLogs } from './lib/logs'
 
 // ─── Helpers ───────────────────────────────────────────────
@@ -454,6 +455,7 @@ function SorenessPrompt({ session, muscleGroups, onSubmit, onDismiss }) {
 function HomeScreen({
   pendingSoreness,
   machines,
+  libraryEnabled,
   onLogSets,
   onLibrary,
   onAnalysis,
@@ -499,12 +501,14 @@ function HomeScreen({
           <div style={{ fontSize: 13, color: '#022', marginTop: 4 }}>Capture sets directly without starting a session</div>
         </button>
 
-        <button onClick={onLibrary} style={{
-          background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, textAlign: 'left',
-        }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>📚 Library</div>
-          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Manage exercises and defaults</div>
-        </button>
+        {libraryEnabled && (
+          <button onClick={onLibrary} style={{
+            background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, textAlign: 'left',
+          }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>📚 Library</div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Manage exercises and defaults</div>
+          </button>
+        )}
 
         <button onClick={onAnalysis} style={{
           background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, textAlign: 'left',
@@ -974,6 +978,8 @@ function LogSetScreen({
   onDeleteSet,
   onBack,
   onOpenLibrary,
+  libraryEnabled,
+  setCentricLoggingEnabled,
 }) {
   const [view, setView] = useState('log')
   const [selectedMachine, setSelectedMachine] = useState(null)
@@ -995,6 +1001,11 @@ function LogSetScreen({
   const setMachineIdRef = useRef(null)
   const lastSetTime = useRef(null)
   const feedbackTimeoutRef = useRef(null)
+
+  useEffect(() => {
+    if (setCentricLoggingEnabled) return
+    addLog({ level: 'warn', event: 'feature_flags.logset_fallback', message: 'Set-centric controls disabled; using standard log flow.' })
+  }, [setCentricLoggingEnabled])
 
   const showFeedback = useCallback((message, tone = 'success') => {
     setFeedback({ message, tone })
@@ -1108,11 +1119,13 @@ function LogSetScreen({
     return (
       <div style={{ padding: '20px 16px', minHeight: '100dvh' }}>
         <TopBar left={<BackBtn onClick={() => setView('log')} />} title="SELECT EXERCISE" />
-        <button onClick={onOpenLibrary} style={{
-          width: '100%', padding: 14, borderRadius: 12, border: '1px solid var(--border)',
-          background: 'var(--surface2)', color: 'var(--text)', fontSize: 13, fontWeight: 700,
-          marginBottom: 16,
-        }}>Go to Library</button>
+        {libraryEnabled && (
+          <button onClick={onOpenLibrary} style={{
+            width: '100%', padding: 14, borderRadius: 12, border: '1px solid var(--border)',
+            background: 'var(--surface2)', color: 'var(--text)', fontSize: 13, fontWeight: 700,
+            marginBottom: 16,
+          }}>Go to Library</button>
+        )}
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, marginBottom: 8, fontFamily: 'var(--font-code)' }}>
             FILTER BY MAIN MUSCLE GROUP
@@ -1133,7 +1146,7 @@ function LogSetScreen({
         {machines.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-dim)' }}>
             <div style={{ fontSize: 40, marginBottom: 12 }}>🏋️</div>
-            <div>No exercises yet. Add one from Library.</div>
+            <div>{libraryEnabled ? 'No exercises yet. Add one from Library.' : 'No exercises available yet.'}</div>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1173,7 +1186,7 @@ function LogSetScreen({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <BackBtn onClick={onBack} />
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 11, color: 'var(--accent)', letterSpacing: 2, fontFamily: 'var(--font-code)' }}>SET-FIRST LOGGING</div>
+          <div style={{ fontSize: 11, color: 'var(--accent)', letterSpacing: 2, fontFamily: 'var(--font-code)' }}>{setCentricLoggingEnabled ? 'SET-FIRST LOGGING' : 'STANDARD LOGGING'}</div>
           <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>{sets.length} sets logged</div>
         </div>
       </div>
@@ -1199,22 +1212,24 @@ function LogSetScreen({
 
       {selectedMachine && (
         <>
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, marginBottom: 8, fontFamily: 'var(--font-code)' }}>SET TYPE</div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {SET_TYPE_OPTIONS.map((type) => {
-                const active = setType === type
-                return (
-                  <button key={type} onClick={() => setSetType(type)} style={{
-                    textTransform: 'capitalize',
-                    padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
-                    background: active ? 'var(--accent)22' : 'var(--surface2)', color: active ? 'var(--accent)' : 'var(--text-muted)',
-                    fontSize: 12, fontWeight: 700,
-                  }}>{type}</button>
-                )
-              })}
+          {setCentricLoggingEnabled && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, marginBottom: 8, fontFamily: 'var(--font-code)' }}>SET TYPE</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {SET_TYPE_OPTIONS.map((type) => {
+                  const active = setType === type
+                  return (
+                    <button key={type} onClick={() => setSetType(type)} style={{
+                      textTransform: 'capitalize',
+                      padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                      background: active ? 'var(--accent)22' : 'var(--surface2)', color: active ? 'var(--accent)' : 'var(--text-muted)',
+                      fontSize: 12, fontWeight: 700,
+                    }}>{type}</button>
+                  )
+                })}
+              </div>
             </div>
-          </div>
+          )}
 
           {selectedMachine.notes && (
             <div style={{ background: '#1a1a2e', borderRadius: 12, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#88a', borderLeft: '3px solid #4444ff' }}>
@@ -1231,7 +1246,8 @@ function LogSetScreen({
             </div>
           )}
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          {setCentricLoggingEnabled && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)' }}>REST TIMER</div>
             <button onClick={() => setRestTimerEnabled((enabled) => !enabled)} style={{
               border: `1px solid ${restTimerEnabled ? 'var(--accent)' : 'var(--border)'}`,
@@ -1242,24 +1258,26 @@ function LogSetScreen({
               fontSize: 12,
               fontWeight: 700,
             }}>{restTimerEnabled ? 'ON' : 'OFF'}</button>
-          </div>
+            </div>
+          )}
 
           {/* Rest timer */}
-          {restTimerEnabled && sets.length > 0 && restSeconds > 0 && <RestTimer seconds={restSeconds} />}
+          {setCentricLoggingEnabled && restTimerEnabled && sets.length > 0 && restSeconds > 0 && <RestTimer seconds={restSeconds} />}
 
           <SliderInput label="Reps" value={reps} onChange={setReps} min={1} max={30} step={1} unit="" color="var(--accent)" />
           <QuickAdjust value={reps} onChange={setReps} step={1} color="var(--accent)" min={1} />
           <SliderInput label={weightLabelForMachine(selectedMachine)} value={weight} onChange={setWeight} min={0} max={200} step={2.5} unit="kg" color="var(--blue)" />
           <QuickAdjust value={weight} onChange={setWeight} step={2.5} color="var(--blue)" />
 
-          {setInProgress && (
+          {setCentricLoggingEnabled && setInProgress && (
             <div style={{ marginBottom: 12, fontSize: 13, color: 'var(--blue)', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
               Set in progress: {fmtTimer(activeSetSeconds)}
               <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>Exercise selection is locked until you stop this set.</div>
             </div>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+          {setCentricLoggingEnabled && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
             <button onClick={handleStartSet} disabled={logging || setInProgress} style={{
               width: '100%', padding: 14, borderRadius: 12, fontSize: 14, fontWeight: 800,
               background: 'var(--surface2)', color: setInProgress ? 'var(--text-dim)' : 'var(--accent)',
@@ -1275,9 +1293,10 @@ function LogSetScreen({
               fontFamily: 'var(--font-mono)',
               opacity: logging ? 0.6 : 1,
             }}>STOP & LOG</button>
-          </div>
+            </div>
+          )}
 
-          <button onClick={() => handleLog()} disabled={logging || setInProgress} style={{
+          <button onClick={() => handleLog()} disabled={logging || (setCentricLoggingEnabled && setInProgress)} style={{
             width: '100%', padding: 20, borderRadius: 14, fontSize: 20, fontWeight: 900,
             background: 'linear-gradient(135deg, var(--accent), var(--accent-dark))', color: '#000',
             fontFamily: 'var(--font-mono)', marginBottom: 24, boxShadow: '0 0 30px var(--accent)33',
@@ -1539,16 +1558,17 @@ function HistoryScreen({ trainingBuckets, machines, onBack }) {
 
 // ─── Analysis Screen ───────────────────────────────────────
 
-function AnalysisScreen({ machines, machineHistory, onLoadMachineHistory, onBack }) {
+function AnalysisScreen({ machines, machineHistory, onLoadMachineHistory, onBack, analysisOnDemandOnly }) {
   const [selectedMachineId, setSelectedMachineId] = useState(machines[0]?.id || '')
   const [setTypeMode, setSetTypeMode] = useState('working')
   const [customSetTypes, setCustomSetTypes] = useState(['working'])
 
   useEffect(() => {
+    if (analysisOnDemandOnly) return
     if (selectedMachineId) {
       onLoadMachineHistory(selectedMachineId)
     }
-  }, [selectedMachineId, onLoadMachineHistory])
+  }, [analysisOnDemandOnly, selectedMachineId, onLoadMachineHistory])
 
   useEffect(() => {
     if (!selectedMachineId && machines.length) {
@@ -1600,6 +1620,25 @@ function AnalysisScreen({ machines, machineHistory, onLoadMachineHistory, onBack
           ))}
         </select>
       </div>
+
+      {analysisOnDemandOnly && (
+        <button onClick={() => {
+          if (!selectedMachineId) {
+            addLog({ level: 'warn', event: 'analysis.load_fallback', message: 'Machine selection required before loading analysis.' })
+            return
+          }
+          onLoadMachineHistory(selectedMachineId)
+        }} style={{
+          width: '100%',
+          marginBottom: 14,
+          padding: 12,
+          borderRadius: 10,
+          border: '1px solid var(--border)',
+          background: 'var(--surface2)',
+          color: 'var(--text)',
+          fontWeight: 700,
+        }}>Load analysis</button>
+      )}
 
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, marginBottom: 8, fontFamily: 'var(--font-code)' }}>SET TYPE FILTER</div>
@@ -1883,6 +1922,8 @@ export default function App() {
   const [pendingSoreness, setPendingSoreness] = useState([])
   const [machineHistory, setMachineHistory] = useState({})
   const [machineHistoryStatus, setMachineHistoryStatus] = useState({})
+  const [featureFlags, setFeatureFlags] = useState(DEFAULT_FLAGS)
+  const [featureFlagsLoading, setFeatureFlagsLoading] = useState(true)
 
   // Auth listener
   useEffect(() => {
@@ -1906,6 +1947,31 @@ export default function App() {
       subscription.unsubscribe()
     }
   }, [])
+
+  useEffect(() => {
+    if (user === undefined) return
+    let active = true
+
+    const loadFlags = async () => {
+      setFeatureFlagsLoading(true)
+      try {
+        const resolvedFlags = await getFeatureFlags()
+        if (!active) return
+        setFeatureFlags(resolvedFlags)
+      } catch (error) {
+        if (!active) return
+        addLog({ level: 'warn', event: 'feature_flags.load_failed', message: error?.message || 'Falling back to default feature flags.' })
+        setFeatureFlags(DEFAULT_FLAGS)
+      } finally {
+        if (active) setFeatureFlagsLoading(false)
+      }
+    }
+
+    loadFlags()
+    return () => {
+      active = false
+    }
+  }, [user])
 
   const loadData = useCallback(async () => {
     if (!user) return
@@ -1999,6 +2065,21 @@ export default function App() {
   }, [machineHistory, machineHistoryStatus, sets, machines])
 
   const trainingBuckets = useMemo(() => buildTrainingBuckets(sets, machines), [sets, machines])
+  const resolvedFlags = featureFlagsLoading ? DEFAULT_FLAGS : featureFlags
+  const setCentricLoggingEnabled = resolvedFlags.setCentricLogging
+  const libraryEnabled = resolvedFlags.libraryScreenEnabled
+  const analysisOnDemandOnly = resolvedFlags.analysisOnDemandOnly
+
+  useEffect(() => {
+    if (!featureFlagsLoading) return
+    addLog({ level: 'info', event: 'feature_flags.defaults_applied', message: 'Using safe default flags until remote flags are loaded.' })
+  }, [featureFlagsLoading])
+
+  useEffect(() => {
+    if (featureFlagsLoading || libraryEnabled || screen !== 'library') return
+    addLog({ level: 'warn', event: 'feature_flags.library_fallback', message: 'Library screen disabled; redirecting to home.' })
+    setScreen('home')
+  }, [featureFlagsLoading, libraryEnabled, screen])
 
   // ─── Loading / Auth ──────────────────────────────────────
   if (user === undefined) {
@@ -2017,8 +2098,15 @@ export default function App() {
         <HomeScreen
           pendingSoreness={pendingSoreness}
           machines={machines}
+          libraryEnabled={libraryEnabled}
           onLogSets={() => setScreen('log')}
-          onLibrary={() => setScreen('library')}
+          onLibrary={() => {
+            if (!libraryEnabled) {
+              addLog({ level: 'warn', event: 'feature_flags.library_fallback', message: 'Library entry is disabled by feature flag.' })
+              return
+            }
+            setScreen('library')
+          }}
           onHistory={() => setScreen('history')}
           onAnalysis={() => setScreen('analysis')}
           onDiagnostics={() => setScreen('diagnostics')}
@@ -2036,10 +2124,18 @@ export default function App() {
           onLogSet={handleLogSet}
           onDeleteSet={handleDeleteSet}
           onBack={() => setScreen('home')}
-          onOpenLibrary={() => setScreen('library')}
+          onOpenLibrary={() => {
+            if (!libraryEnabled) {
+              addLog({ level: 'warn', event: 'feature_flags.library_fallback', message: 'Library entry from log screen is disabled by feature flag.' })
+              return
+            }
+            setScreen('library')
+          }}
+          libraryEnabled={libraryEnabled}
+          setCentricLoggingEnabled={setCentricLoggingEnabled}
         />
       )}
-      {screen === 'library' && (
+      {libraryEnabled && screen === 'library' && (
         <LibraryScreen
           machines={machines}
           onSaveMachine={handleSaveMachine}
@@ -2060,6 +2156,7 @@ export default function App() {
           machineHistory={machineHistory}
           onLoadMachineHistory={loadMachineHistory}
           onBack={() => setScreen('home')}
+          analysisOnDemandOnly={analysisOnDemandOnly}
         />
       )}
       {screen === 'diagnostics' && (
