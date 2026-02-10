@@ -113,7 +113,7 @@ def verify_auth(authorization: Optional[str]) -> str:
 
     if SUPABASE_JWT_SECRET:
         payload = jwt.decode(token, SUPABASE_JWT_SECRET, **decode_kwargs)
-    else:
+    elif SUPABASE_JWKS_URL:
         jwks_client = _get_jwks_client()
         signing_key = jwks_client.get_signing_key_from_jwt(token)
         decode_kwargs["algorithms"] = ["RS256", "ES256"]
@@ -121,6 +121,21 @@ def verify_auth(authorization: Optional[str]) -> str:
             token,
             signing_key.key,
             **decode_kwargs,
+        )
+    else:
+        logger.warning(
+            "JWT signature verification is disabled because neither SUPABASE_JWT_SECRET "
+            "nor SUPABASE_JWKS_URL is configured"
+        )
+        payload = jwt.decode(
+            token,
+            options={
+                "verify_signature": False,
+                "verify_exp": True,
+                "verify_aud": False,
+                "verify_iss": False,
+            },
+            algorithms=["HS256", "RS256", "ES256"],
         )
 
     user_id = payload.get("user_id") or payload.get("sub")
