@@ -25,6 +25,26 @@ ALLOW_ALL_ORIGINS = len(ALLOWED_ORIGINS) == 1 and ALLOWED_ORIGINS[0] == "*"
 ANTHROPIC_MODEL = "claude-sonnet-4-20250514"
 MAX_HISTORY_TOKENS = 4000
 
+
+def read_bool_env(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    normalized = raw.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    logger.warning("Invalid boolean value for %s=%r; falling back to %s", name, raw, default)
+    return default
+
+
+ROLLOUT_FLAGS = {
+    "setCentricLogging": read_bool_env("SET_CENTRIC_LOGGING", False),
+    "libraryScreenEnabled": read_bool_env("LIBRARY_SCREEN_ENABLED", False),
+    "analysisOnDemandOnly": read_bool_env("ANALYSIS_ON_DEMAND_ONLY", False),
+}
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"] if ALLOW_ALL_ORIGINS else ALLOWED_ORIGINS,
@@ -189,4 +209,9 @@ Return ONLY valid JSON:
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "model": ANTHROPIC_MODEL}
+    return {"status": "ok", "model": ANTHROPIC_MODEL, "rollout_flags": ROLLOUT_FLAGS}
+
+
+@app.get("/api/rollout-flags")
+async def rollout_flags():
+    return ROLLOUT_FLAGS

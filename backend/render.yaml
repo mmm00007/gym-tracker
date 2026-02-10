@@ -9,3 +9,9 @@ services:
         sync: false
       - key: ALLOWED_ORIGINS
         sync: false
+      - key: SET_CENTRIC_LOGGING
+        value: "false"
+      - key: LIBRARY_SCREEN_ENABLED
+        value: "false"
+      - key: ANALYSIS_ON_DEMAND_ONLY
+        value: "false"
