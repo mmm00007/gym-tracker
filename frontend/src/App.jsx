@@ -1072,7 +1072,12 @@ function LogSetScreen({
   const setsForMachine = selectedMachine ? sets.filter(s => s.machine_id === selectedMachine.id) : []
   const historyForMachine = selectedMachine ? (machineHistory[selectedMachine.id] || []) : []
   const sessionMetrics = buildMetrics(setsForMachine)
-  const trendHistory = historyForMachine.slice(-5)
+  const trendHistory = historyForMachine
+    .slice(-5)
+    .map((entry) => ({
+      ...entry,
+      metrics: entry.metrics || buildMetrics(entry.sets || []),
+    }))
   const trendValues = [
     ...trendHistory.map(entry => entry.metrics.totalVolume),
     ...(setsForMachine.length ? [sessionMetrics.totalVolume] : []),
