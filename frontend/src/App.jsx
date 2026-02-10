@@ -24,6 +24,15 @@ const fmtNumber = (value, digits = 1) => {
 const estimate1RM = (weight, reps) => weight * (1 + reps / 30)
 const SET_TYPE_OPTIONS = ['warmup', 'working', 'top', 'drop', 'backoff', 'failure']
 const EQUIPMENT_TYPE_OPTIONS = ['machine', 'freeweight', 'bodyweight', 'cable', 'band', 'other']
+const TREND_TIMEFRAME_OPTIONS = [
+  { key: '1d', label: '1D', ms: 24 * 60 * 60 * 1000 },
+  { key: '1w', label: '1W', ms: 7 * 24 * 60 * 60 * 1000 },
+  { key: '1m', label: '1M', ms: 30 * 24 * 60 * 60 * 1000 },
+]
+
+const isBodyweightExercise = (machine) => machine?.equipment_type === 'bodyweight'
+
+const weightLabelForMachine = (machine) => (isBodyweightExercise(machine) ? 'Additional weight' : 'Weight')
 
 const filterSetsByType = (sets, setTypes) => {
   if (!setTypes?.length) return sets
@@ -276,6 +285,31 @@ function MiniBarChart({ values, color, height = 60 }) {
         }} />
       ))}
     </div>
+  )
+}
+
+function MiniLineChart({ points, color, height = 70 }) {
+  if (!points.length) return null
+  const width = 300
+  const min = Math.min(...points)
+  const max = Math.max(...points)
+  const range = Math.max(max - min, 1)
+  const coords = points.map((value, index) => {
+    const x = points.length === 1 ? width / 2 : (index / (points.length - 1)) * width
+    const y = height - (((value - min) / range) * (height - 10) + 5)
+    return `${x},${y}`
+  })
+  const polylinePoints = coords.join(' ')
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height }} role="img" aria-label="Volume trend line chart">
+      <line x1="0" y1={height - 1} x2={width} y2={height - 1} stroke="var(--border)" strokeWidth="1" />
+      <polyline fill="none" stroke={color} strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" points={polylinePoints} />
+      {coords.map((point, index) => {
+        const [cx, cy] = point.split(',')
+        return <circle key={index} cx={cx} cy={cy} r="3" fill={color} />
+      })}
+    </svg>
   )
 }
 
@@ -949,9 +983,15 @@ function LogSetScreen({
   const [setType, setSetType] = useState('working')
   const [setTypeByMachine, setSetTypeByMachine] = useState({})
   const [restSeconds, setRestSeconds] = useState(0)
+  const [restTimerEnabled, setRestTimerEnabled] = useState(true)
+  const [trendTimeframe, setTrendTimeframe] = useState('1w')
+  const [setInProgress, setSetInProgress] = useState(false)
+  const [activeSetSeconds, setActiveSetSeconds] = useState(0)
   const [logging, setLogging] = useState(false)
   const [feedback, setFeedback] = useState(null)
   const restRef = useRef(null)
+  const activeSetRef = useRef(null)
+  const setStartTime = useRef(null)
   const lastSetTime = useRef(null)
   const feedbackTimeoutRef = useRef(null)
 
@@ -963,6 +1003,7 @@ function LogSetScreen({
 
   useEffect(() => () => {
     if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current)
+    if (activeSetRef.current) clearInterval(activeSetRef.current)
   }, [])
 
   // Rest timer
@@ -978,6 +1019,20 @@ function LogSetScreen({
     restRef.current = setInterval(tick, 1000)
     return () => clearInterval(restRef.current)
   }, [sets.length])
+
+  useEffect(() => {
+    if (!setInProgress) return undefined
+    const tick = () => {
+      if (setStartTime.current) {
+        setActiveSetSeconds(Math.max(1, Math.floor((Date.now() - setStartTime.current) / 1000)))
+      }
+    }
+    tick()
+    activeSetRef.current = setInterval(tick, 1000)
+    return () => {
+      if (activeSetRef.current) clearInterval(activeSetRef.current)
+    }
+  }, [setInProgress])
 
   const selectMachine = (m) => {
     setSelectedMachine(m)
@@ -999,23 +1054,42 @@ function LogSetScreen({
     }
   }, [selectedMachine, onLoadMachineHistory])
 
-  const handleLog = async () => {
+  const handleLog = async (durationSeconds = null) => {
     if (!selectedMachine || logging) return
     setLogging(true)
-    const rest = lastSetTime.current ? Math.floor((Date.now() - lastSetTime.current) / 1000) : null
+    const rest = restTimerEnabled && lastSetTime.current
+      ? Math.floor((Date.now() - lastSetTime.current) / 1000)
+      : null
     try {
-      await onLogSet(selectedMachine.id, reps, weight, null, rest, setType)
+      await onLogSet(selectedMachine.id, reps, weight, durationSeconds, rest, setType)
       setSetTypeByMachine((prev) => ({ ...prev, [selectedMachine.id]: setType }))
       lastSetTime.current = Date.now()
       setRestSeconds(0)
       if (navigator.vibrate) navigator.vibrate(50)
-      showFeedback(`Logged ${reps} × ${weight}kg (${setType})`, 'success')
+      const weightLabel = isBodyweightExercise(selectedMachine) ? `${weight}kg additional` : `${weight}kg`
+      showFeedback(`Logged ${reps} × ${weightLabel} (${setType})`, 'success')
     } catch (error) {
       addLog({ level: 'error', event: 'set.log_failed', message: error?.message || 'Failed to log set.' })
       showFeedback('Could not log set. Please try again.', 'error')
     } finally {
       setLogging(false)
     }
+  }
+
+  const handleStartSet = () => {
+    if (!selectedMachine || logging || setInProgress) return
+    setStartTime.current = Date.now()
+    setActiveSetSeconds(0)
+    setSetInProgress(true)
+  }
+
+  const handleStopSet = async () => {
+    if (!setInProgress || !setStartTime.current) return
+    const durationSeconds = Math.max(1, Math.floor((Date.now() - setStartTime.current) / 1000))
+    setSetInProgress(false)
+    setStartTime.current = null
+    setActiveSetSeconds(0)
+    await handleLog(durationSeconds)
   }
 
   // Select view
@@ -1072,15 +1146,19 @@ function LogSetScreen({
   const setsForMachine = selectedMachine ? sets.filter(s => s.machine_id === selectedMachine.id) : []
   const historyForMachine = selectedMachine ? (machineHistory[selectedMachine.id] || []) : []
   const sessionMetrics = buildMetrics(setsForMachine)
-  const trendHistory = historyForMachine
-    .slice(-5)
+  const trendCutoff = Date.now() - (TREND_TIMEFRAME_OPTIONS.find((option) => option.key === trendTimeframe)?.ms || TREND_TIMEFRAME_OPTIONS[1].ms)
+  const trendPoints = historyForMachine
     .map((entry) => ({
       ...entry,
+      timestamp: new Date(entry.ended_at || entry.training_date).getTime(),
       metrics: entry.metrics || buildMetrics(entry.sets || []),
     }))
+    .filter((entry) => Number.isFinite(entry.timestamp) && entry.timestamp >= trendCutoff)
+    .sort((a, b) => a.timestamp - b.timestamp)
+  const includeCurrentSession = setsForMachine.length > 0
   const trendValues = [
-    ...trendHistory.map(entry => entry.metrics.totalVolume),
-    ...(setsForMachine.length ? [sessionMetrics.totalVolume] : []),
+    ...trendPoints.map((entry) => entry.metrics.totalVolume),
+    ...(includeCurrentSession ? [sessionMetrics.totalVolume] : []),
   ]
 
   return (
@@ -1145,19 +1223,56 @@ function LogSetScreen({
             </div>
           )}
 
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)' }}>REST TIMER</div>
+            <button onClick={() => setRestTimerEnabled((enabled) => !enabled)} style={{
+              border: `1px solid ${restTimerEnabled ? 'var(--accent)' : 'var(--border)'}`,
+              background: restTimerEnabled ? 'var(--accent)22' : 'var(--surface2)',
+              color: restTimerEnabled ? 'var(--accent)' : 'var(--text-muted)',
+              borderRadius: 999,
+              padding: '4px 10px',
+              fontSize: 12,
+              fontWeight: 700,
+            }}>{restTimerEnabled ? 'ON' : 'OFF'}</button>
+          </div>
+
           {/* Rest timer */}
-          {sets.length > 0 && restSeconds > 0 && <RestTimer seconds={restSeconds} />}
+          {restTimerEnabled && sets.length > 0 && restSeconds > 0 && <RestTimer seconds={restSeconds} />}
 
           <SliderInput label="Reps" value={reps} onChange={setReps} min={1} max={30} step={1} unit="" color="var(--accent)" />
           <QuickAdjust value={reps} onChange={setReps} step={1} color="var(--accent)" min={1} />
-          <SliderInput label="Weight" value={weight} onChange={setWeight} min={0} max={200} step={2.5} unit="kg" color="var(--blue)" />
+          <SliderInput label={weightLabelForMachine(selectedMachine)} value={weight} onChange={setWeight} min={0} max={200} step={2.5} unit="kg" color="var(--blue)" />
           <QuickAdjust value={weight} onChange={setWeight} step={2.5} color="var(--blue)" />
 
-          <button onClick={handleLog} disabled={logging} style={{
+          {setInProgress && (
+            <div style={{ marginBottom: 12, fontSize: 13, color: 'var(--blue)', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+              Set in progress: {fmtTimer(activeSetSeconds)}
+            </div>
+          )}
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+            <button onClick={handleStartSet} disabled={logging || setInProgress} style={{
+              width: '100%', padding: 14, borderRadius: 12, fontSize: 14, fontWeight: 800,
+              background: 'var(--surface2)', color: setInProgress ? 'var(--text-dim)' : 'var(--accent)',
+              border: `1px solid ${setInProgress ? 'var(--border)' : 'var(--accent)66'}`,
+              fontFamily: 'var(--font-mono)',
+              opacity: logging ? 0.6 : 1,
+            }}>START SET</button>
+            <button onClick={handleStopSet} disabled={logging || !setInProgress} style={{
+              width: '100%', padding: 14, borderRadius: 12, fontSize: 14, fontWeight: 800,
+              background: setInProgress ? 'linear-gradient(135deg, var(--blue), #49a9ff)' : 'var(--surface2)',
+              color: setInProgress ? '#041018' : 'var(--text-dim)',
+              border: '1px solid var(--border)',
+              fontFamily: 'var(--font-mono)',
+              opacity: logging ? 0.6 : 1,
+            }}>STOP & LOG</button>
+          </div>
+
+          <button onClick={() => handleLog()} disabled={logging || setInProgress} style={{
             width: '100%', padding: 20, borderRadius: 14, fontSize: 20, fontWeight: 900,
             background: 'linear-gradient(135deg, var(--accent), var(--accent-dark))', color: '#000',
             fontFamily: 'var(--font-mono)', marginBottom: 24, boxShadow: '0 0 30px var(--accent)33',
-            opacity: logging ? 0.6 : 1,
+            opacity: logging || setInProgress ? 0.6 : 1,
           }}>LOG SET ✓</button>
 
           <div style={{ marginBottom: 24 }}>
@@ -1171,11 +1286,29 @@ function LogSetScreen({
             ) : (
               <div style={{ background: 'var(--surface)', borderRadius: 14, padding: 14, border: '1px solid var(--border)' }}>
                 <div style={{ marginBottom: 12 }}>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Volume load trend</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Volume load trend</div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {TREND_TIMEFRAME_OPTIONS.map((option) => {
+                        const active = trendTimeframe === option.key
+                        return (
+                          <button key={option.key} onClick={() => setTrendTimeframe(option.key)} style={{
+                            borderRadius: 999,
+                            border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                            background: active ? 'var(--accent)22' : 'var(--surface2)',
+                            color: active ? 'var(--accent)' : 'var(--text-muted)',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            padding: '3px 8px',
+                          }}>{option.label}</button>
+                        )
+                      })}
+                    </div>
+                  </div>
                   {trendValues.length ? (
-                    <MiniBarChart values={trendValues} color="var(--accent)" height={50} />
+                    <MiniLineChart points={trendValues} color="var(--accent)" height={60} />
                   ) : (
-                    <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>No history yet.</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>No history in selected timeframe yet.</div>
                   )}
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
@@ -1208,7 +1341,9 @@ function LogSetScreen({
                     <span style={{ color: 'var(--accent)', fontWeight: 700 }}>{s.reps}</span>
                     <span style={{ color: 'var(--text-dim)' }}> × </span>
                     <span style={{ color: 'var(--blue)', fontWeight: 700 }}>{s.weight}</span>
-                    <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>kg</span>
+                    <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>
+                      {isBodyweightExercise(selectedMachine) ? 'kg additional' : 'kg'}
+                    </span>
                   </div>
                   {s.rest_seconds && <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>{fmtTimer(s.rest_seconds)} rest</span>}
                   <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>{fmtTime(s.logged_at)}</span>
@@ -1242,7 +1377,7 @@ function LogSetScreen({
                   <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--accent)' }}>{s.reps}</span>
                   <span style={{ fontSize: 12, color: 'var(--text-dim)' }}> × </span>
                   <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--blue)' }}>{s.weight}</span>
-                  <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>kg</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>{isBodyweightExercise(m) ? 'kg additional' : 'kg'}</span>
                 </div>
               </div>
             )
