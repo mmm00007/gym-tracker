@@ -1212,24 +1212,22 @@ function LogSetScreen({
 
       {selectedMachine && (
         <>
-          {setCentricLoggingEnabled && (
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, marginBottom: 8, fontFamily: 'var(--font-code)' }}>SET TYPE</div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {SET_TYPE_OPTIONS.map((type) => {
-                  const active = setType === type
-                  return (
-                    <button key={type} onClick={() => setSetType(type)} style={{
-                      textTransform: 'capitalize',
-                      padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
-                      background: active ? 'var(--accent)22' : 'var(--surface2)', color: active ? 'var(--accent)' : 'var(--text-muted)',
-                      fontSize: 12, fontWeight: 700,
-                    }}>{type}</button>
-                  )
-                })}
-              </div>
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, marginBottom: 8, fontFamily: 'var(--font-code)' }}>SET TYPE</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {SET_TYPE_OPTIONS.map((type) => {
+                const active = setType === type
+                return (
+                  <button key={type} onClick={() => setSetType(type)} style={{
+                    textTransform: 'capitalize',
+                    padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                    background: active ? 'var(--accent)22' : 'var(--surface2)', color: active ? 'var(--accent)' : 'var(--text-muted)',
+                    fontSize: 12, fontWeight: 700,
+                  }}>{type}</button>
+                )
+              })}
             </div>
-          )}
+          </div>
 
           {selectedMachine.notes && (
             <div style={{ background: '#1a1a2e', borderRadius: 12, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#88a', borderLeft: '3px solid #4444ff' }}>
