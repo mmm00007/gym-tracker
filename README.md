@@ -43,6 +43,9 @@ Mobile-first gym tracker with AI machine identification and smart recommendation
    ```
    ANTHROPIC_API_KEY=sk-ant-...
    ALLOWED_ORIGINS=https://your-app.netlify.app
+   SET_CENTRIC_LOGGING=false
+   LIBRARY_SCREEN_ENABLED=false
+   ANALYSIS_ON_DEMAND_ONLY=false
    ```
 
 ### 3. Frontend (Netlify)
@@ -57,6 +60,9 @@ Mobile-first gym tracker with AI machine identification and smart recommendation
    VITE_SUPABASE_URL=https://abc123.supabase.co
    VITE_SUPABASE_ANON_KEY=eyJ...
    VITE_API_URL=https://gym-tracker-api.onrender.com
+   VITE_SET_CENTRIC_LOGGING=false
+   VITE_LIBRARY_SCREEN_ENABLED=false
+   VITE_ANALYSIS_ON_DEMAND_ONLY=false
    ```
 
 ### 4. Update CORS
@@ -80,6 +86,10 @@ npm install
 # Create frontend/.env.local with VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, VITE_API_URL
 npm run dev
 ```
+
+## Stabilization Contract
+
+Phase 0 contract lock is documented in [`docs/data-contract-lock.md`](docs/data-contract-lock.md).
 
 ## Features
 

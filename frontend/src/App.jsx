@@ -7,6 +7,7 @@ import {
   getPendingSoreness, submitSoreness, getRecentSoreness,
 } from './lib/supabase'
 import { identifyMachine, getRecommendations, API_BASE_URL, pingHealth } from './lib/api'
+import { DEFAULT_FLAGS, getFeatureFlags } from './lib/featureFlags'
 import { addLog, subscribeLogs } from './lib/logs'
 
 // ─── Helpers ───────────────────────────────────────────────
@@ -1478,6 +1479,7 @@ export default function App() {
   const [recommendations, setRecommendations] = useState(null)
   const [machineHistory, setMachineHistory] = useState({})
   const [machineHistoryStatus, setMachineHistoryStatus] = useState({})
+  const [featureFlags, setFeatureFlags] = useState(DEFAULT_FLAGS)
 
   // Auth listener
   useEffect(() => {
@@ -1534,6 +1536,20 @@ export default function App() {
     setMachineHistory({})
     setMachineHistoryStatus({})
   }, [sessions.length])
+
+  useEffect(() => {
+    let active = true
+    const loadFlags = async () => {
+      const flags = await getFeatureFlags()
+      if (!active) return
+      setFeatureFlags(flags)
+      addLog({ level: 'info', event: 'flags.loaded', message: 'Rollout flags loaded.', meta: flags })
+    }
+    loadFlags()
+    return () => {
+      active = false
+    }
+  }, [])
 
   // ─── Actions ─────────────────────────────────────────────
   const handleStartSession = async () => {
@@ -1598,6 +1614,20 @@ export default function App() {
 
     // End in DB
     await dbEndSession(activeSession.id, null)
+
+    if (featureFlags.analysisOnDemandOnly) {
+      setRecommendations({
+        summary: 'AI insights are set to on-demand mode. Run analysis manually from the Analysis screen.',
+        highlights: [],
+        suggestions: [],
+        nextSession: '',
+      })
+      setActiveSession(null)
+      setCurrentSets([])
+      const updated = await getSessions()
+      setSessions(updated.filter(s => s.ended_at))
+      return
+    }
 
     // Get recs
     try {
