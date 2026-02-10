@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+import { createRecommendationScope, supabase } from './supabase'
 import { addLog } from './logs'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -87,6 +87,7 @@ export async function pingHealth() {
 export async function getRecommendations(scope, groupedTraining, equipment, sorenessData) {
   const requestId = `${Date.now()}-${Math.random().toString(16).slice(2)}`
   const startTime = Date.now()
+  let scopeId = null
   addLog({
     level: 'info',
     event: 'recs.start',
@@ -95,11 +96,20 @@ export async function getRecommendations(scope, groupedTraining, equipment, sore
   })
   const headers = await authHeaders()
   try {
+    const persistedScope = await createRecommendationScope(scope, {
+      request_id: requestId,
+      grouped_training_count: groupedTraining?.length || 0,
+      includes_soreness_data: Boolean(sorenessData?.length),
+      source: 'frontend:getRecommendations',
+    })
+    scopeId = persistedScope?.id || null
+
     const res = await fetch(`${API_URL}/api/recommendations`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
         scope,
+        scope_id: scopeId,
         grouped_training: groupedTraining,
         equipment,
         soreness_data: sorenessData || [],
@@ -109,20 +119,21 @@ export async function getRecommendations(scope, groupedTraining, equipment, sore
       level: res.ok ? 'info' : 'error',
       event: 'recs.response',
       message: res.ok ? 'Recommendations response received.' : 'Recommendations response error.',
-      meta: { requestId, status: res.status, ok: res.ok, duration_ms: Date.now() - startTime },
+      meta: { requestId, scopeId, status: res.status, ok: res.ok, duration_ms: Date.now() - startTime },
     })
     if (!res.ok) {
       const err = (await res.text()).trim()
       const detail = err || `Server error (${res.status})`
       throw new Error(`Recommendations failed: ${detail}`)
     }
-    return res.json()
+    const data = await res.json()
+    return { ...data, scope_id: data?.scope_id || scopeId }
   } catch (error) {
     addLog({
       level: 'error',
       event: 'recs.error',
       message: error?.message || 'Recommendations request failed.',
-      meta: { requestId, duration_ms: Date.now() - startTime },
+      meta: { requestId, scopeId, duration_ms: Date.now() - startTime },
     })
     throw error
   }
