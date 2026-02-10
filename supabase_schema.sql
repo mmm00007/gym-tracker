@@ -81,6 +81,71 @@ create index idx_machines_user on public.machines(user_id);
 create index idx_machines_equipment_type on public.machines(user_id, equipment_type);
 create unique index uq_machines_id_user on public.machines(id, user_id);
 
+
+create or replace function public.seed_default_equipment_catalog()
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  inserted_count int;
+begin
+  if v_user_id is null then
+    raise exception 'Authentication required for seed_default_equipment_catalog';
+  end if;
+
+  insert into public.machines (
+    user_id, name, movement, equipment_type, muscle_groups, exercise_type,
+    default_weight, default_reps, notes, source
+  )
+  select
+    v_user_id,
+    seed.name,
+    seed.movement,
+    seed.equipment_type,
+    seed.muscle_groups,
+    seed.exercise_type,
+    seed.default_weight,
+    seed.default_reps,
+    seed.notes,
+    'default_catalog'
+  from (
+    values
+      ('Barbell Back Squat', 'Squat', 'freeweight', array['Quadriceps','Glutes','Core']::text[], 'Legs', 60::real, 5, 'Brace and keep bar path over mid-foot'),
+      ('Romanian Deadlift', 'Hip Hinge', 'freeweight', array['Hamstrings','Glutes','Back']::text[], 'Pull', 50::real, 8, 'Push hips back and maintain neutral spine'),
+      ('Barbell Bench Press', 'Horizontal Press', 'freeweight', array['Chest','Shoulders','Triceps']::text[], 'Push', 40::real, 6, 'Control descent and drive evenly'),
+      ('Pull-Up', 'Vertical Pull', 'bodyweight', array['Back','Biceps']::text[], 'Pull', 0::real, 6, 'Full hang to chest-up as able'),
+      ('Push-Up', 'Horizontal Press', 'bodyweight', array['Chest','Shoulders','Triceps','Core']::text[], 'Push', 0::real, 12, 'Maintain rigid plank line'),
+      ('Walking Lunge', 'Lunge', 'bodyweight', array['Quadriceps','Glutes','Hamstrings']::text[], 'Legs', 0::real, 10, 'Step long and control knee path'),
+      ('Cable Row', 'Horizontal Pull', 'cable', array['Back','Biceps']::text[], 'Pull', 30::real, 10, 'Lead with elbows and avoid shrugging'),
+      ('Lat Pulldown Machine', 'Vertical Pull', 'machine', array['Back','Biceps']::text[], 'Pull', 40::real, 10, 'Pull to upper chest with stable torso'),
+      ('Leg Press Machine', 'Squat', 'machine', array['Quadriceps','Glutes']::text[], 'Legs', 80::real, 10, 'Control depth and avoid locking knees'),
+      ('Cable Lateral Raise', 'Lateral Raise', 'cable', array['Shoulders']::text[], 'Push', 8::real, 12, 'Slight forward lean and controlled tempo')
+  ) as seed(name, movement, equipment_type, muscle_groups, exercise_type, default_weight, default_reps, notes)
+  where not exists (
+    select 1
+    from public.machines m
+    where m.user_id = v_user_id
+      and lower(m.name) = lower(seed.name)
+      and m.equipment_type = seed.equipment_type
+  );
+
+  get diagnostics inserted_count = row_count;
+  return inserted_count;
+end;
+$$;
+
+create or replace function public.seed_default_machine_catalog()
+returns int
+language sql
+security definer
+set search_path = public
+as $$
+  select public.seed_default_equipment_catalog();
+$$;
+
 -- ─── SESSIONS (legacy-compatible, non-authoritative) ───────
 create table public.sessions (
   id uuid primary key default uuid_generate_v4(),
