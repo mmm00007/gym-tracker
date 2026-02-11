@@ -106,10 +106,19 @@ const buildTrainingBuckets = (sets, machines) => {
       training_bucket_id: bucketId,
       training_date: set.training_date || bucketId.replace('training_day:', ''),
       workout_cluster_id: set.workout_cluster_id || null,
+      workout_cluster_ids: [],
       started_at: set.logged_at,
       ended_at: set.logged_at,
       sets: [],
     }
+
+    if (set.workout_cluster_id && !existing.workout_cluster_ids.includes(set.workout_cluster_id)) {
+      existing.workout_cluster_ids.push(set.workout_cluster_id)
+    }
+
+    existing.workout_cluster_id = existing.workout_cluster_ids.length === 1
+      ? existing.workout_cluster_ids[0]
+      : null
 
     existing.sets.push({
       machine_id: set.machine_id,
@@ -120,6 +129,7 @@ const buildTrainingBuckets = (sets, machines) => {
       duration_seconds: set.duration_seconds ?? null,
       rest_seconds: set.rest_seconds ?? null,
       logged_at: set.logged_at,
+      workout_cluster_id: set.workout_cluster_id || null,
     })
 
     if (new Date(set.logged_at) < new Date(existing.started_at)) existing.started_at = set.logged_at
@@ -2180,6 +2190,8 @@ export default function App() {
           if (!machineSets.length) return null
           return {
             training_bucket_id: bucket.training_bucket_id,
+            workout_cluster_id: bucket.workout_cluster_id,
+            workout_cluster_ids: bucket.workout_cluster_ids || [],
             training_date: bucket.training_date,
             started_at: bucket.started_at,
             ended_at: bucket.ended_at,

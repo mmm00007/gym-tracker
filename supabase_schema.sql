@@ -186,6 +186,67 @@ create table public.sets (
   check (training_bucket_id <> '')
 );
 
+create or replace function public.recompute_workout_clusters(
+  p_user_id uuid,
+  p_training_date date,
+  p_gap_threshold_minutes int default 90
+)
+returns void
+language plpgsql
+as $$
+begin
+  if p_user_id is null or p_training_date is null then
+    return;
+  end if;
+
+  -- Serialize recomputation per user + training_date so concurrent trigger
+  -- executions cannot overwrite cluster assignments using stale snapshots.
+  perform pg_advisory_xact_lock(
+    hashtextextended(
+      format('workout-cluster-recompute:%s:%s', p_user_id::text, p_training_date::text),
+      0
+    )
+  );
+
+  with ordered_sets as (
+    select
+      st.id,
+      st.logged_at,
+      lag(st.logged_at) over (order by st.logged_at, st.id) as prev_logged_at
+    from public.sets st
+    where st.user_id = p_user_id
+      and st.training_date = p_training_date
+  ),
+  clustered_sets as (
+    select
+      os.id,
+      sum(
+        case
+          when os.prev_logged_at is null
+            or os.logged_at - os.prev_logged_at > make_interval(mins => p_gap_threshold_minutes)
+            then 1
+          else 0
+        end
+      ) over (order by os.logged_at, os.id rows unbounded preceding) as cluster_seq
+    from ordered_sets os
+  ),
+  desired_clusters as (
+    select
+      cs.id,
+      uuid_generate_v5(
+        uuid_ns_url(),
+        format('workout-cluster:%s:%s:%s', p_user_id::text, p_training_date::text, cs.cluster_seq)
+      ) as cluster_id
+    from clustered_sets cs
+  )
+  update public.sets st
+  set workout_cluster_id = dc.cluster_id
+  from desired_clusters dc
+  where st.id = dc.id
+    and st.workout_cluster_id is distinct from dc.cluster_id;
+end;
+$$;
+
 create or replace function public.compute_set_grouping_fields()
 returns trigger
 language plpgsql
@@ -259,6 +320,37 @@ on public.sets
 for each row
 execute function public.validate_set_ownership();
 
+create or replace function public.refresh_workout_cluster_assignments()
+returns trigger
+language plpgsql
+as $$
+begin
+  if pg_trigger_depth() > 1 then
+    return null;
+  end if;
+
+  if tg_op = 'DELETE' then
+    perform public.recompute_workout_clusters(old.user_id, old.training_date);
+    return null;
+  end if;
+
+  perform public.recompute_workout_clusters(new.user_id, new.training_date);
+
+  if tg_op = 'UPDATE'
+    and (old.user_id is distinct from new.user_id or old.training_date is distinct from new.training_date) then
+    perform public.recompute_workout_clusters(old.user_id, old.training_date);
+  end if;
+
+  return null;
+end;
+$$;
+
+create trigger trg_sets_refresh_workout_clusters
+after insert or update of user_id, logged_at, training_date or delete
+on public.sets
+for each row
+execute function public.refresh_workout_cluster_assignments();
+
 alter table public.sets enable row level security;
 create policy "Users manage own sets" on public.sets
   for all
@@ -266,6 +358,7 @@ create policy "Users manage own sets" on public.sets
   with check (auth.uid() = user_id);
 create index idx_sets_user_logged on public.sets(user_id, logged_at desc);
 create index idx_sets_bucket on public.sets(user_id, training_bucket_id, logged_at desc);
+create index idx_sets_cluster on public.sets(user_id, training_date, workout_cluster_id, logged_at desc);
 create index idx_sets_machine on public.sets(user_id, machine_id, logged_at desc);
 
 -- ─── SORENESS REPORTS (bucket linked, no session dependency) ─
