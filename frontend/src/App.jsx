@@ -1508,8 +1508,12 @@ function AnalysisScreen({
       const response = await getRecommendations(scope, recommendationGroupedTraining, equipmentById, sorenessDataForScope)
       setRecommendationState({ loading: false, error: '', data: response })
       if (response?.report_id) {
-        const report = await getAnalysisReport(response.report_id)
-        setSavedReports((prev) => [report, ...prev.filter((item) => item.id !== report.id)])
+        try {
+          const report = await getAnalysisReport(response.report_id)
+          setSavedReports((prev) => [report, ...prev.filter((item) => item.id !== report.id)])
+        } catch (reportError) {
+          console.warn('Recommendations generated, but failed to fetch report details.', reportError)
+        }
       }
     } catch (error) {
       setRecommendationState({ loading: false, error: error?.message || 'Failed to generate recommendations.', data: null })

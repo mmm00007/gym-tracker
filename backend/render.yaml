@@ -27,7 +27,7 @@ cronJobs:
     runtime: docker
     schedule: "0 6 * * 1"
     dockerCommand: |
-      /bin/sh -lc 'curl -sS -X POST "$API_BASE_URL/api/jobs/generate-weekly-trends" \
+      /bin/sh -lc 'curl --fail -sS -X POST "$API_BASE_URL/api/jobs/generate-weekly-trends" \
       -H "Content-Type: application/json" \
       -H "x-cron-secret: $CRON_SHARED_SECRET" \
       -d "{\"user_id\":\"$TREND_USER_ID\"}"'
