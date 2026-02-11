@@ -1603,7 +1603,7 @@ function AnalysisScreen({
       date_start: scopeDateStart,
       date_end: scopeDateEnd,
       included_set_types: recommendationSetTypePool,
-      goals: goals.trim() || null,
+      recommendations: goals.trim() || null,
     }
 
     setRecommendationState({ loading: true, error: '', data: null })

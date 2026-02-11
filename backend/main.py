@@ -248,6 +248,7 @@ class RecommendationScope(BaseModel):
     date_start: Optional[str] = None
     date_end: Optional[str] = None
     included_set_types: list[str] = ["working"]
+    recommendations: Optional[str] = None
 
 
 class RecommendationRequest(BaseModel):
