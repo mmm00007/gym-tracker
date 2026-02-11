@@ -1366,21 +1366,24 @@ function AnalysisScreen({
   const [selectedMachineId, setSelectedMachineId] = useState(machines[0]?.id || '')
   const [setTypeMode, setSetTypeMode] = useState('working')
   const [customSetTypes, setCustomSetTypes] = useState(['working'])
-  const [scopeWindowDays, setScopeWindowDays] = useState('30')
-  const [goals, setGoals] = useState('')
-  const [recommendationSetTypes, setRecommendationSetTypes] = useState(['working'])
+  const [scopeMode, setScopeMode] = useState('30d')
+  const [customScopeStart, setCustomScopeStart] = useState('')
+  const [customScopeEnd, setCustomScopeEnd] = useState('')
+  const [selectedGoals, setSelectedGoals] = useState(['strength'])
+  const [goalsNotes, setGoalsNotes] = useState('')
+  const [recommendationSetTypeMode, setRecommendationSetTypeMode] = useState('working')
+  const [customRecommendationSetTypes, setCustomRecommendationSetTypes] = useState(['working'])
   const [recommendationState, setRecommendationState] = useState({ loading: false, error: '', data: null })
   const [savedReports, setSavedReports] = useState([])
   const [selectedReport, setSelectedReport] = useState(null)
   const [reportLoadError, setReportLoadError] = useState('')
+  const [reportTypeFilter, setReportTypeFilter] = useState('all')
+  const [reportStatusFilter, setReportStatusFilter] = useState('all')
+  const [reportDateFilter, setReportDateFilter] = useState('all')
+  const [reportCustomStart, setReportCustomStart] = useState('')
+  const [reportCustomEnd, setReportCustomEnd] = useState('')
+  const [reportSearch, setReportSearch] = useState('')
   const [weeklyTrends, setWeeklyTrends] = useState([])
-
-  useEffect(() => {
-    if (analysisOnDemandOnly) return
-    if (selectedMachineId) {
-      onLoadMachineHistory(selectedMachineId)
-    }
-  }, [analysisOnDemandOnly, selectedMachineId, onLoadMachineHistory])
 
   useEffect(() => {
     if (!selectedMachineId && machines.length) {
@@ -1388,18 +1391,73 @@ function AnalysisScreen({
     }
   }, [machines, selectedMachineId])
 
+  const latestTrainingDate = useMemo(() => {
+    const datedBuckets = trainingBuckets.filter((bucket) => bucket.training_date)
+    if (!datedBuckets.length) return ''
+    return datedBuckets.reduce((latest, bucket) => (bucket.training_date > latest ? bucket.training_date : latest), datedBuckets[0].training_date)
+  }, [trainingBuckets])
+
+  const today = new Date()
+  const todayIso = today.toISOString().slice(0, 10)
+  const last30Start = new Date(today.getTime() - 29 * 86400000).toISOString().slice(0, 10)
+
+  const scopeDateStart = scopeMode === 'last_training_day'
+    ? (latestTrainingDate || todayIso)
+    : scopeMode === 'custom'
+      ? (customScopeStart || customScopeEnd || last30Start)
+      : last30Start
+
+  const scopeDateEnd = scopeMode === 'last_training_day'
+    ? (latestTrainingDate || todayIso)
+    : scopeMode === 'custom'
+      ? (customScopeEnd || customScopeStart || todayIso)
+      : todayIso
+
+  const reportDateStart = reportDateFilter === '30d'
+    ? new Date(today.getTime() - 29 * 86400000).toISOString().slice(0, 10)
+    : reportDateFilter === '90d'
+      ? new Date(today.getTime() - 89 * 86400000).toISOString().slice(0, 10)
+      : reportDateFilter === 'custom'
+        ? (reportCustomStart || reportCustomEnd || null)
+        : null
+
+  const reportDateEnd = reportDateFilter === 'all'
+    ? null
+    : reportDateFilter === 'custom'
+      ? (reportCustomEnd || reportCustomStart || null)
+      : todayIso
+
+  const recommendationSetTypePool = useMemo(() => {
+    if (recommendationSetTypeMode === 'all') return [...SET_TYPE_OPTIONS]
+    if (recommendationSetTypeMode === 'working') return ['working']
+    return customRecommendationSetTypes.length ? customRecommendationSetTypes : ['working']
+  }, [recommendationSetTypeMode, customRecommendationSetTypes])
 
   useEffect(() => {
     let active = true
     const loadReports = async () => {
       try {
-        const [recommendationReports, trendReports] = await Promise.all([
-          getAnalysisReports('recommendation'),
-          getAnalysisReports('weekly_trend'),
-        ])
+        const reportType = reportTypeFilter === 'all' ? null : reportTypeFilter
+        const status = reportStatusFilter === 'all' ? null : reportStatusFilter
+        const reports = await getAnalysisReports(reportType, {
+          status,
+          search: reportSearch,
+          dateStart: reportDateStart,
+          dateEnd: reportDateEnd,
+          limit: 100,
+        })
+        const trendReports = await getAnalysisReports('weekly_trend', { limit: 8 })
         if (!active) return
-        setSavedReports(recommendationReports)
+        setSavedReports(reports)
         setWeeklyTrends(trendReports)
+        if (
+          selectedReport?.id
+          && !reports.some((report) => report.id === selectedReport.id)
+          && !trendReports.some((report) => report.id === selectedReport.id)
+        ) {
+          setSelectedReport(null)
+        }
+        setReportLoadError('')
       } catch (error) {
         if (!active) return
         setReportLoadError(error?.message || 'Could not load saved reports.')
@@ -1407,7 +1465,7 @@ function AnalysisScreen({
     }
     loadReports()
     return () => { active = false }
-  }, [recommendationState.data])
+  }, [recommendationState.data, reportTypeFilter, reportStatusFilter, reportSearch, reportDateStart, reportDateEnd])
 
   const historyEntries = selectedMachineId ? (machineHistory[selectedMachineId] || []) : []
   const includedSetTypes = setTypeMode === 'all'
@@ -1426,35 +1484,13 @@ function AnalysisScreen({
     })
     .filter((entry) => entry.metrics.totalSets > 0)
 
-  const metricConfigs = [
-    { key: 'totalVolume', label: 'Total volume load (kg)', color: 'var(--accent)', format: (v) => `${fmtNumber(v, 0)} kg` },
-    { key: 'totalSets', label: 'Total sets', color: 'var(--blue)', format: (v) => fmtNumber(v, 0) },
-    { key: 'totalReps', label: 'Total reps', color: '#ffe66d', format: (v) => fmtNumber(v, 0) },
-    { key: 'avgLoad', label: 'Average load per rep', color: '#4ecdc4', format: (v) => `${fmtNumber(v, 1)} kg` },
-    { key: 'avgRepsPerSet', label: 'Average reps per set', color: '#ff8a5c', format: (v) => fmtNumber(v, 1) },
-    { key: 'maxStandardized', label: 'Max weight (5–8 reps)', color: '#c9b1ff', format: (v) => `${fmtNumber(v, 1)} kg` },
-    { key: 'estOneRm', label: 'Estimated 1RM (best set)', color: '#88d8b0', format: (v) => `${fmtNumber(v, 1)} kg` },
-    { key: 'hardSets', label: 'Hard sets (proxy)', color: '#ff6b6b', format: (v) => fmtNumber(v, 0) },
-    { key: 'avgTimedDuration', label: 'Average timed set duration', color: '#f7b267', format: (v) => v === null ? 'Unknown' : `${fmtNumber(v, 1)} s` },
-  ]
-
-  const recommendationWindowDays = Math.max(1, Number.parseInt(scopeWindowDays, 10) || 30)
-  const today = new Date()
-  const scopeDateEnd = today.toISOString().slice(0, 10)
-  const scopeDateStart = new Date(today.getTime() - (recommendationWindowDays - 1) * 86400000).toISOString().slice(0, 10)
-
-  const recommendationSetTypePool = recommendationSetTypes.length ? recommendationSetTypes : ['working']
-
   const recommendationGroupedTraining = useMemo(() => {
     return trainingBuckets
       .map((bucket) => {
         const bucketDate = bucket.training_date || bucket.started_at?.slice(0, 10)
-        if (!bucketDate) return null
-        if (bucketDate < scopeDateStart || bucketDate > scopeDateEnd) return null
-
+        if (!bucketDate || bucketDate < scopeDateStart || bucketDate > scopeDateEnd) return null
         const filteredSets = (bucket.sets || []).filter((set) => recommendationSetTypePool.includes(set.set_type || 'working'))
         if (!filteredSets.length) return null
-
         return {
           ...bucket,
           sets: filteredSets,
@@ -1462,6 +1498,13 @@ function AnalysisScreen({
       })
       .filter(Boolean)
   }, [trainingBuckets, recommendationSetTypePool, scopeDateStart, scopeDateEnd])
+
+  const sorenessDataForScope = useMemo(() => {
+    return (sorenessHistory || []).filter((entry) => {
+      const date = (entry.reported_at || '').slice(0, 10)
+      return date && date >= scopeDateStart && date <= scopeDateEnd
+    })
+  }, [sorenessHistory, scopeDateStart, scopeDateEnd])
 
   const equipmentById = useMemo(() => {
     return machines.reduce((acc, machine) => {
@@ -1475,23 +1518,32 @@ function AnalysisScreen({
     }, {})
   }, [machines])
 
-  const sorenessDataForScope = useMemo(() => {
-    return (sorenessHistory || []).filter((entry) => {
-      const date = (entry.reported_at || '').slice(0, 10)
-      return date && date >= scopeDateStart && date <= scopeDateEnd
+  const toggleGoal = (goal) => {
+    setSelectedGoals((prev) => {
+      if (prev.includes(goal)) return prev.filter((value) => value !== goal)
+      return [...prev, goal]
     })
-  }, [sorenessHistory, scopeDateStart, scopeDateEnd])
+  }
 
-  const toggleRecommendationSetType = (type) => {
-    setRecommendationSetTypes((prev) => {
+  const toggleCustomRecommendationSetType = (type) => {
+    setCustomRecommendationSetTypes((prev) => {
       if (prev.includes(type)) return prev.filter((value) => value !== type)
       return [...prev, type]
     })
   }
 
+  const loadReportDetail = async (reportId) => {
+    try {
+      const fullReport = await getAnalysisReport(reportId)
+      setSelectedReport(fullReport)
+    } catch (error) {
+      setReportLoadError(error?.message || 'Failed to load report details.')
+    }
+  }
+
   const handleRunRecommendations = async () => {
     if (!recommendationGroupedTraining.length) {
-      setRecommendationState({ loading: false, error: 'No scoped training data found for this window and set-type selection.', data: null })
+      setRecommendationState({ loading: false, error: 'No scoped training data found for this scope and set-type selection.', data: null })
       return
     }
 
@@ -1500,7 +1552,8 @@ function AnalysisScreen({
       date_start: scopeDateStart,
       date_end: scopeDateEnd,
       included_set_types: recommendationSetTypePool,
-      recommendations: goals.trim() || null,
+      goals: selectedGoals,
+      recommendations: goalsNotes.trim() || null,
     }
 
     setRecommendationState({ loading: true, error: '', data: null })
@@ -1508,87 +1561,132 @@ function AnalysisScreen({
       const response = await getRecommendations(scope, recommendationGroupedTraining, equipmentById, sorenessDataForScope)
       setRecommendationState({ loading: false, error: '', data: response })
       if (response?.report_id) {
-        try {
-          const report = await getAnalysisReport(response.report_id)
-          setSavedReports((prev) => [report, ...prev.filter((item) => item.id !== report.id)])
-        } catch (reportError) {
-          console.warn('Recommendations generated, but failed to fetch report details.', reportError)
-        }
+        await loadReportDetail(response.report_id)
       }
     } catch (error) {
-      setRecommendationState({ loading: false, error: error?.message || 'Failed to generate recommendations.', data: null })
+      setRecommendationState({ loading: false, error: error?.message || 'Failed to generate analysis.', data: null })
     }
   }
 
   const recs = recommendationState.data
   const selectedReportPayload = selectedReport?.payload || null
+  const selectedEvidence = selectedReport?.evidence || selectedReportPayload?.evidence || []
+  const trendReports = weeklyTrends
+  const latestTrend = trendReports[0] || null
+  const previousTrends = trendReports.slice(1, 4)
+
+  const metricConfigs = [
+    { key: 'totalVolume', label: 'Total volume load (kg)', color: 'var(--accent)', format: (v) => `${fmtNumber(v, 0)} kg` },
+    { key: 'totalSets', label: 'Total sets', color: 'var(--blue)', format: (v) => fmtNumber(v, 0) },
+    { key: 'totalReps', label: 'Total reps', color: '#ffe66d', format: (v) => fmtNumber(v, 0) },
+    { key: 'avgLoad', label: 'Average load per rep', color: '#4ecdc4', format: (v) => `${fmtNumber(v, 1)} kg` },
+    { key: 'avgRepsPerSet', label: 'Average reps per set', color: '#ff8a5c', format: (v) => fmtNumber(v, 1) },
+    { key: 'maxStandardized', label: 'Max weight (5–8 reps)', color: '#c9b1ff', format: (v) => `${fmtNumber(v, 1)} kg` },
+    { key: 'estOneRm', label: 'Estimated 1RM (best set)', color: '#88d8b0', format: (v) => `${fmtNumber(v, 1)} kg` },
+    { key: 'hardSets', label: 'Hard sets proxy', color: '#ff6b6b', format: (v) => fmtNumber(v, 0) },
+    { key: 'avgTimedDuration', label: 'Average timed set duration', color: '#f7b267', format: (v) => v === null ? 'Unknown' : `${fmtNumber(v, 1)} s` },
+  ]
 
   return (
     <div style={{ padding: '20px 16px', minHeight: '100dvh' }}>
-      <TopBar left={<BackBtn onClick={onBack} />} title="ANALYSIS" />
+      <TopBar left={<BackBtn onClick={onBack} />} title="ANALYZE" />
 
       <div style={{ background: 'var(--surface)', borderRadius: 14, border: '1px solid var(--border)', padding: 14, marginBottom: 16 }}>
-        <div style={{ fontSize: 12, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)', marginBottom: 10 }}>ANALYZE SCOPE</div>
+        <div style={{ fontSize: 12, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)', marginBottom: 10 }}>ANALYZE MENU</div>
 
         <div style={{ marginBottom: 10 }}>
-          <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 6, fontFamily: 'var(--font-code)' }}>SCOPE WINDOW</div>
-          <select value={scopeWindowDays} onChange={(e) => setScopeWindowDays(e.target.value)} style={{
-            width: '100%', padding: 10, borderRadius: 10, border: '1px solid var(--border)',
-            background: 'var(--surface2)', color: 'var(--text)', fontSize: 14,
-          }}>
-            <option value="7">Last 7 days</option>
-            <option value="14">Last 14 days</option>
-            <option value="30">Last 30 days</option>
-            <option value="60">Last 60 days</option>
-            <option value="90">Last 90 days</option>
-          </select>
-          <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 6 }}>
-            {scopeDateStart} → {scopeDateEnd}
+          <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 6, fontFamily: 'var(--font-code)' }}>SCOPE</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+            {[
+              { key: 'last_training_day', label: 'Last training day' },
+              { key: '30d', label: 'Last 30 days' },
+              { key: 'custom', label: 'Custom' },
+            ].map((option) => {
+              const active = scopeMode === option.key
+              return (
+                <button key={option.key} onClick={() => setScopeMode(option.key)} style={{
+                  padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                  background: active ? 'var(--accent)22' : 'var(--surface2)', color: active ? 'var(--accent)' : 'var(--text-muted)',
+                  fontSize: 12, fontWeight: 700,
+                }}>{option.label}</button>
+              )
+            })}
           </div>
+
+          {scopeMode === 'custom' && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <input type="date" value={customScopeStart} onChange={(e) => setCustomScopeStart(e.target.value)} style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)' }} />
+              <input type="date" value={customScopeEnd} onChange={(e) => setCustomScopeEnd(e.target.value)} style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)' }} />
+            </div>
+          )}
+          <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 6 }}>{scopeDateStart} → {scopeDateEnd}</div>
         </div>
 
         <div style={{ marginBottom: 10 }}>
           <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 6, fontFamily: 'var(--font-code)' }}>GOALS</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+            {['strength', 'volume balance', 'recovery', 'consistency'].map((goal) => {
+              const active = selectedGoals.includes(goal)
+              return (
+                <button key={goal} onClick={() => toggleGoal(goal)} style={{
+                  textTransform: 'capitalize',
+                  padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--blue)' : 'var(--border)'}`,
+                  background: active ? 'var(--blue)22' : 'var(--surface2)', color: active ? 'var(--blue)' : 'var(--text-muted)',
+                  fontSize: 12, fontWeight: 700,
+                }}>{goal}</button>
+              )
+            })}
+          </div>
           <textarea
-            value={goals}
-            onChange={(e) => setGoals(e.target.value)}
-            placeholder="e.g. prioritize chest + back growth while reducing right-shoulder fatigue"
+            value={goalsNotes}
+            onChange={(e) => setGoalsNotes(e.target.value)}
+            placeholder="Optional note for the AI (constraints, soreness context, focus areas)."
             rows={3}
-            style={{
-              width: '100%', padding: 10, borderRadius: 10, border: '1px solid var(--border)', resize: 'vertical',
-              background: 'var(--surface2)', color: 'var(--text)', fontSize: 13,
-            }}
+            style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid var(--border)', resize: 'vertical', background: 'var(--surface2)', color: 'var(--text)', fontSize: 13 }}
           />
         </div>
 
         <div style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 6, fontFamily: 'var(--font-code)' }}>INCLUDED SET TYPES</div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {SET_TYPE_OPTIONS.map((type) => {
-              const active = recommendationSetTypes.includes(type)
+          <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 6, fontFamily: 'var(--font-code)' }}>SET-TYPE INCLUSION POLICY</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+            {[
+              { key: 'all', label: 'Include all' },
+              { key: 'working', label: 'Working only' },
+              { key: 'custom', label: 'Custom' },
+            ].map((mode) => {
+              const active = recommendationSetTypeMode === mode.key
               return (
-                <button key={type} onClick={() => toggleRecommendationSetType(type)} style={{
-                  textTransform: 'capitalize',
+                <button key={mode.key} onClick={() => setRecommendationSetTypeMode(mode.key)} style={{
                   padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
                   background: active ? 'var(--accent)22' : 'var(--surface2)', color: active ? 'var(--accent)' : 'var(--text-muted)',
                   fontSize: 12, fontWeight: 700,
-                }}>{type}</button>
+                }}>{mode.label}</button>
               )
             })}
           </div>
+          {recommendationSetTypeMode === 'custom' && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {SET_TYPE_OPTIONS.map((type) => {
+                const active = customRecommendationSetTypes.includes(type)
+                return (
+                  <button key={type} onClick={() => toggleCustomRecommendationSetType(type)} style={{
+                    textTransform: 'capitalize',
+                    padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--blue)' : 'var(--border)'}`,
+                    background: active ? 'var(--blue)22' : 'var(--surface2)', color: active ? 'var(--blue)' : 'var(--text-muted)',
+                    fontSize: 12, fontWeight: 700,
+                  }}>{type}</button>
+                )
+              })}
+            </div>
+          )}
         </div>
 
         <button onClick={handleRunRecommendations} disabled={recommendationState.loading} style={{
-          width: '100%',
-          padding: 12,
-          borderRadius: 10,
-          border: '1px solid var(--border)',
+          width: '100%', padding: 12, borderRadius: 10, border: '1px solid var(--border)',
           background: recommendationState.loading ? 'var(--surface2)' : 'linear-gradient(135deg, var(--accent), var(--accent-dark))',
-          color: recommendationState.loading ? 'var(--text-muted)' : '#000',
-          fontWeight: 800,
-          fontFamily: 'var(--font-mono)',
+          color: recommendationState.loading ? 'var(--text-muted)' : '#000', fontWeight: 800, fontFamily: 'var(--font-mono)',
         }}>
-          {recommendationState.loading ? 'Generating recommendations…' : 'Run recommendations'}
+          {recommendationState.loading ? 'Generating analysis…' : 'Run analysis'}
         </button>
 
         <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-dim)' }}>
@@ -1602,93 +1700,115 @@ function AnalysisScreen({
 
       {recs && (
         <div style={{ background: '#10131c', border: '1px solid #2a2f3a', borderRadius: 14, padding: 14, marginBottom: 16 }}>
-          <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 8, letterSpacing: 1, fontFamily: 'var(--font-code)' }}>RECOMMENDATION RESPONSE</div>
+          <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 8, letterSpacing: 1, fontFamily: 'var(--font-code)' }}>LATEST RESPONSE</div>
           {recs.summary && <div style={{ fontSize: 14, color: 'var(--text)', lineHeight: 1.5, marginBottom: 10 }}>{recs.summary}</div>}
-
-          {recs.highlights?.length > 0 && (
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 11, color: '#9ad1ff', letterSpacing: 1, marginBottom: 4 }}>HIGHLIGHTS</div>
-              {recs.highlights.map((item, idx) => <div key={`h-${idx}`} style={{ fontSize: 13, color: '#cde8ff', marginBottom: 4 }}>• {item}</div>)}
-            </div>
-          )}
-
-          {recs.suggestions?.length > 0 && (
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 11, color: '#ffd6a5', letterSpacing: 1, marginBottom: 4 }}>SUGGESTIONS</div>
-              {recs.suggestions.map((item, idx) => <div key={`s-${idx}`} style={{ fontSize: 13, color: '#ffe8cf', marginBottom: 4 }}>• {item}</div>)}
-            </div>
-          )}
-
-          {recs.nextSession && (
-            <div style={{ marginBottom: 8, fontSize: 13, color: '#b8f7d4' }}>
-              <span style={{ fontWeight: 700 }}>Next session:</span> {recs.nextSession}
-            </div>
-          )}
-
-          {recs.progressNotes && (
-            <div style={{ marginBottom: 10, fontSize: 13, color: '#d3c9ff' }}>
-              <span style={{ fontWeight: 700 }}>Progress notes:</span> {recs.progressNotes}
-            </div>
-          )}
-
-          <div style={{ marginTop: 10 }}>
-            <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 6, letterSpacing: 1, fontFamily: 'var(--font-code)' }}>EVIDENCE</div>
-            {recs.evidence?.length ? recs.evidence.map((item, idx) => (
-              <div key={`e-${idx}`} style={{ border: '1px solid #2a2f3a', borderRadius: 10, padding: 10, marginBottom: 8, background: '#0f1219' }}>
-                <div style={{ fontSize: 13, color: 'var(--text)', marginBottom: 4 }}>{item.claim || 'Claim unavailable'}</div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Metric: {item.metric || 'n/a'} · Period: {item.period || 'n/a'}</div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Delta: {item.delta ?? 'n/a'} · Samples: {item?.source?.sample_size ?? 'n/a'}</div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Source: {item?.source?.grouping || 'n/a'} · Set types: {(item?.source?.included_set_types || []).join(', ') || 'n/a'}</div>
-              </div>
-            )) : <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>No evidence details returned.</div>}
-          </div>
+          {recs.highlights?.length > 0 && recs.highlights.map((item, idx) => <div key={`h-${idx}`} style={{ fontSize: 13, color: '#cde8ff', marginBottom: 4 }}>• {item}</div>)}
         </div>
       )}
 
-
       <div style={{ background: 'var(--surface)', borderRadius: 14, border: '1px solid var(--border)', padding: 14, marginBottom: 16 }}>
-        <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)', marginBottom: 10 }}>SAVED ANALYSIS REPORTS</div>
+        <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)', marginBottom: 10 }}>REPORTS</div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+          <select value={reportTypeFilter} onChange={(e) => setReportTypeFilter(e.target.value)} style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', fontSize: 13 }}>
+            <option value="all">All report types</option>
+            <option value="recommendation">Recommendations</option>
+            <option value="weekly_trend">Weekly trends</option>
+          </select>
+          <select value={reportStatusFilter} onChange={(e) => setReportStatusFilter(e.target.value)} style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', fontSize: 13 }}>
+            <option value="all">All statuses</option>
+            <option value="ready">Ready</option>
+            <option value="failed">Failed</option>
+          </select>
+        </div>
+        <div style={{ marginBottom: 8 }}>
+          <select value={reportDateFilter} onChange={(e) => setReportDateFilter(e.target.value)} style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', fontSize: 13 }}>
+            <option value="all">Any time</option>
+            <option value="30d">Last 30 days</option>
+            <option value="90d">Last 90 days</option>
+            <option value="custom">Custom range</option>
+          </select>
+        </div>
+        {reportDateFilter === 'custom' && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+            <input type="date" value={reportCustomStart} onChange={(e) => setReportCustomStart(e.target.value)} style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)' }} />
+            <input type="date" value={reportCustomEnd} onChange={(e) => setReportCustomEnd(e.target.value)} style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)' }} />
+          </div>
+        )}
+        <input
+          value={reportSearch}
+          onChange={(e) => setReportSearch(e.target.value)}
+          placeholder="Search report title or summary"
+          style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', fontSize: 13, marginBottom: 10 }}
+        />
+
         {reportLoadError && <div style={{ fontSize: 12, color: 'var(--red)', marginBottom: 8 }}>{reportLoadError}</div>}
         {!savedReports.length ? (
-          <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>No saved reports yet. Run recommendations to create one.</div>
+          <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>No reports found for the selected filters.</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {savedReports.slice(0, 6).map((report) => (
-              <button key={report.id} onClick={async () => {
-                const fullReport = await getAnalysisReport(report.id)
-                setSelectedReport(fullReport)
-              }} style={{
+            {savedReports.slice(0, 10).map((report) => (
+              <button key={report.id} onClick={() => loadReportDetail(report.id)} style={{
                 textAlign: 'left', padding: 10, borderRadius: 10, border: '1px solid var(--border)',
                 background: selectedReport?.id === report.id ? 'var(--surface2)' : 'transparent', color: 'var(--text)',
               }}>
-                <div style={{ fontSize: 12, fontWeight: 700 }}>{report.title || 'Recommendation report'}</div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{new Date(report.created_at).toLocaleString()}</div>
+                <div style={{ fontSize: 12, fontWeight: 700 }}>{report.title || 'Analysis report'}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{report.report_type} · {new Date(report.created_at).toLocaleString()}</div>
+                {report.summary && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>{report.summary}</div>}
               </button>
             ))}
           </div>
         )}
+
         {selectedReportPayload && (
           <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>{selectedReportPayload.summary || selectedReport.summary || 'Saved summary'}</div>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{(selectedReportPayload.nextSession || '')}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 6, letterSpacing: 1, fontFamily: 'var(--font-code)' }}>REPORT DETAIL</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>{selectedReport?.title || 'Analysis report'}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>{selectedReportPayload.summary || selectedReport.summary || 'No summary available.'}</div>
+            {selectedReportPayload.highlights?.length > 0 && selectedReportPayload.highlights.map((item, idx) => (
+              <div key={`saved-highlight-${idx}`} style={{ fontSize: 12, color: 'var(--text)', marginBottom: 4 }}>• {item}</div>
+            ))}
+
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 6, letterSpacing: 1, fontFamily: 'var(--font-code)' }}>WHY (EVIDENCE)</div>
+              {selectedEvidence?.length ? selectedEvidence.map((item, idx) => (
+                <details key={`saved-evidence-${idx}`} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: '8px 10px', marginBottom: 8, background: 'var(--surface2)' }}>
+                  <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--text)', fontWeight: 700 }}>{item.claim || 'Evidence claim'}</summary>
+                  <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>
+                    <div>Metric: {item.metric || 'n/a'}</div>
+                    <div>Period: {item.period || 'n/a'}</div>
+                    <div>Delta: {item.delta ?? 'n/a'}</div>
+                    <div>Source: {item?.source?.grouping || 'n/a'} · Set types: {(item?.source?.included_set_types || []).join(', ') || 'n/a'} · Samples: {item?.source?.sample_size ?? 'n/a'}</div>
+                  </div>
+                </details>
+              )) : <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>No evidence details available.</div>}
+            </div>
           </div>
         )}
       </div>
 
       <div style={{ background: 'var(--surface)', borderRadius: 14, border: '1px solid var(--border)', padding: 14, marginBottom: 16 }}>
         <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)', marginBottom: 10 }}>WEEKLY TRENDS</div>
-        {!weeklyTrends.length ? (
-          <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>No weekly trend reports yet. Run scheduled trend generation to populate this section.</div>
+        {!latestTrend ? (
+          <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>No weekly trend reports yet.</div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {weeklyTrends.slice(0, 3).map((trendReport) => (
-              <div key={trendReport.id} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 10 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>{trendReport.title || 'Weekly trends'}</div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>{new Date(trendReport.created_at).toLocaleString()}</div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{trendReport.summary || 'No summary available.'}</div>
+          <>
+            <button onClick={() => loadReportDetail(latestTrend.id)} style={{ width: '100%', textAlign: 'left', border: '1px solid var(--border)', borderRadius: 10, padding: 10, marginBottom: 8, background: 'var(--surface2)', color: 'var(--text)' }}>
+              <div style={{ fontSize: 12, fontWeight: 700 }}>Latest: {latestTrend.title || 'Weekly trends'}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{new Date(latestTrend.created_at).toLocaleString()}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{latestTrend.summary || 'No summary available.'}</div>
+            </button>
+            {previousTrends.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {previousTrends.map((trendReport) => (
+                  <button key={trendReport.id} onClick={() => loadReportDetail(trendReport.id)} style={{ width: '100%', textAlign: 'left', border: '1px solid var(--border)', borderRadius: 10, padding: 10, background: 'transparent', color: 'var(--text)' }}>
+                    <div style={{ fontSize: 12, fontWeight: 700 }}>{trendReport.title || 'Weekly trends'}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{new Date(trendReport.created_at).toLocaleString()}</div>
+                  </button>
+                ))}
               </div>
-            ))}
-          </div>
+            )}
+          </>
         )}
       </div>
 
@@ -1720,7 +1840,7 @@ function AnalysisScreen({
           background: 'var(--surface2)',
           color: 'var(--text)',
           fontWeight: 700,
-        }}>Load analysis</button>
+        }}>Load exercise analysis</button>
       )}
 
       <div style={{ marginBottom: 14 }}>

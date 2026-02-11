@@ -451,7 +451,7 @@ Return ONLY valid JSON:
 
 
 class WeeklyTrendJobRequest(BaseModel):
-    user_id: str
+    user_id: Optional[str] = None
 
 
 def _bucket_week_start(training_date: str) -> Optional[str]:
@@ -467,16 +467,12 @@ def _bucket_week_start(training_date: str) -> Optional[str]:
         return None
 
 
-@app.post("/api/jobs/generate-weekly-trends")
-async def generate_weekly_trends(req: WeeklyTrendJobRequest, x_cron_secret: Optional[str] = Header(None)):
-    if not CRON_SHARED_SECRET or x_cron_secret != CRON_SHARED_SECRET:
-        raise HTTPException(401, "Unauthorized")
-
+async def build_weekly_trend_report(user_id: str) -> dict:
     set_rows = await supabase_admin_request(
         "GET",
         "sets",
         params={
-            "user_id": f"eq.{req.user_id}",
+            "user_id": f"eq.{user_id}",
             "select": "training_date,reps,weight,set_type",
             "order": "training_date.desc",
             "limit": "800",
@@ -503,7 +499,7 @@ async def generate_weekly_trends(req: WeeklyTrendJobRequest, x_cron_secret: Opti
         )
 
     report_id = await persist_analysis_report(
-        user_id=req.user_id,
+        user_id=user_id,
         report_type="weekly_trend",
         payload={"weeks": trend_points},
         evidence=[],
@@ -512,7 +508,58 @@ async def generate_weekly_trends(req: WeeklyTrendJobRequest, x_cron_secret: Opti
         metadata={"source": "api/jobs/generate-weekly-trends", "week_count": len(trend_points)},
     )
 
-    return {"ok": True, "report_id": report_id, "weeks": trend_points}
+    return {"user_id": user_id, "report_id": report_id, "weeks": trend_points}
+
+
+async def list_all_user_ids_with_sets(page_size: int = 1000) -> list[str]:
+    user_ids: set[str] = set()
+    offset = 0
+
+    while True:
+        rows = await supabase_admin_request(
+            "GET",
+            "sets",
+            params={
+                "select": "user_id",
+                "user_id": "not.is.null",
+                "order": "user_id.asc",
+                "limit": str(page_size),
+                "offset": str(offset),
+            },
+        )
+
+        if not rows:
+            break
+
+        user_ids.update(str(row["user_id"]) for row in rows if row.get("user_id"))
+
+        if len(rows) < page_size:
+            break
+
+        offset += page_size
+
+    return sorted(user_ids)
+
+
+@app.post("/api/jobs/generate-weekly-trends")
+async def generate_weekly_trends(req: WeeklyTrendJobRequest, x_cron_secret: Optional[str] = Header(None)):
+    if not CRON_SHARED_SECRET or x_cron_secret != CRON_SHARED_SECRET:
+        raise HTTPException(401, "Unauthorized")
+
+    user_ids: list[str] = []
+    if req.user_id:
+        user_ids = [req.user_id]
+    else:
+        user_ids = await list_all_user_ids_with_sets()
+
+    if not user_ids:
+        return {"ok": True, "processed_users": 0, "reports": []}
+
+    reports = []
+    for user_id in user_ids:
+        reports.append(await build_weekly_trend_report(user_id))
+
+    return {"ok": True, "processed_users": len(reports), "reports": reports}
 
 
 @app.get("/api/health")

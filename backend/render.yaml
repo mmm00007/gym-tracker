@@ -30,11 +30,9 @@ cronJobs:
       /bin/sh -lc 'curl --fail -sS -X POST "$API_BASE_URL/api/jobs/generate-weekly-trends" \
       -H "Content-Type: application/json" \
       -H "x-cron-secret: $CRON_SHARED_SECRET" \
-      -d "{\"user_id\":\"$TREND_USER_ID\"}"'
+      -d "{}"'
     envVars:
       - key: API_BASE_URL
         sync: false
       - key: CRON_SHARED_SECRET
-        sync: false
-      - key: TREND_USER_ID
         sync: false
