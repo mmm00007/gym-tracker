@@ -149,7 +149,7 @@ as $$
   select public.seed_default_equipment_catalog();
 $$;
 
--- ─── SESSIONS (legacy-compatible, non-authoritative) ───────
+-- ─── SESSIONS (legacy-compatible historical records only) ───────
 create table public.sessions (
   id uuid primary key default uuid_generate_v4(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -171,6 +171,7 @@ create unique index uq_sessions_id_user on public.sessions(id, user_id);
 create table public.sets (
   id uuid primary key default uuid_generate_v4(),
   user_id uuid not null references auth.users(id) on delete cascade,
+  -- Optional legacy linkage only (Phase 1 set-centric cutover keeps this nullable for historical compatibility).
   session_id uuid references public.sessions(id) on delete set null,
   machine_id uuid references public.machines(id) on delete set null,
   reps int not null check (reps > 0),

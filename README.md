@@ -106,7 +106,7 @@ Phase 0 contract lock is documented in [`docs/data-contract-lock.md`](docs/data-
 | Table | Purpose |
 |-------|---------|
 | `machines` | Gym machine library per user |
-| `sessions` | Workout sessions + AI recommendations |
+| `sessions` | Legacy/historical session records (non-authoritative in Phase 1) |
 | `sets` | Individual sets (reps, weight, rest, optional duration) |
 | `soreness_reports` | Post-session muscle soreness (0-4 scale) |
 

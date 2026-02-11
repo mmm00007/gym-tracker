@@ -31,6 +31,14 @@ The backend exposes `GET /api/rollout-flags`.
 
 ---
 
+
+## Session compatibility decision (Phase 1)
+
+- Keep `sessions` for historical compatibility only.
+- Keep `sets.session_id` nullable as optional legacy linkage during Phase 1.
+- Treat training buckets (`training_date`, `training_bucket_id`) and `sets.user_id` as authoritative for grouping/auth.
+
+---
 ## Set logging payload contract
 
 ### Write contract (`sets` insert)
@@ -52,7 +60,7 @@ The backend exposes `GET /api/rollout-flags`.
 ### Rules
 
 - `user_id` is required and is the primary authorization key.
-- `session_id` is optional and non-authoritative.
+- `session_id` is optional, non-authoritative, and retained only for historical compatibility.
 - `set_type` defaults to `working`.
 - `duration_seconds` is optional and may be `null` when timing is not used.
 - Missing timing data must remain unknown (`null`) and **must not be imputed**.

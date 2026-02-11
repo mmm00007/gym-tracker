@@ -113,7 +113,10 @@ export const getMachines = getEquipment
 export const upsertMachine = upsertEquipment
 export const deleteMachine = deleteEquipment
 
-// ─── Session CRUD ──────────────────────────────────────────
+// ─── Session CRUD (legacy compatibility only) ─────────────
+// Deprecated: Phase 1 is set-centric. Session rows remain for historical
+// compatibility and optional linkage only.
+/** @deprecated Legacy helper retained for historical compatibility. */
 export async function getSessions() {
   const { data, error } = await supabase
     .from('sessions').select('*').order('started_at', { ascending: false })
@@ -121,6 +124,7 @@ export async function getSessions() {
   return data
 }
 
+/** @deprecated Legacy helper retained for historical compatibility. */
 export async function createSession() {
   const { data: { user } } = await supabase.auth.getUser()
   const { data, error } = await supabase
@@ -129,6 +133,7 @@ export async function createSession() {
   return data
 }
 
+/** @deprecated Legacy helper retained for historical compatibility. */
 export async function endSession(id, recommendations) {
   const { data, error } = await supabase
     .from('sessions')
@@ -138,6 +143,7 @@ export async function endSession(id, recommendations) {
   return data
 }
 
+/** @deprecated Legacy helper retained for historical compatibility. */
 export async function getActiveSession() {
   const { data, error } = await supabase
     .from('sessions').select('*')
@@ -147,7 +153,7 @@ export async function getActiveSession() {
 }
 
 // ─── Set CRUD ──────────────────────────────────────────────
-export async function getSetsForSession(sessionId) {
+export async function getSets(sessionId) {
   const query = supabase.from('sets').select('*').order('logged_at')
   const { data, error } = sessionId
     ? await query.eq('session_id', sessionId)
@@ -155,6 +161,10 @@ export async function getSetsForSession(sessionId) {
   if (error) throw error
   return data
 }
+
+// Backwards-compatible alias while callers migrate.
+/** @deprecated Use getSets(sessionId?) instead. */
+export const getSetsForSession = getSets
 
 export async function logSet(sessionId, machineId, reps, weight, durationSeconds, restSeconds, setType = 'working') {
   const { data: { user } } = await supabase.auth.getUser()
