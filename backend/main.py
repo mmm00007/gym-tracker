@@ -514,8 +514,10 @@ Return ONLY valid JSON:
 
         if validated_scope_id:
             response["scope_id"] = validated_scope_id
-        if report_id:
+        if report_persisted and report_id:
             response["report_id"] = report_id
+        elif not report_persisted:
+            response.pop("report_id", None)
         response["report_persisted"] = report_persisted
         return response
     except json.JSONDecodeError:
