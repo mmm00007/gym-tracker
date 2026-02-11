@@ -199,6 +199,15 @@ begin
     return;
   end if;
 
+  -- Serialize recomputation per user + training_date so concurrent trigger
+  -- executions cannot overwrite cluster assignments using stale snapshots.
+  perform pg_advisory_xact_lock(
+    hashtextextended(
+      format('workout-cluster-recompute:%s:%s', p_user_id::text, p_training_date::text),
+      0
+    )
+  );
+
   with ordered_sets as (
     select
       st.id,
