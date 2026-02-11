@@ -458,12 +458,9 @@ def _bucket_week_start(training_date: str) -> Optional[str]:
     if not training_date:
         return None
     try:
-        ts = time.strptime(training_date, "%Y-%m-%d")
-        dt = time.mktime(ts)
-        # align to Monday in UTC using datetime for clarity
-        from datetime import datetime, timedelta, timezone
+        from datetime import date, timedelta
 
-        date_obj = datetime.fromtimestamp(dt, tz=timezone.utc).date()
+        date_obj = date.fromisoformat(training_date)
         week_start = date_obj - timedelta(days=date_obj.weekday())
         return week_start.isoformat()
     except ValueError:
