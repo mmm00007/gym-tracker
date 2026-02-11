@@ -1704,6 +1704,11 @@ function AnalysisScreen({
       {recs && (
         <div style={{ background: '#10131c', border: '1px solid #2a2f3a', borderRadius: 14, padding: 14, marginBottom: 16 }}>
           <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 8, letterSpacing: 1, fontFamily: 'var(--font-code)' }}>LATEST RESPONSE</div>
+          {recs.report_persisted === false && (
+            <div style={{ fontSize: 12, color: '#f7b267', marginBottom: 8 }}>
+              Generated successfully but couldn&apos;t save to Reports.
+            </div>
+          )}
           {recs.summary && <div style={{ fontSize: 14, color: 'var(--text)', lineHeight: 1.5, marginBottom: 10 }}>{recs.summary}</div>}
           {recs.highlights?.length > 0 && recs.highlights.map((item, idx) => <div key={`h-${idx}`} style={{ fontSize: 13, color: '#cde8ff', marginBottom: 4 }}>• {item}</div>)}
         </div>
