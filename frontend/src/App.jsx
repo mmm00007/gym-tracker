@@ -4,9 +4,9 @@ import {
   getMachines, upsertMachine, deleteMachine as dbDeleteMachine,
   getSetsForSession, logSet as dbLogSet, deleteSet as dbDeleteSet,
   bootstrapDefaultEquipmentCatalog,
-  getPendingSoreness, submitSoreness,
+  getPendingSoreness, submitSoreness, getRecentSoreness,
 } from './lib/supabase'
-import { identifyMachine, API_BASE_URL, pingHealth } from './lib/api'
+import { identifyMachine, API_BASE_URL, pingHealth, getRecommendations } from './lib/api'
 import { getFeatureFlags, DEFAULT_FLAGS } from './lib/featureFlags'
 import { addLog, subscribeLogs } from './lib/logs'
 
@@ -1437,80 +1437,6 @@ function LogSetScreen({
   )
 }
 
-// ─── Summary Screen ────────────────────────────────────────
-
-function SummaryScreen({ session, sets, machines, recommendations, onDone }) {
-  const byMachine = {}
-  sets.forEach(s => { (byMachine[s.machine_id] ??= []).push(s) })
-
-  return (
-    <div style={{ padding: '20px 16px', minHeight: '100dvh' }} className="fade-in">
-      <div style={{ textAlign: 'center', marginBottom: 24 }}>
-        <div style={{ fontSize: 40, marginBottom: 8 }}>🎯</div>
-        <h2 style={{ fontSize: 24, fontWeight: 900, color: 'var(--text)', margin: 0, fontFamily: 'var(--font-mono)' }}>Session Complete</h2>
-        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
-          {fmtFull(session.started_at)} · {session.ended_at ? fmtDur(new Date(session.ended_at) - new Date(session.started_at)) : ''} · {sets.length} sets
-        </div>
-      </div>
-
-      {Object.entries(byMachine).map(([mid, mSets]) => {
-        const m = machines.find(ma => ma.id === mid)
-        return (
-          <div key={mid} style={{
-            background: 'var(--surface)', borderRadius: 14, padding: 14, marginBottom: 10,
-            borderLeft: `3px solid ${mc(m?.muscle_groups?.[0])}`,
-          }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#ccc', marginBottom: 6 }}>{m?.movement || 'Unknown'}</div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {mSets.map((s, i) => (
-                <span key={i} style={{
-                  padding: '4px 10px', borderRadius: 8, background: 'var(--surface2)', fontSize: 14, fontFamily: 'var(--font-mono)', color: '#aaa',
-                }}><span style={{ color: 'var(--accent)' }}>{s.reps}</span>×<span style={{ color: 'var(--blue)' }}>{s.weight}</span></span>
-              ))}
-            </div>
-          </div>
-        )
-      })}
-
-      {recommendations ? (
-        <div style={{ marginTop: 24 }}>
-          <div style={{ fontSize: 12, color: 'var(--accent)', letterSpacing: 2, marginBottom: 12, fontFamily: 'var(--font-code)' }}>🤖 AI INSIGHTS</div>
-          <div style={{ background: '#1a1a2e', borderRadius: 14, padding: 16, marginBottom: 12, border: '1px solid var(--border)' }}>
-            <div style={{ fontSize: 15, color: '#ccc', lineHeight: 1.5 }}>{recommendations.summary}</div>
-          </div>
-          {recommendations.highlights?.map((h, i) => (
-            <div key={i} style={{ padding: '8px 12px', background: '#0a1a1a', borderRadius: 10, marginBottom: 6, fontSize: 14, color: '#aaa', borderLeft: '3px solid #4ecdc4' }}>{h}</div>
-          ))}
-          {recommendations.suggestions?.map((s, i) => (
-            <div key={i} style={{ padding: '8px 12px', background: '#1a1a0a', borderRadius: 10, marginBottom: 6, fontSize: 14, color: '#aaa', borderLeft: '3px solid #ffe66d' }}>{s}</div>
-          ))}
-          {recommendations.nextSession && (
-            <div style={{ background: '#1a0a2e', borderRadius: 12, padding: '10px 14px', marginTop: 8, fontSize: 14, color: '#c9b1ff', borderLeft: '3px solid #c9b1ff' }}>
-              <span style={{ fontWeight: 700 }}>Next time:</span> {recommendations.nextSession}
-            </div>
-          )}
-          {recommendations.progressNotes && (
-            <div style={{ background: '#0a1a0a', borderRadius: 12, padding: '10px 14px', marginTop: 8, fontSize: 14, color: '#88d8b0', borderLeft: '3px solid #88d8b0' }}>
-              <span style={{ fontWeight: 700 }}>Progress:</span> {recommendations.progressNotes}
-            </div>
-          )}
-        </div>
-      ) : (
-        <div style={{ textAlign: 'center', padding: 30, color: 'var(--text-dim)' }}>
-          <div style={{ animation: 'spin 2s linear infinite', display: 'inline-block', fontSize: 24 }}>⚙</div>
-          <div style={{ marginTop: 8 }}>Generating AI insights...</div>
-        </div>
-      )}
-
-      <button onClick={onDone} style={{
-        width: '100%', padding: 18, borderRadius: 14, fontSize: 18, fontWeight: 800,
-        background: 'linear-gradient(135deg, var(--accent), var(--accent-dark))', color: '#000',
-        fontFamily: 'var(--font-mono)', marginTop: 24,
-      }}>Done</button>
-    </div>
-  )
-}
-
 // ─── History Screen ────────────────────────────────────────
 
 function HistoryScreen({ trainingBuckets, machines, onBack }) {
@@ -1556,10 +1482,22 @@ function HistoryScreen({ trainingBuckets, machines, onBack }) {
 
 // ─── Analysis Screen ───────────────────────────────────────
 
-function AnalysisScreen({ machines, machineHistory, onLoadMachineHistory, onBack, analysisOnDemandOnly }) {
+function AnalysisScreen({
+  machines,
+  machineHistory,
+  onLoadMachineHistory,
+  onBack,
+  analysisOnDemandOnly,
+  trainingBuckets,
+  sorenessHistory,
+}) {
   const [selectedMachineId, setSelectedMachineId] = useState(machines[0]?.id || '')
   const [setTypeMode, setSetTypeMode] = useState('working')
   const [customSetTypes, setCustomSetTypes] = useState(['working'])
+  const [scopeWindowDays, setScopeWindowDays] = useState('30')
+  const [goals, setGoals] = useState('')
+  const [recommendationSetTypes, setRecommendationSetTypes] = useState(['working'])
+  const [recommendationState, setRecommendationState] = useState({ loading: false, error: '', data: null })
 
   useEffect(() => {
     if (analysisOnDemandOnly) return
@@ -1603,9 +1541,203 @@ function AnalysisScreen({ machines, machineHistory, onLoadMachineHistory, onBack
     { key: 'avgTimedDuration', label: 'Average timed set duration', color: '#f7b267', format: (v) => v === null ? 'Unknown' : `${fmtNumber(v, 1)} s` },
   ]
 
+  const recommendationWindowDays = Math.max(1, Number.parseInt(scopeWindowDays, 10) || 30)
+  const today = new Date()
+  const scopeDateEnd = today.toISOString().slice(0, 10)
+  const scopeDateStart = new Date(today.getTime() - (recommendationWindowDays - 1) * 86400000).toISOString().slice(0, 10)
+
+  const recommendationSetTypePool = recommendationSetTypes.length ? recommendationSetTypes : ['working']
+
+  const recommendationGroupedTraining = useMemo(() => {
+    return trainingBuckets
+      .map((bucket) => {
+        const bucketDate = bucket.training_date || bucket.started_at?.slice(0, 10)
+        if (!bucketDate) return null
+        if (bucketDate < scopeDateStart || bucketDate > scopeDateEnd) return null
+
+        const filteredSets = (bucket.sets || []).filter((set) => recommendationSetTypePool.includes(set.set_type || 'working'))
+        if (!filteredSets.length) return null
+
+        return {
+          ...bucket,
+          sets: filteredSets,
+        }
+      })
+      .filter(Boolean)
+  }, [trainingBuckets, recommendationSetTypePool, scopeDateStart, scopeDateEnd])
+
+  const equipmentById = useMemo(() => {
+    return machines.reduce((acc, machine) => {
+      acc[machine.id] = {
+        name: machine.name,
+        movement: machine.movement,
+        muscle_groups: machine.muscle_groups || [],
+        equipment_type: machine.equipment_type || 'other',
+      }
+      return acc
+    }, {})
+  }, [machines])
+
+  const sorenessDataForScope = useMemo(() => {
+    return (sorenessHistory || []).filter((entry) => {
+      const date = (entry.reported_at || '').slice(0, 10)
+      return date && date >= scopeDateStart && date <= scopeDateEnd
+    })
+  }, [sorenessHistory, scopeDateStart, scopeDateEnd])
+
+  const toggleRecommendationSetType = (type) => {
+    setRecommendationSetTypes((prev) => {
+      if (prev.includes(type)) return prev.filter((value) => value !== type)
+      return [...prev, type]
+    })
+  }
+
+  const handleRunRecommendations = async () => {
+    if (!recommendationGroupedTraining.length) {
+      setRecommendationState({ loading: false, error: 'No scoped training data found for this window and set-type selection.', data: null })
+      return
+    }
+
+    const scope = {
+      grouping: 'training_day',
+      date_start: scopeDateStart,
+      date_end: scopeDateEnd,
+      included_set_types: recommendationSetTypePool,
+      recommendations: goals.trim() || null,
+    }
+
+    setRecommendationState({ loading: true, error: '', data: null })
+    try {
+      const response = await getRecommendations(scope, recommendationGroupedTraining, equipmentById, sorenessDataForScope)
+      setRecommendationState({ loading: false, error: '', data: response })
+    } catch (error) {
+      setRecommendationState({ loading: false, error: error?.message || 'Failed to generate recommendations.', data: null })
+    }
+  }
+
+  const recs = recommendationState.data
+
   return (
     <div style={{ padding: '20px 16px', minHeight: '100dvh' }}>
       <TopBar left={<BackBtn onClick={onBack} />} title="ANALYSIS" />
+
+      <div style={{ background: 'var(--surface)', borderRadius: 14, border: '1px solid var(--border)', padding: 14, marginBottom: 16 }}>
+        <div style={{ fontSize: 12, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)', marginBottom: 10 }}>ANALYZE SCOPE</div>
+
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 6, fontFamily: 'var(--font-code)' }}>SCOPE WINDOW</div>
+          <select value={scopeWindowDays} onChange={(e) => setScopeWindowDays(e.target.value)} style={{
+            width: '100%', padding: 10, borderRadius: 10, border: '1px solid var(--border)',
+            background: 'var(--surface2)', color: 'var(--text)', fontSize: 14,
+          }}>
+            <option value="7">Last 7 days</option>
+            <option value="14">Last 14 days</option>
+            <option value="30">Last 30 days</option>
+            <option value="60">Last 60 days</option>
+            <option value="90">Last 90 days</option>
+          </select>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 6 }}>
+            {scopeDateStart} → {scopeDateEnd}
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 6, fontFamily: 'var(--font-code)' }}>GOALS</div>
+          <textarea
+            value={goals}
+            onChange={(e) => setGoals(e.target.value)}
+            placeholder="e.g. prioritize chest + back growth while reducing right-shoulder fatigue"
+            rows={3}
+            style={{
+              width: '100%', padding: 10, borderRadius: 10, border: '1px solid var(--border)', resize: 'vertical',
+              background: 'var(--surface2)', color: 'var(--text)', fontSize: 13,
+            }}
+          />
+        </div>
+
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 6, fontFamily: 'var(--font-code)' }}>INCLUDED SET TYPES</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {SET_TYPE_OPTIONS.map((type) => {
+              const active = recommendationSetTypes.includes(type)
+              return (
+                <button key={type} onClick={() => toggleRecommendationSetType(type)} style={{
+                  textTransform: 'capitalize',
+                  padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                  background: active ? 'var(--accent)22' : 'var(--surface2)', color: active ? 'var(--accent)' : 'var(--text-muted)',
+                  fontSize: 12, fontWeight: 700,
+                }}>{type}</button>
+              )
+            })}
+          </div>
+        </div>
+
+        <button onClick={handleRunRecommendations} disabled={recommendationState.loading} style={{
+          width: '100%',
+          padding: 12,
+          borderRadius: 10,
+          border: '1px solid var(--border)',
+          background: recommendationState.loading ? 'var(--surface2)' : 'linear-gradient(135deg, var(--accent), var(--accent-dark))',
+          color: recommendationState.loading ? 'var(--text-muted)' : '#000',
+          fontWeight: 800,
+          fontFamily: 'var(--font-mono)',
+        }}>
+          {recommendationState.loading ? 'Generating recommendations…' : 'Run recommendations'}
+        </button>
+
+        <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-dim)' }}>
+          Using {recommendationGroupedTraining.length} training buckets, {sorenessDataForScope.length} soreness reports.
+        </div>
+
+        {recommendationState.error && (
+          <div style={{ marginTop: 10, fontSize: 12, color: 'var(--red)' }}>{recommendationState.error}</div>
+        )}
+      </div>
+
+      {recs && (
+        <div style={{ background: '#10131c', border: '1px solid #2a2f3a', borderRadius: 14, padding: 14, marginBottom: 16 }}>
+          <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 8, letterSpacing: 1, fontFamily: 'var(--font-code)' }}>RECOMMENDATION RESPONSE</div>
+          {recs.summary && <div style={{ fontSize: 14, color: 'var(--text)', lineHeight: 1.5, marginBottom: 10 }}>{recs.summary}</div>}
+
+          {recs.highlights?.length > 0 && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 11, color: '#9ad1ff', letterSpacing: 1, marginBottom: 4 }}>HIGHLIGHTS</div>
+              {recs.highlights.map((item, idx) => <div key={`h-${idx}`} style={{ fontSize: 13, color: '#cde8ff', marginBottom: 4 }}>• {item}</div>)}
+            </div>
+          )}
+
+          {recs.suggestions?.length > 0 && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 11, color: '#ffd6a5', letterSpacing: 1, marginBottom: 4 }}>SUGGESTIONS</div>
+              {recs.suggestions.map((item, idx) => <div key={`s-${idx}`} style={{ fontSize: 13, color: '#ffe8cf', marginBottom: 4 }}>• {item}</div>)}
+            </div>
+          )}
+
+          {recs.nextSession && (
+            <div style={{ marginBottom: 8, fontSize: 13, color: '#b8f7d4' }}>
+              <span style={{ fontWeight: 700 }}>Next session:</span> {recs.nextSession}
+            </div>
+          )}
+
+          {recs.progressNotes && (
+            <div style={{ marginBottom: 10, fontSize: 13, color: '#d3c9ff' }}>
+              <span style={{ fontWeight: 700 }}>Progress notes:</span> {recs.progressNotes}
+            </div>
+          )}
+
+          <div style={{ marginTop: 10 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 6, letterSpacing: 1, fontFamily: 'var(--font-code)' }}>EVIDENCE</div>
+            {recs.evidence?.length ? recs.evidence.map((item, idx) => (
+              <div key={`e-${idx}`} style={{ border: '1px solid #2a2f3a', borderRadius: 10, padding: 10, marginBottom: 8, background: '#0f1219' }}>
+                <div style={{ fontSize: 13, color: 'var(--text)', marginBottom: 4 }}>{item.claim || 'Claim unavailable'}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Metric: {item.metric || 'n/a'} · Period: {item.period || 'n/a'}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Delta: {item.delta ?? 'n/a'} · Samples: {item?.source?.sample_size ?? 'n/a'}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Source: {item?.source?.grouping || 'n/a'} · Set types: {(item?.source?.included_set_types || []).join(', ') || 'n/a'}</div>
+              </div>
+            )) : <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>No evidence details returned.</div>}
+          </div>
+        </div>
+      )}
 
       <div style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)', marginBottom: 6 }}>EXERCISE</div>
@@ -1918,6 +2050,7 @@ export default function App() {
   const [machines, setMachines] = useState([])
   const [sets, setSets] = useState([])
   const [pendingSoreness, setPendingSoreness] = useState([])
+  const [sorenessHistory, setSorenessHistory] = useState([])
   const [machineHistory, setMachineHistory] = useState({})
   const [machineHistoryStatus, setMachineHistoryStatus] = useState({})
   const [featureFlags, setFeatureFlags] = useState(DEFAULT_FLAGS)
@@ -1980,9 +2113,10 @@ export default function App() {
         addLog({ level: 'warn', event: 'catalog.seed_failed', message: seedError?.message || 'Default catalog seed failed.' })
       }
 
-      const [m, allSets] = await Promise.all([getMachines(), getSetsForSession()])
+      const [m, allSets, recentSoreness] = await Promise.all([getMachines(), getSetsForSession(), getRecentSoreness()])
       setMachines(m)
       setSets(allSets)
+      setSorenessHistory(recentSoreness || [])
 
       const pending = await getPendingSoreness()
       const enriched = pending.map((p) => ({ ...p, _sets: p._sets || [] }))
@@ -2155,6 +2289,8 @@ export default function App() {
           onLoadMachineHistory={loadMachineHistory}
           onBack={() => setScreen('home')}
           analysisOnDemandOnly={analysisOnDemandOnly}
+          trainingBuckets={trainingBuckets}
+          sorenessHistory={sorenessHistory}
         />
       )}
       {screen === 'diagnostics' && (
