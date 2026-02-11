@@ -399,6 +399,27 @@ async def get_recommendations(req: RecommendationRequest, user_id: str = Depends
 
     logger.debug("recommendations request authorized for user_id=%s", user_id)
 
+    validated_scope_id: Optional[str] = None
+    if req.scope_id:
+        scope_rows = await supabase_admin_request(
+            "GET",
+            "recommendation_scopes",
+            params={
+                "id": f"eq.{req.scope_id}",
+                "user_id": f"eq.{user_id}",
+                "select": "id",
+                "limit": "1",
+            },
+        )
+        if not scope_rows:
+            logger.warning(
+                "Rejected recommendation request with invalid scope ownership: user_id=%s scope_id=%s",
+                user_id,
+                req.scope_id,
+            )
+            raise HTTPException(400, "Invalid scope_id")
+        validated_scope_id = req.scope_id
+
     scope, grouped_training, equipment = normalize_recommendation_request(req)
     trimmed_training = trim_history_to_token_budget(grouped_training, MAX_HISTORY_TOKENS)
 
@@ -460,7 +481,7 @@ Return ONLY valid JSON:
         report_id = await persist_analysis_report(
             user_id=user_id,
             report_type="recommendation",
-            scope_id=req.scope_id,
+            scope_id=validated_scope_id,
             payload=response,
             evidence=response.get("evidence", []),
             title="On-demand recommendation",
@@ -472,8 +493,8 @@ Return ONLY valid JSON:
             },
         )
 
-        if req.scope_id:
-            response["scope_id"] = req.scope_id
+        if validated_scope_id:
+            response["scope_id"] = validated_scope_id
         if report_id:
             response["report_id"] = report_id
         return response
