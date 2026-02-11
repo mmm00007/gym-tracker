@@ -257,6 +257,18 @@ export async function createRecommendationScope(scope, metadata = null) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user?.id) throw new Error('Not authenticated')
 
+  const normalizedGoals = Array.isArray(scope?.goals)
+    ? [...new Set(scope.goals.map((goal) => String(goal || '').trim()).filter(Boolean))]
+    : []
+
+  // Keep schema stable: persist goals and scope notes in recommendation_scopes.metadata.
+  // Format: { goals: string[], recommendations: string | null, ...otherMetadata }
+  const mergedMetadata = {
+    goals: normalizedGoals,
+    recommendations: typeof scope?.recommendations === 'string' ? scope.recommendations : null,
+    ...(metadata && typeof metadata === 'object' ? metadata : {}),
+  }
+
   const payload = {
     user_id: user.id,
     grouping: scope?.grouping || 'training_day',
@@ -265,10 +277,7 @@ export async function createRecommendationScope(scope, metadata = null) {
     included_set_types: Array.isArray(scope?.included_set_types) && scope.included_set_types.length
       ? scope.included_set_types
       : ['working'],
-  }
-
-  if (metadata && typeof metadata === 'object') {
-    payload.metadata = metadata
+    metadata: mergedMetadata,
   }
 
   const { data, error } = await supabase
