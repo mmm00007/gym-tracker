@@ -174,8 +174,8 @@ export async function logSet(sessionId, machineId, reps, weight, durationSeconds
     reps,
     weight,
     set_type: setType || 'working',
-    duration_seconds: durationSeconds || null,
-    rest_seconds: restSeconds || null,
+    duration_seconds: durationSeconds ?? null,
+    rest_seconds: restSeconds ?? null,
   }
 
   if (sessionId) payload.session_id = sessionId
