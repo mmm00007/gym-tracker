@@ -1547,13 +1547,16 @@ function AnalysisScreen({
       return
     }
 
+    const normalizedGoals = [...new Set(selectedGoals.map((goal) => String(goal || '').trim()).filter(Boolean))]
+    const normalizedGoalNotes = goalsNotes.trim() || null
+
     const scope = {
       grouping: 'training_day',
       date_start: scopeDateStart,
       date_end: scopeDateEnd,
       included_set_types: recommendationSetTypePool,
-      goals: selectedGoals,
-      recommendations: goalsNotes.trim() || null,
+      goals: normalizedGoals,
+      recommendations: normalizedGoalNotes,
     }
 
     setRecommendationState({ loading: true, error: '', data: null })

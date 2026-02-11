@@ -11,7 +11,7 @@ import time
 from typing import Any, Optional
 from fastapi import FastAPI, HTTPException, Header, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 import httpx
 import jwt
 from jwt import PyJWKClient
@@ -305,8 +305,30 @@ class RecommendationScope(BaseModel):
     grouping: str = "training_day"
     date_start: Optional[str] = None
     date_end: Optional[str] = None
-    included_set_types: list[str] = ["working"]
+    included_set_types: list[str] = Field(default_factory=lambda: ["working"])
+    goals: list[str] = Field(default_factory=list)
     recommendations: Optional[str] = None
+
+    @field_validator("included_set_types", "goals", mode="before")
+    @classmethod
+    def normalize_scope_lists(cls, value: Any) -> list[str]:
+        if value is None:
+            return []
+        if not isinstance(value, list):
+            raise ValueError("Must be an array of strings")
+        normalized: list[str] = []
+        for item in value:
+            if item is None:
+                continue
+            text = str(item).strip()
+            if text and text not in normalized:
+                normalized.append(text)
+        return normalized
+
+    @field_validator("included_set_types", mode="after")
+    @classmethod
+    def ensure_default_set_type(cls, value: list[str]) -> list[str]:
+        return value or ["working"]
 
 
 class RecommendationRequest(BaseModel):
@@ -366,6 +388,7 @@ def normalize_recommendation_request(req: RecommendationRequest) -> tuple[dict, 
         "date_start": None,
         "date_end": None,
         "included_set_types": ["working"],
+        "goals": [],
     }
     equipment = req.machines or req.equipment or {}
     return scope, grouped, equipment
@@ -383,10 +406,16 @@ async def get_recommendations(req: RecommendationRequest, user_id: str = Depends
     if req.soreness_data:
         soreness_ctx = f"\n\nRECENT SORENESS REPORTS:\n{json.dumps(req.soreness_data, indent=2)}"
 
+    goals = scope.get("goals", [])
+    goals_json = json.dumps(goals, indent=2)
+
     prompt = f"""You are an expert personal trainer analyzing set-based training data.
 
 ANALYSIS SCOPE:
 {json.dumps(scope, indent=2)}
+
+PRIORITY GOALS (rank recommendations to match these first):
+{goals_json}
 
 GROUPED TRAINING DATA ({len(trimmed_training)} buckets):
 {json.dumps(trimmed_training, indent=2)}
@@ -395,6 +424,8 @@ EQUIPMENT CATALOG:
 {json.dumps(equipment, indent=2)}{soreness_ctx}
 
 Use the scope fields exactly as constraints. Prioritize explainable, evidence-based insights.
+Treat scope.goals as explicit user priorities and optimize recommendation ranking/order to satisfy those goals first.
+When trade-offs are required, call them out and explain how each suggestion serves the listed goals.
 Consider volume progression, muscle balance, rest patterns, soreness feedback, and exercise variety.
 Do not infer set duration if duration_seconds is missing.
 
