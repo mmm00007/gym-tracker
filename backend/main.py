@@ -478,25 +478,45 @@ Return ONLY valid JSON:
         if not isinstance(response, dict):
             raise HTTPException(502, "LLM response must be a JSON object")
 
-        report_id = await persist_analysis_report(
-            user_id=user_id,
-            report_type="recommendation",
-            scope_id=validated_scope_id,
-            payload=response,
-            evidence=response.get("evidence", []),
-            title="On-demand recommendation",
-            summary=response.get("summary"),
-            metadata={
-                "grouping": scope.get("grouping"),
-                "included_set_types": scope.get("included_set_types", []),
-                "source": "api/recommendations",
-            },
-        )
+        report_persisted = True
+        report_id: Optional[str] = None
+        try:
+            report_id = await persist_analysis_report(
+                user_id=user_id,
+                report_type="recommendation",
+                scope_id=validated_scope_id,
+                payload=response,
+                evidence=response.get("evidence", []),
+                title="On-demand recommendation",
+                summary=response.get("summary"),
+                metadata={
+                    "grouping": scope.get("grouping"),
+                    "included_set_types": scope.get("included_set_types", []),
+                    "source": "api/recommendations",
+                },
+            )
+        except HTTPException as exc:
+            report_persisted = False
+            logger.error(
+                "Failed to persist recommendation report: user_id=%s scope_id=%s reason=%s",
+                user_id,
+                validated_scope_id,
+                exc.detail,
+            )
+        except Exception as exc:
+            report_persisted = False
+            logger.exception(
+                "Unexpected recommendation report persistence failure: user_id=%s scope_id=%s reason=%s",
+                user_id,
+                validated_scope_id,
+                str(exc),
+            )
 
         if validated_scope_id:
             response["scope_id"] = validated_scope_id
         if report_id:
             response["report_id"] = report_id
+        response["report_persisted"] = report_persisted
         return response
     except json.JSONDecodeError:
         raise HTTPException(502, "Failed to parse LLM response")
