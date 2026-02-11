@@ -564,6 +564,75 @@ async def build_weekly_trend_report(user_id: str) -> dict:
         item["total_volume"] += float(row.get("weight") or 0) * float(row.get("reps") or 0)
 
     trend_points = [weekly[key] for key in sorted(weekly.keys())][-8:]
+    week_start_min = trend_points[0]["week_start"] if trend_points else None
+    week_start_max = trend_points[-1]["week_start"] if trend_points else None
+
+    evidence = []
+    if len(trend_points) >= 2:
+        latest = trend_points[-1]
+        previous = trend_points[-2]
+        evidence = [
+            {
+                "claim": "Latest week total sets changed versus prior week.",
+                "metric": "total_sets",
+                "period": f"{latest['week_start']} vs {previous['week_start']}",
+                "delta": latest["total_sets"] - previous["total_sets"],
+                "source": {
+                    "grouping": "training_week",
+                    "included_set_types": ["all"],
+                    "sample_size": {
+                        "latest_week_sets": latest["total_sets"],
+                        "prior_week_sets": previous["total_sets"],
+                    },
+                },
+            },
+            {
+                "claim": "Latest week total reps changed versus prior week.",
+                "metric": "total_reps",
+                "period": f"{latest['week_start']} vs {previous['week_start']}",
+                "delta": latest["total_reps"] - previous["total_reps"],
+                "source": {
+                    "grouping": "training_week",
+                    "included_set_types": ["all"],
+                    "sample_size": {
+                        "latest_week_sets": latest["total_sets"],
+                        "prior_week_sets": previous["total_sets"],
+                    },
+                },
+            },
+            {
+                "claim": "Latest week total volume changed versus prior week.",
+                "metric": "total_volume",
+                "period": f"{latest['week_start']} vs {previous['week_start']}",
+                "delta": round(latest["total_volume"] - previous["total_volume"], 1),
+                "source": {
+                    "grouping": "training_week",
+                    "included_set_types": ["all"],
+                    "sample_size": {
+                        "latest_week_sets": latest["total_sets"],
+                        "prior_week_sets": previous["total_sets"],
+                    },
+                },
+            },
+        ]
+    elif len(trend_points) == 1:
+        latest = trend_points[-1]
+        evidence = [
+            {
+                "claim": "Only one week is currently available for trend comparison.",
+                "metric": "weekly_sample_size",
+                "period": latest["week_start"],
+                "delta": 0,
+                "source": {
+                    "grouping": "training_week",
+                    "included_set_types": ["all"],
+                    "sample_size": {
+                        "latest_week_sets": latest["total_sets"],
+                    },
+                },
+            }
+        ]
+
     summary = "No weekly trends available yet."
     if trend_points:
         latest = trend_points[-1]
@@ -576,10 +645,16 @@ async def build_weekly_trend_report(user_id: str) -> dict:
         user_id=user_id,
         report_type="weekly_trend",
         payload={"weeks": trend_points},
-        evidence=[],
+        evidence=evidence,
         title="Weekly trends",
         summary=summary,
-        metadata={"source": "api/jobs/generate-weekly-trends", "week_count": len(trend_points)},
+        metadata={
+            "source": "api/jobs/generate-weekly-trends",
+            "week_count": len(trend_points),
+            "week_start_min": week_start_min,
+            "week_start_max": week_start_max,
+            "included_set_types": ["all"],
+        },
     )
 
     return {"user_id": user_id, "report_id": report_id, "weeks": trend_points}

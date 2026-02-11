@@ -1577,6 +1577,13 @@ function AnalysisScreen({
   const trendReports = weeklyTrends
   const latestTrend = trendReports[0] || null
   const previousTrends = trendReports.slice(1, 4)
+  const formatTrendPeriod = (report) => {
+    const min = report?.metadata?.week_start_min
+    const max = report?.metadata?.week_start_max
+    if (!min || !max) return ''
+    if (min === max) return `Period covered: week of ${min}`
+    return `Period covered: ${min} → ${max}`
+  }
 
   const metricConfigs = [
     { key: 'totalVolume', label: 'Total volume load (kg)', color: 'var(--accent)', format: (v) => `${fmtNumber(v, 0)} kg` },
@@ -1804,6 +1811,7 @@ function AnalysisScreen({
             <button onClick={() => loadReportDetail(latestTrend.id)} style={{ width: '100%', textAlign: 'left', border: '1px solid var(--border)', borderRadius: 10, padding: 10, marginBottom: 8, background: 'var(--surface2)', color: 'var(--text)' }}>
               <div style={{ fontSize: 12, fontWeight: 700 }}>Latest: {latestTrend.title || 'Weekly trends'}</div>
               <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{new Date(latestTrend.created_at).toLocaleString()}</div>
+              {formatTrendPeriod(latestTrend) && <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>{formatTrendPeriod(latestTrend)}</div>}
               <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{latestTrend.summary || 'No summary available.'}</div>
             </button>
             {previousTrends.length > 0 && (
@@ -1812,6 +1820,7 @@ function AnalysisScreen({
                   <button key={trendReport.id} onClick={() => loadReportDetail(trendReport.id)} style={{ width: '100%', textAlign: 'left', border: '1px solid var(--border)', borderRadius: 10, padding: 10, background: 'transparent', color: 'var(--text)' }}>
                     <div style={{ fontSize: 12, fontWeight: 700 }}>{trendReport.title || 'Weekly trends'}</div>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{new Date(trendReport.created_at).toLocaleString()}</div>
+                    {formatTrendPeriod(trendReport) && <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>{formatTrendPeriod(trendReport)}</div>}
                   </button>
                 ))}
               </div>
