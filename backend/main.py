@@ -511,6 +511,36 @@ async def build_weekly_trend_report(user_id: str) -> dict:
     return {"user_id": user_id, "report_id": report_id, "weeks": trend_points}
 
 
+async def list_all_user_ids_with_sets(page_size: int = 1000) -> list[str]:
+    user_ids: set[str] = set()
+    offset = 0
+
+    while True:
+        rows = await supabase_admin_request(
+            "GET",
+            "sets",
+            params={
+                "select": "user_id",
+                "user_id": "not.is.null",
+                "order": "user_id.asc",
+                "limit": str(page_size),
+                "offset": str(offset),
+            },
+        )
+
+        if not rows:
+            break
+
+        user_ids.update(str(row["user_id"]) for row in rows if row.get("user_id"))
+
+        if len(rows) < page_size:
+            break
+
+        offset += page_size
+
+    return sorted(user_ids)
+
+
 @app.post("/api/jobs/generate-weekly-trends")
 async def generate_weekly_trends(req: WeeklyTrendJobRequest, x_cron_secret: Optional[str] = Header(None)):
     if not CRON_SHARED_SECRET or x_cron_secret != CRON_SHARED_SECRET:
@@ -520,16 +550,7 @@ async def generate_weekly_trends(req: WeeklyTrendJobRequest, x_cron_secret: Opti
     if req.user_id:
         user_ids = [req.user_id]
     else:
-        rows = await supabase_admin_request(
-            "GET",
-            "sets",
-            params={
-                "select": "user_id",
-                "order": "logged_at.desc",
-                "limit": "5000",
-            },
-        )
-        user_ids = sorted({row.get("user_id") for row in (rows or []) if row.get("user_id")})
+        user_ids = await list_all_user_ids_with_sets()
 
     if not user_ids:
         return {"ok": True, "processed_users": 0, "reports": []}
