@@ -43,9 +43,12 @@ Mobile-first gym tracker with AI machine identification and smart recommendation
    ```
    ANTHROPIC_API_KEY=sk-ant-...
    ALLOWED_ORIGINS=https://your-app.netlify.app
-   SET_CENTRIC_LOGGING=false
-   LIBRARY_SCREEN_ENABLED=false
-   ANALYSIS_ON_DEMAND_ONLY=false
+   SET_CENTRIC_LOGGING=true
+   LIBRARY_SCREEN_ENABLED=true
+   ANALYSIS_ON_DEMAND_ONLY=true
+   SUPABASE_URL=https://abc123.supabase.co
+   SUPABASE_SERVICE_ROLE_KEY=eyJ...
+   CRON_SHARED_SECRET=super-secret
    ```
 
 ### 3. Frontend (Netlify)
@@ -60,9 +63,9 @@ Mobile-first gym tracker with AI machine identification and smart recommendation
    VITE_SUPABASE_URL=https://abc123.supabase.co
    VITE_SUPABASE_ANON_KEY=eyJ...
    VITE_API_URL=https://gym-tracker-api.onrender.com
-   VITE_SET_CENTRIC_LOGGING=false
-   VITE_LIBRARY_SCREEN_ENABLED=false
-   VITE_ANALYSIS_ON_DEMAND_ONLY=false
+   VITE_SET_CENTRIC_LOGGING=true
+   VITE_LIBRARY_SCREEN_ENABLED=true
+   VITE_ANALYSIS_ON_DEMAND_ONLY=true
    ```
 
 ### 4. Update CORS
@@ -73,6 +76,8 @@ Update Render's `ALLOWED_ORIGINS` to your Netlify **site origin** (scheme + host
 - If Render logs show `OPTIONS /api/health` returning `400`, the browser CORS preflight is being rejected. Double-check that `ALLOWED_ORIGINS` is set to the Netlify site origin (not the Render API URL) and redeploy the backend.
 
 ## Local Development
+
+Use `frontend/.env.phase-complete` as a smoke-test profile where all phase-complete feature flags are ON by default.
 
 ```bash
 # Backend
@@ -109,6 +114,8 @@ Phase 0 contract lock is documented in [`docs/data-contract-lock.md`](docs/data-
 | `sessions` | Legacy/historical session records (non-authoritative in Phase 1) |
 | `sets` | Individual sets (reps, weight, rest, optional duration) |
 | `soreness_reports` | Post-session muscle soreness (0-4 scale) |
+| `recommendation_scopes` | Explicit scope metadata for recommendation generation |
+| `analysis_reports` | Persisted recommendation and weekly trend outputs |
 
 ## Cost
 

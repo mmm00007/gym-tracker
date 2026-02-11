@@ -127,7 +127,7 @@ export async function getRecommendations(scope, groupedTraining, equipment, sore
       throw new Error(`Recommendations failed: ${detail}`)
     }
     const data = await res.json()
-    return { ...data, scope_id: data?.scope_id || scopeId }
+    return { ...data, scope_id: data?.scope_id || scopeId, report_id: data?.report_id || null }
   } catch (error) {
     addLog({
       level: 'error',

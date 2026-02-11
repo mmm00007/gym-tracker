@@ -281,6 +281,32 @@ export async function createRecommendationScope(scope, metadata = null) {
   return data
 }
 
+
+
+export async function getAnalysisReports(reportType = null) {
+  let query = supabase
+    .from('analysis_reports')
+    .select('*')
+    .order('created_at', { ascending: false })
+
+  if (reportType) {
+    query = query.eq('report_type', reportType)
+  }
+
+  const { data, error } = await query.limit(50)
+  if (error) throw error
+  return data || []
+}
+
+export async function getAnalysisReport(reportId) {
+  const { data, error } = await supabase
+    .from('analysis_reports')
+    .select('*')
+    .eq('id', reportId)
+    .single()
+  if (error) throw error
+  return data
+}
 export async function getRecentSoreness() {
   const twoWeeksAgo = new Date(Date.now() - 14 * 86400000).toISOString()
   const { data, error } = await supabase

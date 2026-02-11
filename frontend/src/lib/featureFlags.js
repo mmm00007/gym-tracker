@@ -1,9 +1,9 @@
 import { API_BASE_URL } from './api'
 
 const DEFAULT_FLAGS = Object.freeze({
-  setCentricLogging: false,
-  libraryScreenEnabled: false,
-  analysisOnDemandOnly: false,
+  setCentricLogging: true,
+  libraryScreenEnabled: true,
+  analysisOnDemandOnly: true,
 })
 
 const ENV_FLAG_MAP = Object.freeze({

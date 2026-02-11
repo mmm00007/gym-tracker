@@ -37,6 +37,8 @@ SUPABASE_JWT_ISSUER = os.environ.get("SUPABASE_JWT_ISSUER") or (
 SUPABASE_JWKS_URL = os.environ.get("SUPABASE_JWKS_URL") or (
     f"{SUPABASE_URL}/auth/v1/.well-known/jwks.json" if SUPABASE_URL else None
 )
+SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+CRON_SHARED_SECRET = os.environ.get("CRON_SHARED_SECRET")
 
 _jwks_client: Optional[PyJWKClient] = None
 _jwks_client_url: Optional[str] = None
@@ -58,9 +60,9 @@ def read_bool_env(name: str, default: bool = False) -> bool:
 
 
 ROLLOUT_FLAGS = {
-    "setCentricLogging": read_bool_env("SET_CENTRIC_LOGGING", False),
-    "libraryScreenEnabled": read_bool_env("LIBRARY_SCREEN_ENABLED", False),
-    "analysisOnDemandOnly": read_bool_env("ANALYSIS_ON_DEMAND_ONLY", False),
+    "setCentricLogging": read_bool_env("SET_CENTRIC_LOGGING", True),
+    "libraryScreenEnabled": read_bool_env("LIBRARY_SCREEN_ENABLED", True),
+    "analysisOnDemandOnly": read_bool_env("ANALYSIS_ON_DEMAND_ONLY", True),
 }
 
 app.add_middleware(
@@ -180,6 +182,30 @@ async def call_anthropic(messages: list, max_tokens: int = 1000) -> str:
     return text
 
 
+def require_supabase_admin() -> tuple[str, str]:
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        raise HTTPException(500, "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be configured")
+    return SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+
+
+async def supabase_admin_request(method: str, path: str, payload: Optional[Any] = None, params: Optional[dict] = None) -> Any:
+    base_url, service_key = require_supabase_admin()
+    url = f"{base_url}/rest/v1/{path.lstrip('/')}"
+    headers = {
+        "apikey": service_key,
+        "Authorization": f"Bearer {service_key}",
+        "Content-Type": "application/json",
+    }
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.request(method, url, headers=headers, json=payload, params=params)
+    if response.status_code >= 400:
+        logger.error("Supabase admin request failed: %s %s -> %s %s", method, path, response.status_code, response.text)
+        raise HTTPException(502, "Database persistence error")
+    if not response.text:
+        return None
+    return response.json()
+
+
 def parse_json_response(text: str) -> Any:
     cleaned = text.strip()
     if cleaned.startswith("```"):
@@ -188,6 +214,38 @@ def parse_json_response(text: str) -> Any:
         cleaned = cleaned.rsplit("```", 1)[0]
     cleaned = cleaned.replace("```json", "").replace("```", "").strip()
     return json.loads(cleaned)
+
+
+async def persist_analysis_report(
+    user_id: str,
+    report_type: str,
+    payload: dict,
+    evidence: Any,
+    scope_id: Optional[str] = None,
+    metadata: Optional[dict] = None,
+    title: Optional[str] = None,
+    summary: Optional[str] = None,
+) -> Optional[str]:
+    report_row = {
+        "user_id": user_id,
+        "report_type": report_type,
+        "recommendation_scope_id": scope_id,
+        "status": "ready",
+        "title": title,
+        "summary": summary,
+        "payload": payload or {},
+        "evidence": evidence if isinstance(evidence, list) else [],
+        "metadata": metadata or {},
+    }
+    rows = await supabase_admin_request(
+        "POST",
+        "analysis_reports",
+        payload=[report_row],
+        params={"select": "id"},
+    )
+    if isinstance(rows, list) and rows:
+        return rows[0].get("id")
+    return None
 
 
 # --- Identify Machine ---
@@ -365,13 +423,99 @@ Return ONLY valid JSON:
     try:
         text = await call_anthropic([{"role": "user", "content": prompt}])
         response = parse_json_response(text)
+        if not isinstance(response, dict):
+            raise HTTPException(502, "LLM response must be a JSON object")
+
+        report_id = await persist_analysis_report(
+            user_id=user_id,
+            report_type="recommendation",
+            scope_id=req.scope_id,
+            payload=response,
+            evidence=response.get("evidence", []),
+            title="On-demand recommendation",
+            summary=response.get("summary"),
+            metadata={
+                "grouping": scope.get("grouping"),
+                "included_set_types": scope.get("included_set_types", []),
+                "source": "api/recommendations",
+            },
+        )
+
         if req.scope_id:
-            if not isinstance(response, dict):
-                raise HTTPException(502, "LLM response must be a JSON object when scope_id is provided")
             response["scope_id"] = req.scope_id
+        if report_id:
+            response["report_id"] = report_id
         return response
     except json.JSONDecodeError:
         raise HTTPException(502, "Failed to parse LLM response")
+
+
+class WeeklyTrendJobRequest(BaseModel):
+    user_id: str
+
+
+def _bucket_week_start(training_date: str) -> Optional[str]:
+    if not training_date:
+        return None
+    try:
+        ts = time.strptime(training_date, "%Y-%m-%d")
+        dt = time.mktime(ts)
+        # align to Monday in UTC using datetime for clarity
+        from datetime import datetime, timedelta, timezone
+
+        date_obj = datetime.fromtimestamp(dt, tz=timezone.utc).date()
+        week_start = date_obj - timedelta(days=date_obj.weekday())
+        return week_start.isoformat()
+    except ValueError:
+        return None
+
+
+@app.post("/api/jobs/generate-weekly-trends")
+async def generate_weekly_trends(req: WeeklyTrendJobRequest, x_cron_secret: Optional[str] = Header(None)):
+    if not CRON_SHARED_SECRET or x_cron_secret != CRON_SHARED_SECRET:
+        raise HTTPException(401, "Unauthorized")
+
+    set_rows = await supabase_admin_request(
+        "GET",
+        "sets",
+        params={
+            "user_id": f"eq.{req.user_id}",
+            "select": "training_date,reps,weight,set_type",
+            "order": "training_date.desc",
+            "limit": "800",
+        },
+    )
+
+    weekly = {}
+    for row in set_rows or []:
+        week_start = _bucket_week_start(row.get("training_date"))
+        if not week_start:
+            continue
+        item = weekly.setdefault(week_start, {"week_start": week_start, "total_sets": 0, "total_reps": 0, "total_volume": 0.0})
+        item["total_sets"] += 1
+        item["total_reps"] += int(row.get("reps") or 0)
+        item["total_volume"] += float(row.get("weight") or 0) * float(row.get("reps") or 0)
+
+    trend_points = [weekly[key] for key in sorted(weekly.keys())][-8:]
+    summary = "No weekly trends available yet."
+    if trend_points:
+        latest = trend_points[-1]
+        summary = (
+            f"Week of {latest['week_start']}: {latest['total_sets']} sets, "
+            f"{latest['total_reps']} reps, {round(latest['total_volume'], 1)} volume."
+        )
+
+    report_id = await persist_analysis_report(
+        user_id=req.user_id,
+        report_type="weekly_trend",
+        payload={"weeks": trend_points},
+        evidence=[],
+        title="Weekly trends",
+        summary=summary,
+        metadata={"source": "api/jobs/generate-weekly-trends", "week_count": len(trend_points)},
+    )
+
+    return {"ok": True, "report_id": report_id, "weeks": trend_points}
 
 
 @app.get("/api/health")
