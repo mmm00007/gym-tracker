@@ -283,7 +283,7 @@ export async function createRecommendationScope(scope, metadata = null) {
 
 
 
-export async function getAnalysisReports(reportType = null) {
+export async function getAnalysisReports(reportType = null, filters = {}) {
   let query = supabase
     .from('analysis_reports')
     .select('*')
@@ -293,7 +293,27 @@ export async function getAnalysisReports(reportType = null) {
     query = query.eq('report_type', reportType)
   }
 
-  const { data, error } = await query.limit(50)
+  if (filters?.status) {
+    query = query.eq('status', filters.status)
+  }
+
+  if (filters?.dateStart) {
+    query = query.gte('created_at', `${filters.dateStart}T00:00:00.000Z`)
+  }
+
+  if (filters?.dateEnd) {
+    query = query.lte('created_at', `${filters.dateEnd}T23:59:59.999Z`)
+  }
+
+  if (filters?.search) {
+    const sanitized = String(filters.search).replace(/[%]/g, '').trim()
+    if (sanitized) {
+      query = query.or(`title.ilike.%${sanitized}%,summary.ilike.%${sanitized}%`)
+    }
+  }
+
+  const limit = Math.max(1, Math.min(200, Number.parseInt(filters?.limit, 10) || 50))
+  const { data, error } = await query.limit(limit)
   if (error) throw error
   return data || []
 }
