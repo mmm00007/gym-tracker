@@ -1359,6 +1359,7 @@ function AnalysisScreen({
   machineHistory,
   onLoadMachineHistory,
   onBack,
+  initialTab = 'run',
   analysisOnDemandOnly,
   trainingBuckets,
   sorenessHistory,
@@ -1384,6 +1385,11 @@ function AnalysisScreen({
   const [reportCustomEnd, setReportCustomEnd] = useState('')
   const [reportSearch, setReportSearch] = useState('')
   const [weeklyTrends, setWeeklyTrends] = useState([])
+  const [activeTab, setActiveTab] = useState(initialTab)
+
+  useEffect(() => {
+    setActiveTab(initialTab || 'run')
+  }, [initialTab])
 
   useEffect(() => {
     if (!selectedMachineId && machines.length) {
@@ -1601,6 +1607,35 @@ function AnalysisScreen({
     <div style={{ padding: '20px 16px', minHeight: '100dvh' }}>
       <TopBar left={<BackBtn onClick={onBack} />} title="ANALYZE" />
 
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+        {[
+          { key: 'run', label: 'Run Analysis' },
+          { key: 'reports', label: 'Reports' },
+          { key: 'trends', label: 'Trends' },
+          { key: 'metrics', label: 'Exercise Metrics' },
+        ].map((tab) => {
+          const isActive = activeTab === tab.key
+          return (
+            <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={{
+              padding: '8px 12px',
+              borderRadius: 999,
+              border: `1px solid ${isActive ? 'var(--accent)' : 'var(--border)'}`,
+              background: isActive ? 'var(--accent)22' : 'var(--surface)',
+              color: isActive ? 'var(--accent)' : 'var(--text-muted)',
+              fontSize: 12,
+              fontWeight: 700,
+            }}>{tab.label}</button>
+          )
+        })}
+      </div>
+
+      {activeTab === 'run' && (
+      <>
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', marginBottom: 2 }}>Run Analysis</div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Set scope, goals, and set-type policy, then generate a focused AI recommendation report.</div>
+      </div>
+
       <div style={{ background: 'var(--surface)', borderRadius: 14, border: '1px solid var(--border)', padding: 14, marginBottom: 16 }}>
         <div style={{ fontSize: 12, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)', marginBottom: 10 }}>ANALYZE MENU</div>
 
@@ -1720,6 +1755,15 @@ function AnalysisScreen({
           {recs.highlights?.length > 0 && recs.highlights.map((item, idx) => <div key={`h-${idx}`} style={{ fontSize: 13, color: '#cde8ff', marginBottom: 4 }}>• {item}</div>)}
         </div>
       )}
+      </>
+      )}
+
+      {activeTab === 'reports' && (
+      <>
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', marginBottom: 2 }}>Reports</div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Filter saved analyses, inspect detail, and quickly recover prior recommendations or evidence.</div>
+      </div>
 
       <div style={{ background: 'var(--surface)', borderRadius: 14, border: '1px solid var(--border)', padding: 14, marginBottom: 16 }}>
         <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)', marginBottom: 10 }}>REPORTS</div>
@@ -1801,6 +1845,15 @@ function AnalysisScreen({
           </div>
         )}
       </div>
+      </>
+      )}
+
+      {activeTab === 'trends' && (
+      <>
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', marginBottom: 2 }}>Trends</div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Compare the latest weekly trend report with prior weeks to spot momentum shifts early.</div>
+      </div>
 
       <div style={{ background: 'var(--surface)', borderRadius: 14, border: '1px solid var(--border)', padding: 14, marginBottom: 16 }}>
         <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)', marginBottom: 10 }}>WEEKLY TRENDS</div>
@@ -1827,6 +1880,15 @@ function AnalysisScreen({
             )}
           </>
         )}
+      </div>
+      </>
+      )}
+
+      {activeTab === 'metrics' && (
+      <>
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', marginBottom: 2 }}>Exercise Metrics</div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Pick one exercise to review local trend metrics and set-type filtered progression at a glance.</div>
       </div>
 
       <div style={{ marginBottom: 16 }}>
@@ -1903,7 +1965,6 @@ function AnalysisScreen({
       <div title="Duration metrics exclude sets where duration was not timed." style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 16 }}>
         ⓘ Duration unknown if not timed.
       </div>
-
       {history.length === 0 ? (
         <div style={{ background: 'var(--surface)', borderRadius: 14, padding: 16, border: '1px solid var(--border)', color: 'var(--text-dim)' }}>
           No logged sets for this exercise with the selected filter.
@@ -1938,6 +1999,8 @@ function AnalysisScreen({
             )
           })}
         </>
+      )}
+      </>
       )}
     </div>
   )
@@ -2137,6 +2200,7 @@ function DiagnosticsScreen({ user, onBack }) {
 export default function App() {
   const [user, setUser] = useState(undefined) // undefined=loading, null=logged out
   const [screen, setScreen] = useState('home')
+  const [analysisInitialTab, setAnalysisInitialTab] = useState('run')
   const [machines, setMachines] = useState([])
   const [sets, setSets] = useState([])
   const [pendingSoreness, setPendingSoreness] = useState([])
@@ -2332,7 +2396,10 @@ export default function App() {
             setScreen('library')
           }}
           onHistory={() => setScreen('history')}
-          onAnalysis={() => setScreen('analysis')}
+          onAnalysis={() => {
+            setAnalysisInitialTab('run')
+            setScreen('analysis')
+          }}
           onDiagnostics={() => setScreen('diagnostics')}
           onSorenessSubmit={handleSorenessSubmit}
           onSorenessDismiss={handleSorenessDismiss}
@@ -2380,6 +2447,7 @@ export default function App() {
           machineHistory={machineHistory}
           onLoadMachineHistory={loadMachineHistory}
           onBack={() => setScreen('home')}
+          initialTab={analysisInitialTab}
           analysisOnDemandOnly={analysisOnDemandOnly}
           trainingBuckets={trainingBuckets}
           sorenessHistory={sorenessHistory}
