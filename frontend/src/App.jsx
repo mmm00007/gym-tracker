@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   supabase, signUp, signIn, signOut, getSession,
   getMachines, upsertMachine, deleteMachine as dbDeleteMachine,
-  getSetsForSession, logSet as dbLogSet, deleteSet as dbDeleteSet,
+  getSets, logSet as dbLogSet, deleteSet as dbDeleteSet,
   bootstrapDefaultEquipmentCatalog,
   getPendingSoreness, submitSoreness, getRecentSoreness,
 } from './lib/supabase'
@@ -2123,7 +2123,7 @@ export default function App() {
         addLog({ level: 'warn', event: 'catalog.seed_failed', message: seedError?.message || 'Default catalog seed failed.' })
       }
 
-      const [m, allSets, recentSoreness] = await Promise.all([getMachines(), getSetsForSession(), getRecentSoreness()])
+      const [m, allSets, recentSoreness] = await Promise.all([getMachines(), getSets(), getRecentSoreness()])
       setMachines(m)
       setSets(allSets)
       setSorenessHistory(recentSoreness || [])
