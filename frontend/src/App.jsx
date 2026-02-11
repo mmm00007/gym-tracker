@@ -1583,12 +1583,43 @@ function AnalysisScreen({
   const trendReports = weeklyTrends
   const latestTrend = trendReports[0] || null
   const previousTrends = trendReports.slice(1, 4)
+  const selectedTrendReport = selectedReport ? trendReports.some((report) => report.id === selectedReport.id) : false
   const formatTrendPeriod = (report) => {
     const min = report?.metadata?.week_start_min
     const max = report?.metadata?.week_start_max
     if (!min || !max) return ''
     if (min === max) return `Period covered: week of ${min}`
     return `Period covered: ${min} → ${max}`
+  }
+
+  const renderSelectedReportDetail = (shouldRender = true) => {
+    if (!shouldRender || !selectedReportPayload) return null
+
+    return (
+      <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+        <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 6, letterSpacing: 1, fontFamily: 'var(--font-code)' }}>REPORT DETAIL</div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>{selectedReport?.title || 'Analysis report'}</div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>{selectedReportPayload.summary || selectedReport.summary || 'No summary available.'}</div>
+        {selectedReportPayload.highlights?.length > 0 && selectedReportPayload.highlights.map((item, idx) => (
+          <div key={`saved-highlight-${idx}`} style={{ fontSize: 12, color: 'var(--text)', marginBottom: 4 }}>• {item}</div>
+        ))}
+
+        <div style={{ marginTop: 10 }}>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 6, letterSpacing: 1, fontFamily: 'var(--font-code)' }}>WHY (EVIDENCE)</div>
+          {selectedEvidence?.length ? selectedEvidence.map((item, idx) => (
+            <details key={`saved-evidence-${idx}`} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: '8px 10px', marginBottom: 8, background: 'var(--surface2)' }}>
+              <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--text)', fontWeight: 700 }}>{item.claim || 'Evidence claim'}</summary>
+              <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>
+                <div>Metric: {item.metric || 'n/a'}</div>
+                <div>Period: {item.period || 'n/a'}</div>
+                <div>Delta: {item.delta ?? 'n/a'}</div>
+                <div>Source: {item?.source?.grouping || 'n/a'} · Set types: {(item?.source?.included_set_types || []).join(', ') || 'n/a'} · Samples: {item?.source?.sample_size ?? 'n/a'}</div>
+              </div>
+            </details>
+          )) : <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>No evidence details available.</div>}
+        </div>
+      </div>
+    )
   }
 
   const metricConfigs = [
@@ -1819,31 +1850,7 @@ function AnalysisScreen({
           </div>
         )}
 
-        {selectedReportPayload && (
-          <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
-            <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 6, letterSpacing: 1, fontFamily: 'var(--font-code)' }}>REPORT DETAIL</div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>{selectedReport?.title || 'Analysis report'}</div>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>{selectedReportPayload.summary || selectedReport.summary || 'No summary available.'}</div>
-            {selectedReportPayload.highlights?.length > 0 && selectedReportPayload.highlights.map((item, idx) => (
-              <div key={`saved-highlight-${idx}`} style={{ fontSize: 12, color: 'var(--text)', marginBottom: 4 }}>• {item}</div>
-            ))}
-
-            <div style={{ marginTop: 10 }}>
-              <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 6, letterSpacing: 1, fontFamily: 'var(--font-code)' }}>WHY (EVIDENCE)</div>
-              {selectedEvidence?.length ? selectedEvidence.map((item, idx) => (
-                <details key={`saved-evidence-${idx}`} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: '8px 10px', marginBottom: 8, background: 'var(--surface2)' }}>
-                  <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--text)', fontWeight: 700 }}>{item.claim || 'Evidence claim'}</summary>
-                  <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>
-                    <div>Metric: {item.metric || 'n/a'}</div>
-                    <div>Period: {item.period || 'n/a'}</div>
-                    <div>Delta: {item.delta ?? 'n/a'}</div>
-                    <div>Source: {item?.source?.grouping || 'n/a'} · Set types: {(item?.source?.included_set_types || []).join(', ') || 'n/a'} · Samples: {item?.source?.sample_size ?? 'n/a'}</div>
-                  </div>
-                </details>
-              )) : <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>No evidence details available.</div>}
-            </div>
-          </div>
-        )}
+        {renderSelectedReportDetail()}
       </div>
       </>
       )}
@@ -1880,6 +1887,8 @@ function AnalysisScreen({
             )}
           </>
         )}
+
+        {renderSelectedReportDetail(selectedTrendReport)}
       </div>
       </>
       )}
