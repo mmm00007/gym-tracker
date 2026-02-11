@@ -5,8 +5,9 @@ import {
   getSets, logSet as dbLogSet, deleteSet as dbDeleteSet,
   bootstrapDefaultEquipmentCatalog,
   getPendingSoreness, submitSoreness, getRecentSoreness,
+  getAnalysisReports, getAnalysisReport,
 } from './lib/supabase'
-import { identifyMachine, API_BASE_URL, pingHealth, getRecommendations } from './lib/api'
+import { API_BASE_URL, pingHealth, getRecommendations } from './lib/api'
 import { getFeatureFlags, DEFAULT_FLAGS } from './lib/featureFlags'
 import { addLog, subscribeLogs } from './lib/logs'
 
@@ -545,145 +546,6 @@ function HomeScreen({
   )
 }
 
-// ─── Camera Screen ─────────────────────────────────────────
-
-function CameraScreen({ onIdentified, onCancel }) {
-  const [images, setImages] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
-  const cameraRef = useRef()
-  const galleryRef = useRef()
-  const imagesRef = useRef([])
-
-  useEffect(() => {
-    imagesRef.current = images
-  }, [images])
-
-  useEffect(() => {
-    return () => {
-      imagesRef.current.forEach((img) => {
-        if (img.preview) {
-          URL.revokeObjectURL(img.preview)
-        }
-      })
-    }
-  }, [])
-
-  const readFileAsBase64 = (file) => new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onerror = () => reject(new Error('Could not read that image file. Please try again.'))
-    reader.onload = () => {
-      if (typeof reader.result !== 'string') {
-        reject(new Error('Invalid image data. Please choose a different photo.'))
-        return
-      }
-      const base64 = reader.result.split(',')[1]
-      if (!base64) {
-        reject(new Error('Empty image data detected. Please reselect the photo.'))
-        return
-      }
-      resolve(base64)
-    }
-    reader.readAsDataURL(file)
-  })
-
-  const handleFiles = async (files) => {
-    if (!files || files.length === 0) return
-    const available = 3 - images.length
-    if (available <= 0) {
-      setError('You can only upload up to 3 photos.')
-      return
-    }
-    const errors = []
-    const newImgs = []
-    const selectedFiles = Array.from(files)
-    if (selectedFiles.length > available) {
-      errors.push(`Only ${available} photo${available === 1 ? '' : 's'} added; extra selections were ignored.`)
-    }
-    for (const f of selectedFiles.slice(0, available)) {
-      try {
-        const data = await readFileAsBase64(f)
-        newImgs.push({ data, media_type: f.type || 'image/jpeg', preview: URL.createObjectURL(f) })
-      } catch (err) {
-        errors.push(err?.message || 'Could not read one of the selected photos.')
-      }
-    }
-    if (newImgs.length) {
-      setImages(prev => [...prev, ...newImgs].slice(0, 3))
-    }
-    setError(errors.length ? errors.join(' ') : null)
-  }
-
-  const analyze = async () => {
-    setLoading(true); setError(null)
-    try {
-      const result = await identifyMachine(images.map(i => ({ data: i.data, media_type: i.media_type })))
-      const thumbnails = images.map((img) => `data:${img.media_type};base64,${img.data}`)
-      onIdentified({ ...result, thumbnails })
-    } catch (e) {
-      setError(e.message || 'Could not identify. Try clearer photos.')
-      console.error(e)
-    }
-    setLoading(false)
-  }
-
-  return (
-    <div style={{ padding: '20px 16px', minHeight: '100dvh' }}>
-      <TopBar left={<BackBtn onClick={onCancel} />} title="IDENTIFY MACHINE" />
-
-      <div style={{
-        border: '2px dashed var(--border-light)', borderRadius: 16, padding: 24, textAlign: 'center',
-        marginBottom: 16, background: 'var(--surface)',
-      }}>
-        <input ref={cameraRef} type="file" accept="image/*" capture="environment"
-          onChange={async (e) => { await handleFiles(e.target.files); e.target.value = '' }} style={{ display: 'none' }} />
-        <input ref={galleryRef} type="file" accept="image/*" multiple
-          onChange={async (e) => { await handleFiles(e.target.files); e.target.value = '' }} style={{ display: 'none' }} />
-        <div style={{ fontSize: 40, marginBottom: 12 }}>📸</div>
-        <div style={{ fontSize: 16, fontWeight: 600, color: '#ccc', marginBottom: 8 }}>Add up to 3 photos</div>
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
-          <button onClick={() => cameraRef.current?.click()} style={{
-            padding: '10px 16px', borderRadius: 10, fontSize: 14, fontWeight: 700,
-            background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--text)',
-          }}>Take Photo</button>
-          <button onClick={() => galleryRef.current?.click()} style={{
-            padding: '10px 16px', borderRadius: 10, fontSize: 14, fontWeight: 700,
-            background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--text)',
-          }}>Gallery</button>
-        </div>
-        <div style={{ fontSize: 13, color: 'var(--text-dim)' }}>{images.length}/3 selected</div>
-      </div>
-
-      {images.length > 0 && (
-        <div style={{ display: 'flex', gap: 8, marginBottom: 20, overflowX: 'auto', paddingBottom: 8 }}>
-          {images.map((img, i) => (
-            <div key={i} style={{ position: 'relative', flexShrink: 0 }}>
-              <img src={img.preview} alt="" style={{ width: 100, height: 100, objectFit: 'cover', borderRadius: 12, border: '1px solid var(--border)' }} />
-              <button onClick={() => {
-                URL.revokeObjectURL(img.preview)
-                setImages(images.filter((_, j) => j !== i))
-              }} style={{
-                position: 'absolute', top: -6, right: -6, width: 24, height: 24, borderRadius: 12,
-                background: 'var(--red)', color: '#fff', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>×</button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {error && <div style={{ color: 'var(--red)', fontSize: 14, marginBottom: 16, textAlign: 'center' }}>{error}</div>}
-
-      <button onClick={analyze} disabled={!images.length || loading} style={{
-        width: '100%', padding: 18, borderRadius: 14, fontSize: 18, fontWeight: 800,
-        background: images.length ? 'linear-gradient(135deg, var(--accent), var(--accent-dark))' : 'var(--border)',
-        color: images.length ? '#000' : 'var(--text-dim)', fontFamily: 'var(--font-mono)',
-        opacity: loading ? 0.7 : 1,
-      }}>
-        {loading ? '⚙ Analyzing...' : `Identify${images.length ? ` (${images.length})` : ''}`}
-      </button>
-    </div>
-  )
-}
 
 // ─── Edit Machine ──────────────────────────────────────────
 
@@ -1508,6 +1370,10 @@ function AnalysisScreen({
   const [goals, setGoals] = useState('')
   const [recommendationSetTypes, setRecommendationSetTypes] = useState(['working'])
   const [recommendationState, setRecommendationState] = useState({ loading: false, error: '', data: null })
+  const [savedReports, setSavedReports] = useState([])
+  const [selectedReport, setSelectedReport] = useState(null)
+  const [reportLoadError, setReportLoadError] = useState('')
+  const [weeklyTrends, setWeeklyTrends] = useState([])
 
   useEffect(() => {
     if (analysisOnDemandOnly) return
@@ -1521,6 +1387,27 @@ function AnalysisScreen({
       setSelectedMachineId(machines[0].id)
     }
   }, [machines, selectedMachineId])
+
+
+  useEffect(() => {
+    let active = true
+    const loadReports = async () => {
+      try {
+        const [recommendationReports, trendReports] = await Promise.all([
+          getAnalysisReports('recommendation'),
+          getAnalysisReports('weekly_trend'),
+        ])
+        if (!active) return
+        setSavedReports(recommendationReports)
+        setWeeklyTrends(trendReports)
+      } catch (error) {
+        if (!active) return
+        setReportLoadError(error?.message || 'Could not load saved reports.')
+      }
+    }
+    loadReports()
+    return () => { active = false }
+  }, [recommendationState.data])
 
   const historyEntries = selectedMachineId ? (machineHistory[selectedMachineId] || []) : []
   const includedSetTypes = setTypeMode === 'all'
@@ -1620,12 +1507,17 @@ function AnalysisScreen({
     try {
       const response = await getRecommendations(scope, recommendationGroupedTraining, equipmentById, sorenessDataForScope)
       setRecommendationState({ loading: false, error: '', data: response })
+      if (response?.report_id) {
+        const report = await getAnalysisReport(response.report_id)
+        setSavedReports((prev) => [report, ...prev.filter((item) => item.id !== report.id)])
+      }
     } catch (error) {
       setRecommendationState({ loading: false, error: error?.message || 'Failed to generate recommendations.', data: null })
     }
   }
 
   const recs = recommendationState.data
+  const selectedReportPayload = selectedReport?.payload || null
 
   return (
     <div style={{ padding: '20px 16px', minHeight: '100dvh' }}>
@@ -1748,6 +1640,53 @@ function AnalysisScreen({
           </div>
         </div>
       )}
+
+
+      <div style={{ background: 'var(--surface)', borderRadius: 14, border: '1px solid var(--border)', padding: 14, marginBottom: 16 }}>
+        <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)', marginBottom: 10 }}>SAVED ANALYSIS REPORTS</div>
+        {reportLoadError && <div style={{ fontSize: 12, color: 'var(--red)', marginBottom: 8 }}>{reportLoadError}</div>}
+        {!savedReports.length ? (
+          <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>No saved reports yet. Run recommendations to create one.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {savedReports.slice(0, 6).map((report) => (
+              <button key={report.id} onClick={async () => {
+                const fullReport = await getAnalysisReport(report.id)
+                setSelectedReport(fullReport)
+              }} style={{
+                textAlign: 'left', padding: 10, borderRadius: 10, border: '1px solid var(--border)',
+                background: selectedReport?.id === report.id ? 'var(--surface2)' : 'transparent', color: 'var(--text)',
+              }}>
+                <div style={{ fontSize: 12, fontWeight: 700 }}>{report.title || 'Recommendation report'}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{new Date(report.created_at).toLocaleString()}</div>
+              </button>
+            ))}
+          </div>
+        )}
+        {selectedReportPayload && (
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>{selectedReportPayload.summary || selectedReport.summary || 'Saved summary'}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{(selectedReportPayload.nextSession || '')}</div>
+          </div>
+        )}
+      </div>
+
+      <div style={{ background: 'var(--surface)', borderRadius: 14, border: '1px solid var(--border)', padding: 14, marginBottom: 16 }}>
+        <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)', marginBottom: 10 }}>WEEKLY TRENDS</div>
+        {!weeklyTrends.length ? (
+          <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>No weekly trend reports yet. Run scheduled trend generation to populate this section.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {weeklyTrends.slice(0, 3).map((trendReport) => (
+              <div key={trendReport.id} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 10 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>{trendReport.title || 'Weekly trends'}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>{new Date(trendReport.created_at).toLocaleString()}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{trendReport.summary || 'No summary available.'}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)', marginBottom: 6 }}>EXERCISE</div>

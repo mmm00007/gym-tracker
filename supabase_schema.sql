@@ -15,6 +15,7 @@ $$;
 
 -- Drop in dependency order for clean re-apply during development.
 drop view if exists public.session_summaries;
+drop table if exists public.analysis_reports cascade;
 drop table if exists public.recommendation_scopes cascade;
 drop table if exists public.soreness_reports cascade;
 drop table if exists public.sets cascade;
@@ -400,6 +401,29 @@ create policy "Users manage own recommendation scopes" on public.recommendation_
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 create index idx_recommendation_scopes_user on public.recommendation_scopes(user_id, created_at desc);
+
+-- ─── ANALYSIS REPORTS (persisted recommendation + trend outputs) ─
+create table public.analysis_reports (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  recommendation_scope_id uuid references public.recommendation_scopes(id) on delete set null,
+  report_type text not null default 'recommendation' check (report_type in ('recommendation', 'weekly_trend')),
+  status text not null default 'ready' check (status in ('ready', 'failed')),
+  title text,
+  summary text,
+  payload jsonb not null default '{}'::jsonb,
+  evidence jsonb not null default '[]'::jsonb,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+alter table public.analysis_reports enable row level security;
+create policy "Users manage own analysis reports" on public.analysis_reports
+  for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+create index idx_analysis_reports_user_created on public.analysis_reports(user_id, created_at desc);
+create index idx_analysis_reports_user_type_created on public.analysis_reports(user_id, report_type, created_at desc);
 
 -- ─── HELPER VIEW (training-day summaries) ───────────────────
 create or replace view public.session_summaries as

@@ -9,9 +9,32 @@ services:
         sync: false
       - key: ALLOWED_ORIGINS
         sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: CRON_SHARED_SECRET
+        sync: false
       - key: SET_CENTRIC_LOGGING
-        value: "false"
+        value: "true"
       - key: LIBRARY_SCREEN_ENABLED
-        value: "false"
+        value: "true"
       - key: ANALYSIS_ON_DEMAND_ONLY
-        value: "false"
+        value: "true"
+
+cronJobs:
+  - name: gym-tracker-weekly-trends
+    runtime: docker
+    schedule: "0 6 * * 1"
+    dockerCommand: |
+      /bin/sh -lc 'curl -sS -X POST "$API_BASE_URL/api/jobs/generate-weekly-trends" \
+      -H "Content-Type: application/json" \
+      -H "x-cron-secret: $CRON_SHARED_SECRET" \
+      -d "{\"user_id\":\"$TREND_USER_ID\"}"'
+    envVars:
+      - key: API_BASE_URL
+        sync: false
+      - key: CRON_SHARED_SECRET
+        sync: false
+      - key: TREND_USER_ID
+        sync: false
