@@ -580,7 +580,8 @@ async def build_weekly_trend_report(user_id: str) -> dict:
                 "source": {
                     "grouping": "training_week",
                     "included_set_types": ["all"],
-                    "sample_size": {
+                    "sample_size": latest["total_sets"],
+                    "sample_size_detail": {
                         "latest_week_sets": latest["total_sets"],
                         "prior_week_sets": previous["total_sets"],
                     },
@@ -594,7 +595,8 @@ async def build_weekly_trend_report(user_id: str) -> dict:
                 "source": {
                     "grouping": "training_week",
                     "included_set_types": ["all"],
-                    "sample_size": {
+                    "sample_size": latest["total_sets"],
+                    "sample_size_detail": {
                         "latest_week_sets": latest["total_sets"],
                         "prior_week_sets": previous["total_sets"],
                     },
@@ -608,7 +610,8 @@ async def build_weekly_trend_report(user_id: str) -> dict:
                 "source": {
                     "grouping": "training_week",
                     "included_set_types": ["all"],
-                    "sample_size": {
+                    "sample_size": latest["total_sets"],
+                    "sample_size_detail": {
                         "latest_week_sets": latest["total_sets"],
                         "prior_week_sets": previous["total_sets"],
                     },
@@ -626,7 +629,8 @@ async def build_weekly_trend_report(user_id: str) -> dict:
                 "source": {
                     "grouping": "training_week",
                     "included_set_types": ["all"],
-                    "sample_size": {
+                    "sample_size": latest["total_sets"],
+                    "sample_size_detail": {
                         "latest_week_sets": latest["total_sets"],
                     },
                 },
