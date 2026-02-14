@@ -516,6 +516,8 @@ function HomeScreen({
   sets,
   machines,
   libraryEnabled,
+  plansEnabled,
+  homeDashboardEnabled,
   dayStartHour,
   onLogSets,
   onLibrary,
@@ -528,16 +530,49 @@ function HomeScreen({
   onSignOut,
 }) {
   const [todayPlanItems, setTodayPlanItems] = useState([])
-  const workloadByMuscle = useMemo(() => computeWorkloadByMuscleGroup(sets, machines), [sets, machines])
-  const weeklyConsistency = useMemo(() => computeWeeklyConsistency(sets, { rollingWeeks: 6 }), [sets])
+  const workloadByMuscle = useMemo(() => {
+    try {
+      return computeWorkloadByMuscleGroup(sets, machines)
+    } catch (error) {
+      addLog({
+        level: 'error',
+        event: 'dashboard.metrics.workload_failed',
+        message: error?.message || 'Failed to compute workload metric.',
+        meta: { metric: 'workload_by_muscle', setsCount: sets.length, machinesCount: machines.length },
+      })
+      return { groups: [], totalWorkload: 0, contributingSetCount: 0 }
+    }
+  }, [sets, machines])
+  const weeklyConsistency = useMemo(() => {
+    try {
+      return computeWeeklyConsistency(sets, { rollingWeeks: 6 })
+    } catch (error) {
+      addLog({
+        level: 'error',
+        event: 'dashboard.metrics.consistency_failed',
+        message: error?.message || 'Failed to compute consistency metric.',
+        meta: { metric: 'weekly_consistency', setsCount: sets.length, rollingWeeks: 6 },
+      })
+      return { weeks: [], completedDays: 0, possibleDays: 0, ratio: 0 }
+    }
+  }, [sets])
   const adherenceToday = useMemo(
     () => computeDayAdherence(todayPlanItems, sets, { dayStartHour }),
     [todayPlanItems, sets, dayStartHour],
   )
-  const balance = useMemo(
-    () => computeWorkloadBalanceIndex(workloadByMuscle.groups),
-    [workloadByMuscle.groups],
-  )
+  const balance = useMemo(() => {
+    try {
+      return computeWorkloadBalanceIndex(workloadByMuscle.groups)
+    } catch (error) {
+      addLog({
+        level: 'error',
+        event: 'dashboard.metrics.balance_failed',
+        message: error?.message || 'Failed to compute workload balance metric.',
+        meta: { metric: 'workload_balance', activeGroups: workloadByMuscle.groups?.length || 0 },
+      })
+      return { index: 0, activeGroups: 0, totalWorkload: 0 }
+    }
+  }, [workloadByMuscle.groups])
   const sampleWarning = useMemo(
     () => buildSampleWarning({
       contributingSetCount: workloadByMuscle.contributingSetCount,
@@ -592,7 +627,8 @@ function HomeScreen({
         )
       })}
 
-      <div style={{ marginBottom: 14, border: '1px solid var(--border)', borderRadius: 16, padding: 14, background: 'var(--surface)' }}>
+      {homeDashboardEnabled && (
+        <div style={{ marginBottom: 14, border: '1px solid var(--border)', borderRadius: 16, padding: 14, background: 'var(--surface)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8 }}>
           <div style={{ fontSize: 12, letterSpacing: 1, color: 'var(--text-dim)', fontFamily: 'var(--font-code)' }}>DASHBOARD SNAPSHOT</div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
@@ -649,7 +685,8 @@ function HomeScreen({
             {balance.activeGroups < 2 && <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>Need at least two active muscle groups for a meaningful balance score.</div>}
           </div>
         </div>
-      </div>
+        </div>
+      )}
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <button onClick={onLogSets} style={{
@@ -683,12 +720,14 @@ function HomeScreen({
           <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Training-day timeline and recent sets</div>
         </button>
 
-        <button onClick={onPlans} style={{
-          background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, textAlign: 'left',
-        }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>🗓️ Plans</div>
-          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Build weekly templates with target sets and exercises</div>
-        </button>
+        {plansEnabled && (
+          <button onClick={onPlans} style={{
+            background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, textAlign: 'left',
+          }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>🗓️ Plans</div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Build weekly templates with target sets and exercises</div>
+          </button>
+        )}
 
         <button onClick={onDiagnostics} style={{
           background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, textAlign: 'left',
@@ -1120,6 +1159,7 @@ function PlanScreen({ machines, sets, onBack }) {
     } catch (error) {
       setPlans(previous)
       setSelectedPlanId(previous[0]?.id || null)
+      addLog({ level: 'error', event: 'plan.crud.create_failed', message: error?.message || 'Failed to create plan.', meta: { action: 'create', name: plan.name?.trim() || null } })
       setPlanStatus({ loading: false, error: error?.userMessage || error?.message || 'Failed to create plan.' })
     }
   }
@@ -1133,6 +1173,7 @@ function PlanScreen({ machines, sets, onBack }) {
       setPlanStatus({ loading: false, error: null })
     } catch (error) {
       setPlans(previous)
+      addLog({ level: 'error', event: 'plan.crud.update_failed', message: error?.message || 'Failed to update plan.', meta: { action: 'update', planId: id, changedFields: Object.keys(changes || {}) } })
       setPlanStatus({ loading: false, error: error?.userMessage || error?.message || 'Failed to update plan.' })
     }
   }
@@ -1148,6 +1189,7 @@ function PlanScreen({ machines, sets, onBack }) {
     } catch (error) {
       setPlans(previous)
       setSelectedPlanId(id)
+      addLog({ level: 'error', event: 'plan.crud.delete_failed', message: error?.message || 'Failed to delete plan.', meta: { action: 'delete', planId: id } })
       setPlanStatus({ loading: false, error: error?.userMessage || error?.message || 'Failed to delete plan.' })
     }
   }
@@ -1169,6 +1211,7 @@ function PlanScreen({ machines, sets, onBack }) {
     } catch (error) {
       setDays(previous)
       setSelectedDayId(previous[0]?.id || null)
+      addLog({ level: 'error', event: 'plan.crud.save_day_failed', message: error?.message || 'Failed to save plan day.', meta: { action: 'upsert_day', planId: day.planId, weekday: day.weekday } })
       setDayStatus({ loading: false, error: error?.userMessage || error?.message || 'Failed to save day.' })
     }
   }
@@ -1184,6 +1227,7 @@ function PlanScreen({ machines, sets, onBack }) {
     } catch (error) {
       setDays(previous)
       setSelectedDayId(id)
+      addLog({ level: 'error', event: 'plan.crud.delete_day_failed', message: error?.message || 'Failed to delete plan day.', meta: { action: 'delete_day', dayId: id } })
       setDayStatus({ loading: false, error: error?.userMessage || error?.message || 'Failed to delete day.' })
     }
   }
@@ -1224,6 +1268,7 @@ function PlanScreen({ machines, sets, onBack }) {
     } catch (error) {
       setItems(previous)
       replaceDayItemsInSnapshot(payload.planDayId, previous)
+      addLog({ level: 'error', event: 'plan.crud.save_item_failed', message: error?.message || 'Failed to save plan item.', meta: { action: 'upsert_item', planDayId: payload.planDayId, itemId: item.id || null } })
       setItemStatus({ loading: false, error: error?.userMessage || error?.message || 'Failed to save item.' })
     }
   }
@@ -1239,6 +1284,7 @@ function PlanScreen({ machines, sets, onBack }) {
     } catch (error) {
       setItems(previous)
       replaceDayItemsInSnapshot(selectedDayId, previous)
+      addLog({ level: 'error', event: 'plan.crud.delete_item_failed', message: error?.message || 'Failed to delete plan item.', meta: { action: 'delete_item', itemId: id, planDayId: selectedDayId } })
       setItemStatus({ loading: false, error: error?.userMessage || error?.message || 'Failed to delete item.' })
     }
   }
@@ -1604,6 +1650,7 @@ function LogSetScreen({
   libraryEnabled,
   dayStartHour = PLAN_DAY_START_HOUR,
   setCentricLoggingEnabled,
+  favoritesOrderingEnabled,
 }) {
   const [view, setView] = useState('log')
   const [selectedMachine, setSelectedMachine] = useState(null)
@@ -1716,6 +1763,12 @@ function LogSetScreen({
   }, [loadTodayPlanSuggestions, effectiveDayKey])
 
   useEffect(() => {
+    if (!favoritesOrderingEnabled) {
+      setFavoriteCountsByMachine({})
+      setFavoriteLoadFailed(false)
+      return undefined
+    }
+
     let active = true
     const loadFavorites = async () => {
       try {
@@ -1733,14 +1786,19 @@ function LogSetScreen({
         if (!active) return
         setFavoriteCountsByMachine({})
         setFavoriteLoadFailed(true)
-        addLog({ level: 'warn', event: 'favorites.load_failed', message: error?.message || 'Failed to load favorites. Using default ordering.' })
+        addLog({
+          level: 'warn',
+          event: 'favorites.load_failed',
+          message: error?.message || 'Failed to load favorites. Using default ordering.',
+          meta: { window: favoritesWindow },
+        })
       }
     }
     loadFavorites()
     return () => {
       active = false
     }
-  }, [favoritesWindow])
+  }, [favoritesOrderingEnabled, favoritesWindow])
 
   useEffect(() => {
     const tick = () => {
@@ -1809,7 +1867,7 @@ function LogSetScreen({
     const filteredMachines = muscleFilter === 'All'
       ? machines
       : machines.filter(m => m.muscle_groups?.includes(muscleFilter))
-    const rankedMachines = favoriteLoadFailed
+    const rankedMachines = (!favoritesOrderingEnabled || favoriteLoadFailed)
       ? filteredMachines
       : [...filteredMachines].sort((a, b) => {
         const aCount = favoriteCountsByMachine[a.id] || 0
@@ -1823,7 +1881,7 @@ function LogSetScreen({
 
     const usageBadgeForMachine = (machineId) => {
       const count = favoriteCountsByMachine[machineId] || 0
-      if (!count || favoriteLoadFailed) return null
+      if (!favoritesOrderingEnabled || !count || favoriteLoadFailed) return null
       return `${count} sets · ${favoritesWindow}`
     }
     return (
@@ -1836,23 +1894,25 @@ function LogSetScreen({
             marginBottom: 16,
           }}>Go to Library</button>
         )}
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, marginBottom: 8, fontFamily: 'var(--font-code)' }}>
-            FAVORITES WINDOW
+        {favoritesOrderingEnabled && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, marginBottom: 8, fontFamily: 'var(--font-code)' }}>
+              FAVORITES WINDOW
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {['30d', '90d', 'all'].map((windowOption) => {
+                const active = favoritesWindow === windowOption
+                return (
+                  <button key={windowOption} onClick={() => setFavoritesWindow(windowOption)} style={{
+                    padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                    background: active ? 'var(--accent)22' : 'var(--surface2)', color: active ? 'var(--accent)' : 'var(--text-muted)',
+                    fontSize: 12, fontWeight: 700,
+                  }}>{windowOption}</button>
+                )
+              })}
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {['30d', '90d', 'all'].map((windowOption) => {
-              const active = favoritesWindow === windowOption
-              return (
-                <button key={windowOption} onClick={() => setFavoritesWindow(windowOption)} style={{
-                  padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
-                  background: active ? 'var(--accent)22' : 'var(--surface2)', color: active ? 'var(--accent)' : 'var(--text-muted)',
-                  fontSize: 12, fontWeight: 700,
-                }}>{windowOption}</button>
-              )
-            })}
-          </div>
-        </div>
+        )}
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, marginBottom: 8, fontFamily: 'var(--font-code)' }}>
             FILTER BY MAIN MUSCLE GROUP
@@ -3299,6 +3359,9 @@ export default function App() {
   const setCentricLoggingEnabled = resolvedFlags.setCentricLogging
   const libraryEnabled = resolvedFlags.libraryScreenEnabled
   const analysisOnDemandOnly = resolvedFlags.analysisOnDemandOnly
+  const plansEnabled = resolvedFlags.plansEnabled
+  const favoritesOrderingEnabled = resolvedFlags.favoritesOrderingEnabled
+  const homeDashboardEnabled = resolvedFlags.homeDashboardEnabled
 
   useEffect(() => {
     if (!featureFlagsLoading) return
@@ -3310,6 +3373,13 @@ export default function App() {
     addLog({ level: 'warn', event: 'feature_flags.library_fallback', message: 'Library screen disabled; redirecting to home.' })
     setScreen('home')
   }, [featureFlagsLoading, libraryEnabled, screen])
+
+
+  useEffect(() => {
+    if (featureFlagsLoading || plansEnabled || screen !== 'plans') return
+    addLog({ level: 'warn', event: 'feature_flags.plans_fallback', message: 'Plans screen disabled; redirecting to home.' })
+    setScreen('home')
+  }, [featureFlagsLoading, plansEnabled, screen])
 
   // ─── Loading / Auth ──────────────────────────────────────
   if (user === undefined) {
@@ -3330,6 +3400,8 @@ export default function App() {
           sets={sets}
           machines={machines}
           libraryEnabled={libraryEnabled}
+          plansEnabled={plansEnabled}
+          homeDashboardEnabled={homeDashboardEnabled}
           dayStartHour={PLAN_DAY_START_HOUR}
           onLogSets={() => setScreen('log')}
           onLibrary={() => {
@@ -3344,7 +3416,13 @@ export default function App() {
             setAnalysisInitialTab('run')
             setScreen('analysis')
           }}
-          onPlans={() => setScreen('plans')}
+          onPlans={() => {
+            if (!plansEnabled) {
+              addLog({ level: 'warn', event: 'feature_flags.plans_fallback', message: 'Plans entry is disabled by feature flag.' })
+              return
+            }
+            setScreen('plans')
+          }}
           onDiagnostics={() => setScreen('diagnostics')}
           onSorenessSubmit={handleSorenessSubmit}
           onSorenessDismiss={handleSorenessDismiss}
@@ -3370,6 +3448,7 @@ export default function App() {
           libraryEnabled={libraryEnabled}
           dayStartHour={PLAN_DAY_START_HOUR}
           setCentricLoggingEnabled={setCentricLoggingEnabled}
+          favoritesOrderingEnabled={favoritesOrderingEnabled}
         />
       )}
       {libraryEnabled && screen === 'library' && (
@@ -3405,7 +3484,7 @@ export default function App() {
           onBack={() => setScreen('home')}
         />
       )}
-      {screen === 'plans' && (
+      {plansEnabled && screen === 'plans' && (
         <PlanScreen
           machines={machines}
           sets={sets}

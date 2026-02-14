@@ -4,12 +4,18 @@ const DEFAULT_FLAGS = Object.freeze({
   setCentricLogging: true,
   libraryScreenEnabled: true,
   analysisOnDemandOnly: true,
+  plansEnabled: true,
+  favoritesOrderingEnabled: true,
+  homeDashboardEnabled: true,
 })
 
 const ENV_FLAG_MAP = Object.freeze({
   setCentricLogging: import.meta.env.VITE_SET_CENTRIC_LOGGING,
   libraryScreenEnabled: import.meta.env.VITE_LIBRARY_SCREEN_ENABLED,
   analysisOnDemandOnly: import.meta.env.VITE_ANALYSIS_ON_DEMAND_ONLY,
+  plansEnabled: import.meta.env.VITE_PLANS_ENABLED,
+  favoritesOrderingEnabled: import.meta.env.VITE_FAVORITES_ORDERING_ENABLED,
+  homeDashboardEnabled: import.meta.env.VITE_HOME_DASHBOARD_ENABLED,
 })
 
 function parseBooleanFlag(value, fallback) {
@@ -27,6 +33,9 @@ function withEnvDefaults(baseFlags = DEFAULT_FLAGS) {
     setCentricLogging: parseBooleanFlag(ENV_FLAG_MAP.setCentricLogging, baseFlags.setCentricLogging),
     libraryScreenEnabled: parseBooleanFlag(ENV_FLAG_MAP.libraryScreenEnabled, baseFlags.libraryScreenEnabled),
     analysisOnDemandOnly: parseBooleanFlag(ENV_FLAG_MAP.analysisOnDemandOnly, baseFlags.analysisOnDemandOnly),
+    plansEnabled: parseBooleanFlag(ENV_FLAG_MAP.plansEnabled, baseFlags.plansEnabled),
+    favoritesOrderingEnabled: parseBooleanFlag(ENV_FLAG_MAP.favoritesOrderingEnabled, baseFlags.favoritesOrderingEnabled),
+    homeDashboardEnabled: parseBooleanFlag(ENV_FLAG_MAP.homeDashboardEnabled, baseFlags.homeDashboardEnabled),
   }
 }
 
@@ -49,6 +58,9 @@ export async function getFeatureFlags() {
       setCentricLogging: parseBooleanFlag(remoteFlags?.setCentricLogging, envDefaultFlags.setCentricLogging),
       libraryScreenEnabled: parseBooleanFlag(remoteFlags?.libraryScreenEnabled, envDefaultFlags.libraryScreenEnabled),
       analysisOnDemandOnly: parseBooleanFlag(remoteFlags?.analysisOnDemandOnly, envDefaultFlags.analysisOnDemandOnly),
+      plansEnabled: parseBooleanFlag(remoteFlags?.plansEnabled, envDefaultFlags.plansEnabled),
+      favoritesOrderingEnabled: parseBooleanFlag(remoteFlags?.favoritesOrderingEnabled, envDefaultFlags.favoritesOrderingEnabled),
+      homeDashboardEnabled: parseBooleanFlag(remoteFlags?.homeDashboardEnabled, envDefaultFlags.homeDashboardEnabled),
     }
   } catch {
     return withEnvDefaults(DEFAULT_FLAGS)
