@@ -531,6 +531,9 @@ function HomeScreen({
 }) {
   const [todayPlanItems, setTodayPlanItems] = useState([])
   const workloadByMuscle = useMemo(() => {
+    if (!homeDashboardEnabled) {
+      return { groups: [], totalWorkload: 0, contributingSetCount: 0 }
+    }
     try {
       return computeWorkloadByMuscleGroup(sets, machines)
     } catch (error) {
@@ -542,8 +545,11 @@ function HomeScreen({
       })
       return { groups: [], totalWorkload: 0, contributingSetCount: 0 }
     }
-  }, [sets, machines])
+  }, [homeDashboardEnabled, sets, machines])
   const weeklyConsistency = useMemo(() => {
+    if (!homeDashboardEnabled) {
+      return { weeks: [], completedDays: 0, possibleDays: 0, ratio: 0 }
+    }
     try {
       return computeWeeklyConsistency(sets, { rollingWeeks: 6 })
     } catch (error) {
@@ -555,12 +561,17 @@ function HomeScreen({
       })
       return { weeks: [], completedDays: 0, possibleDays: 0, ratio: 0 }
     }
-  }, [sets])
+  }, [homeDashboardEnabled, sets])
   const adherenceToday = useMemo(
-    () => computeDayAdherence(todayPlanItems, sets, { dayStartHour }),
-    [todayPlanItems, sets, dayStartHour],
+    () => (homeDashboardEnabled
+      ? computeDayAdherence(todayPlanItems, sets, { dayStartHour })
+      : { completed: 0, planned: 0, ratio: 0, missing: [] }),
+    [homeDashboardEnabled, todayPlanItems, sets, dayStartHour],
   )
   const balance = useMemo(() => {
+    if (!homeDashboardEnabled) {
+      return { index: 0, activeGroups: 0, totalWorkload: 0 }
+    }
     try {
       return computeWorkloadBalanceIndex(workloadByMuscle.groups)
     } catch (error) {
@@ -572,19 +583,33 @@ function HomeScreen({
       })
       return { index: 0, activeGroups: 0, totalWorkload: 0 }
     }
-  }, [workloadByMuscle.groups])
+  }, [homeDashboardEnabled, workloadByMuscle.groups])
   const sampleWarning = useMemo(
-    () => buildSampleWarning({
-      contributingSetCount: workloadByMuscle.contributingSetCount,
-      activeGroups: balance.activeGroups,
-      trainingDays: weeklyConsistency.completedDays,
-      rollingWeeks: weeklyConsistency.weeks.length,
-    }),
-    [workloadByMuscle.contributingSetCount, balance.activeGroups, weeklyConsistency.completedDays, weeklyConsistency.weeks.length],
+    () => (homeDashboardEnabled
+      ? buildSampleWarning({
+          contributingSetCount: workloadByMuscle.contributingSetCount,
+          activeGroups: balance.activeGroups,
+          trainingDays: weeklyConsistency.completedDays,
+          rollingWeeks: weeklyConsistency.weeks.length,
+        })
+      : null),
+    [
+      homeDashboardEnabled,
+      workloadByMuscle.contributingSetCount,
+      balance.activeGroups,
+      weeklyConsistency.completedDays,
+      weeklyConsistency.weeks.length,
+    ],
   )
-  const consistencyPoints = weeklyConsistency.weeks.map((week) => Number((week.ratio * 100).toFixed(1)))
+  const consistencyPoints = homeDashboardEnabled
+    ? weeklyConsistency.weeks.map((week) => Number((week.ratio * 100).toFixed(1)))
+    : []
 
   useEffect(() => {
+    if (!homeDashboardEnabled) {
+      setTodayPlanItems([])
+      return undefined
+    }
     let active = true
     ;(async () => {
       try {
@@ -598,7 +623,7 @@ function HomeScreen({
       }
     })()
     return () => { active = false }
-  }, [dayStartHour])
+  }, [homeDashboardEnabled, dayStartHour])
 
   return (
     <div style={{ padding: '20px 16px', minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>
