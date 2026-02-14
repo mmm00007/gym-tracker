@@ -58,6 +58,7 @@ const normalizeEquipment = (row = null) => {
   const equipmentType = row.equipment_type || 'machine'
   const movement = row.movement || ''
   return {
+    ...row,
     id: row.id,
     name: row.name || '',
     exercise: movement,
@@ -74,6 +75,52 @@ const normalizeEquipment = (row = null) => {
     updatedAt: row.updated_at || null,
     updated_at: row.updated_at || null,
   }
+}
+
+const EQUIPMENT_DB_COLUMNS = [
+  'id',
+  'user_id',
+  'name',
+  'movement',
+  'equipment_type',
+  'muscle_groups',
+  'notes',
+  'image_url',
+  'default_weight',
+  'default_reps',
+  'thumbnails',
+  'instruction_image',
+  'exercise_type',
+  'source',
+  'created_at',
+  'updated_at',
+]
+
+function toEquipmentDbPayload(equipment = {}, userId) {
+  const source = { ...equipment }
+  const payload = {}
+
+  // Accept aliases from normalized objects/forms and map to DB columns.
+  if (source.equipmentType !== undefined && source.equipment_type === undefined) {
+    source.equipment_type = source.equipmentType
+  }
+  if (source.muscleGroups !== undefined && source.muscle_groups === undefined) {
+    source.muscle_groups = source.muscleGroups
+  }
+  if (source.imageUrl !== undefined && source.image_url === undefined) {
+    source.image_url = source.imageUrl
+  }
+
+  EQUIPMENT_DB_COLUMNS.forEach((key) => {
+    if (source[key] !== undefined) payload[key] = source[key]
+  })
+
+  payload.user_id = userId
+  payload.updated_at = new Date().toISOString()
+  if (!payload.created_at) payload.created_at = new Date().toISOString()
+  if (!payload.equipment_type) payload.equipment_type = 'machine'
+
+  return payload
 }
 
 const normalizePlan = (row = {}) => ({
@@ -205,9 +252,7 @@ export async function getEquipment() {
 
 export async function upsertEquipment(equipment) {
   const { data: { user } } = await supabase.auth.getUser()
-  const payload = { ...equipment, user_id: user.id, updated_at: new Date().toISOString() }
-  if (!payload.created_at) payload.created_at = new Date().toISOString()
-  if (!payload.equipment_type) payload.equipment_type = 'machine'
+  const payload = toEquipmentDbPayload(equipment, user.id)
   const { data, error } = await supabase
     .from('machines').upsert(payload, { onConflict: 'id' }).select().single()
   throwMappedDbError(error, 'Unable to save equipment')
