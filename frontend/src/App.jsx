@@ -1216,9 +1216,10 @@ function PlanScreen({ machines, sets, onBack }) {
     replaceDayItemsInSnapshot(payload.planDayId, next)
     try {
       const saved = await dbUpsertPlanItem(payload)
-      const updated = next.map((entry) => (entry.id === tempId ? saved : entry))
-      setItems(updated)
-      replaceDayItemsInSnapshot(payload.planDayId, updated)
+      setItems((current) => current.map((entry) => (entry.id === tempId ? saved : entry)))
+      setAllDayItems((current) => current.map((entry) => (
+        (entry.planDayId || entry.plan_day_id) === payload.planDayId && entry.id === tempId ? saved : entry
+      )))
       setItemStatus({ loading: false, error: null })
     } catch (error) {
       setItems(previous)
