@@ -6,7 +6,7 @@ import {
   getPlans, createPlan as dbCreatePlan, updatePlan as dbUpdatePlan, deletePlan as dbDeletePlan,
   getPlanDays, upsertPlanDay as dbUpsertPlanDay, deletePlanDay as dbDeletePlanDay,
   getPlanItems, upsertPlanItem as dbUpsertPlanItem, deletePlanItem as dbDeletePlanItem,
-  getTodayPlanSuggestions,
+  getTodayPlanSuggestions, getEquipmentFavorites,
   bootstrapDefaultEquipmentCatalog,
   getPendingSoreness, submitSoreness, getRecentSoreness,
   getAnalysisReports, getAnalysisReport,
@@ -244,7 +244,7 @@ function QuickAdjust({ value, onChange, step, color, min = 0 }) {
   )
 }
 
-function MachineCard({ machine, onSelect, onEdit, compact }) {
+function MachineCard({ machine, onSelect, onEdit, compact, usageBadge }) {
   const primaryColor = mc(machine.muscle_groups?.[0])
   const thumbnails = machine.thumbnails || []
   const thumb = thumbnails[0]
@@ -275,6 +275,22 @@ function MachineCard({ machine, onSelect, onEdit, compact }) {
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--font-mono)', marginBottom: 4 }}>{machine.name}</div>
             <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 6 }}>{machine.movement}</div>
+            {usageBadge && (
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                fontSize: 11,
+                color: 'var(--text-dim)',
+                border: '1px solid var(--border)',
+                background: 'var(--surface2)',
+                borderRadius: 999,
+                padding: '2px 8px',
+                marginBottom: 6,
+              }}>
+                <span style={{ fontFamily: 'var(--font-code)' }}>{usageBadge}</span>
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {machine.muscle_groups?.map((m, i) => <Pill key={i} text={m} color={mc(m)} />)}
             </div>
@@ -1415,6 +1431,9 @@ function LogSetScreen({
   const [planSuggestions, setPlanSuggestions] = useState([])
   const [planSuggestionsStatus, setPlanSuggestionsStatus] = useState({ loading: true, error: null })
   const [effectiveDayKey, setEffectiveDayKey] = useState(() => getEffectiveDayKey())
+  const [favoritesWindow, setFavoritesWindow] = useState('30d')
+  const [favoriteCountsByMachine, setFavoriteCountsByMachine] = useState({})
+  const [favoriteLoadFailed, setFavoriteLoadFailed] = useState(false)
   const restRef = useRef(null)
   const activeSetRef = useRef(null)
   const setStartTime = useRef(null)
@@ -1506,6 +1525,33 @@ function LogSetScreen({
   }, [loadTodayPlanSuggestions, effectiveDayKey])
 
   useEffect(() => {
+    let active = true
+    const loadFavorites = async () => {
+      try {
+        const favorites = await getEquipmentFavorites(favoritesWindow)
+        if (!active) return
+        const nextCounts = favorites.reduce((acc, favorite) => {
+          if (favorite?.equipmentId) {
+            acc[favorite.equipmentId] = favorite.setCount || 0
+          }
+          return acc
+        }, {})
+        setFavoriteCountsByMachine(nextCounts)
+        setFavoriteLoadFailed(false)
+      } catch (error) {
+        if (!active) return
+        setFavoriteCountsByMachine({})
+        setFavoriteLoadFailed(true)
+        addLog({ level: 'warn', event: 'favorites.load_failed', message: error?.message || 'Failed to load favorites. Using default ordering.' })
+      }
+    }
+    loadFavorites()
+    return () => {
+      active = false
+    }
+  }, [favoritesWindow])
+
+  useEffect(() => {
     const tick = () => {
       const nextDayKey = getEffectiveDayKey()
       setEffectiveDayKey((current) => (current === nextDayKey ? current : nextDayKey))
@@ -1560,10 +1606,35 @@ function LogSetScreen({
 
   // Select view
   if (view === 'select') {
+    const compareBySecondaryOrder = (a, b) => {
+      const aName = (a.name || '').toLocaleLowerCase()
+      const bName = (b.name || '').toLocaleLowerCase()
+      if (aName !== bName) return aName.localeCompare(bName)
+      const aMovement = (a.movement || '').toLocaleLowerCase()
+      const bMovement = (b.movement || '').toLocaleLowerCase()
+      return aMovement.localeCompare(bMovement)
+    }
     const muscleGroups = Array.from(new Set(machines.flatMap(m => m.muscle_groups || []))).sort()
     const filteredMachines = muscleFilter === 'All'
       ? machines
       : machines.filter(m => m.muscle_groups?.includes(muscleFilter))
+    const rankedMachines = favoriteLoadFailed
+      ? filteredMachines
+      : [...filteredMachines].sort((a, b) => {
+        const aCount = favoriteCountsByMachine[a.id] || 0
+        const bCount = favoriteCountsByMachine[b.id] || 0
+        const aPinned = aCount > 0
+        const bPinned = bCount > 0
+        if (aPinned !== bPinned) return aPinned ? -1 : 1
+        if (aPinned && bPinned && aCount !== bCount) return bCount - aCount
+        return compareBySecondaryOrder(a, b)
+      })
+
+    const usageBadgeForMachine = (machineId) => {
+      const count = favoriteCountsByMachine[machineId] || 0
+      if (!count || favoriteLoadFailed) return null
+      return `${count} sets · ${favoritesWindow}`
+    }
     return (
       <div style={{ padding: '20px 16px', minHeight: '100dvh' }}>
         <TopBar left={<BackBtn onClick={() => setView('log')} />} title="SELECT EXERCISE" />
@@ -1574,6 +1645,23 @@ function LogSetScreen({
             marginBottom: 16,
           }}>Go to Library</button>
         )}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, marginBottom: 8, fontFamily: 'var(--font-code)' }}>
+            FAVORITES WINDOW
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {['30d', '90d', 'all'].map((windowOption) => {
+              const active = favoritesWindow === windowOption
+              return (
+                <button key={windowOption} onClick={() => setFavoritesWindow(windowOption)} style={{
+                  padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                  background: active ? 'var(--accent)22' : 'var(--surface2)', color: active ? 'var(--accent)' : 'var(--text-muted)',
+                  fontSize: 12, fontWeight: 700,
+                }}>{windowOption}</button>
+              )
+            })}
+          </div>
+        </div>
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, marginBottom: 8, fontFamily: 'var(--font-code)' }}>
             FILTER BY MAIN MUSCLE GROUP
@@ -1603,7 +1691,14 @@ function LogSetScreen({
                 No exercises for that muscle group yet.
               </div>
             )}
-            {filteredMachines.map(m => <MachineCard key={m.id} machine={m} onSelect={() => selectMachine(m)} />)}
+            {rankedMachines.map((m) => (
+              <MachineCard
+                key={m.id}
+                machine={m}
+                usageBadge={usageBadgeForMachine(m.id)}
+                onSelect={() => selectMachine(m)}
+              />
+            ))}
           </div>
         )}
       </div>
