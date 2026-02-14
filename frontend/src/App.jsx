@@ -14,6 +14,12 @@ import {
 import { API_BASE_URL, pingHealth, getRecommendations } from './lib/api'
 import { getFeatureFlags, DEFAULT_FLAGS } from './lib/featureFlags'
 import { addLog, subscribeLogs } from './lib/logs'
+import {
+  computeWorkloadByMuscleGroup,
+  computeWeeklyConsistency,
+  computeWorkloadBalanceIndex,
+  buildSampleWarning,
+} from './lib/dashboardMetrics'
 
 // ─── Helpers ───────────────────────────────────────────────
 const fmt = (d) => new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
@@ -503,6 +509,7 @@ function SorenessPrompt({ session, muscleGroups, onSubmit, onDismiss }) {
 
 function HomeScreen({
   pendingSoreness,
+  sets,
   machines,
   libraryEnabled,
   onLogSets,
@@ -515,6 +522,23 @@ function HomeScreen({
   onSorenessDismiss,
   onSignOut,
 }) {
+  const workloadByMuscle = useMemo(() => computeWorkloadByMuscleGroup(sets, machines), [sets, machines])
+  const weeklyConsistency = useMemo(() => computeWeeklyConsistency(sets, { rollingWeeks: 6 }), [sets])
+  const balance = useMemo(
+    () => computeWorkloadBalanceIndex(workloadByMuscle.groups),
+    [workloadByMuscle.groups],
+  )
+  const sampleWarning = useMemo(
+    () => buildSampleWarning({
+      contributingSetCount: workloadByMuscle.contributingSetCount,
+      activeGroups: balance.activeGroups,
+      trainingDays: weeklyConsistency.completedDays,
+      rollingWeeks: weeklyConsistency.weeks.length,
+    }),
+    [workloadByMuscle.contributingSetCount, balance.activeGroups, weeklyConsistency.completedDays, weeklyConsistency.weeks.length],
+  )
+  const consistencyPoints = weeklyConsistency.weeks.map((week) => Number((week.ratio * 100).toFixed(1)))
+
   return (
     <div style={{ padding: '20px 16px', minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -541,6 +565,56 @@ function HomeScreen({
             onSubmit={onSorenessSubmit} onDismiss={() => onSorenessDismiss(s.training_bucket_id)} />
         )
       })}
+
+      <div style={{ marginBottom: 14, border: '1px solid var(--border)', borderRadius: 16, padding: 14, background: 'var(--surface)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div style={{ fontSize: 12, letterSpacing: 1, color: 'var(--text-dim)', fontFamily: 'var(--font-code)' }}>DASHBOARD SNAPSHOT</div>
+          {sampleWarning && <Pill text="LOW SAMPLE" color="#ffb347" />}
+        </div>
+        {sampleWarning && <div style={{ fontSize: 12, color: '#ffb347', marginBottom: 12 }}>⚠ {sampleWarning}</div>}
+
+        <div style={{ display: 'grid', gap: 10 }}>
+          <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 12, padding: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <div style={{ fontSize: 13, fontWeight: 700 }}>Muscle-group workload</div>
+              <span title="Formula: set volume = reps × weight. Each set volume is split equally across that machine's listed muscle groups (denominator = number of listed groups for that machine). Duration is never inferred or used." style={{ fontSize: 12, color: 'var(--text-dim)' }}>ⓘ</span>
+            </div>
+            {!workloadByMuscle.groups.length && <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>No workload yet. Log sets to populate this widget.</div>}
+            {!!workloadByMuscle.groups.length && (
+              <div style={{ display: 'grid', gap: 6 }}>
+                {workloadByMuscle.groups.slice(0, 4).map((entry) => (
+                  <div key={entry.muscleGroup} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Pill text={entry.muscleGroup} color={mc(entry.muscleGroup)} />
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{fmtNumber(entry.workload, 0)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 12, padding: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div style={{ fontSize: 13, fontWeight: 700 }}>Weekly consistency</div>
+              <span title="Formula over rolling 6 weeks: consistency = completed training days / (6 × 7). A completed day is any local calendar day with ≥1 logged set. Denominator assumes 7 possible days per week." style={{ fontSize: 12, color: 'var(--text-dim)' }}>ⓘ</span>
+            </div>
+            {!weeklyConsistency.completedDays && <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 6 }}>No completed training days in the current 6-week window.</div>}
+            <div style={{ fontSize: 20, fontFamily: 'var(--font-mono)', fontWeight: 800, marginBottom: 6 }}>{fmtNumber(weeklyConsistency.ratio * 100, 1)}%</div>
+            {!!consistencyPoints.length && <MiniLineChart points={consistencyPoints} color="var(--blue)" height={52} />}
+          </div>
+
+          <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 12, padding: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <div style={{ fontSize: 13, fontWeight: 700 }}>Workload distribution balance</div>
+              <span title="Balance index (Shannon evenness): H = -Σ pᵢ ln(pᵢ), where pᵢ = muscle-group workload share. Index = H / ln(k), with k = number of active muscle groups. Range 0-1 (1 = perfectly even)." style={{ fontSize: 12, color: 'var(--text-dim)' }}>ⓘ</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
+              <div style={{ fontSize: 20, fontFamily: 'var(--font-mono)', fontWeight: 800 }}>{fmtNumber(balance.index * 100, 1)}%</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{balance.activeGroups} active groups</div>
+            </div>
+            {balance.activeGroups < 2 && <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>Need at least two active muscle groups for a meaningful balance score.</div>}
+          </div>
+        </div>
+      </div>
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <button onClick={onLogSets} style={{
@@ -3169,6 +3243,7 @@ export default function App() {
       {screen === 'home' && (
         <HomeScreen
           pendingSoreness={pendingSoreness}
+          sets={sets}
           machines={machines}
           libraryEnabled={libraryEnabled}
           onLogSets={() => setScreen('log')}
