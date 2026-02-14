@@ -567,12 +567,23 @@ const WEEKDAY_OPTIONS = [
   { value: 6, label: 'Saturday' },
 ]
 
-const makeRepRange = (min, max) => (min === '' && max === '' ? null : `[${Number(min)},${Number(max)}]`)
+const makeRepRange = (min, max) => (min === '' && max === '' ? null : `[${Number(min)},${Number(max) + 1})`)
 const makeWeightRange = (min, max) => (min === '' && max === '' ? null : `[${Number(min)},${Number(max)}]`)
 const parseRange = (value) => {
   if (!value || typeof value !== 'string') return { min: '', max: '' }
   const cleaned = value.replace(/[\[\]()]/g, '')
   const [min = '', max = ''] = cleaned.split(',')
+  return { min, max }
+}
+
+const parseRepRange = (value) => {
+  if (!value || typeof value !== 'string') return { min: '', max: '' }
+  const lowerBound = value[0]
+  const upperBound = value[value.length - 1]
+  const cleaned = value.replace(/[\[\]()]/g, '')
+  const [rawMin = '', rawMax = ''] = cleaned.split(',')
+  const min = rawMin === '' ? '' : String(Number(rawMin) + (lowerBound === '(' ? 1 : 0))
+  const max = rawMax === '' ? '' : String(Number(rawMax) - (upperBound === ')' ? 1 : 0))
   return { min, max }
 }
 
@@ -708,7 +719,7 @@ function PlanItemEditor({ day, items, machines, loading, error, onSaveItem, onDe
   }, [day?.id, items.length])
 
   const applyExisting = (item) => {
-    const reps = parseRange(item.targetRepRange)
+    const reps = parseRepRange(item.targetRepRange)
     const weight = parseRange(item.targetWeightRange)
     setForm({
       id: item.id,
