@@ -3,6 +3,9 @@ import {
   supabase, signUp, signIn, signOut, getSession,
   getMachines, upsertMachine, deleteMachine as dbDeleteMachine,
   getSets, logSet as dbLogSet, deleteSet as dbDeleteSet,
+  getPlans, createPlan as dbCreatePlan, updatePlan as dbUpdatePlan, deletePlan as dbDeletePlan,
+  getPlanDays, upsertPlanDay as dbUpsertPlanDay, deletePlanDay as dbDeletePlanDay,
+  getPlanItems, upsertPlanItem as dbUpsertPlanItem, deletePlanItem as dbDeletePlanItem,
   bootstrapDefaultEquipmentCatalog,
   getPendingSoreness, submitSoreness, getRecentSoreness,
   getAnalysisReports, getAnalysisReport,
@@ -471,6 +474,7 @@ function HomeScreen({
   onLibrary,
   onAnalysis,
   onHistory,
+  onPlans,
   onDiagnostics,
   onSorenessSubmit,
   onSorenessDismiss,
@@ -535,12 +539,523 @@ function HomeScreen({
           <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Training-day timeline and recent sets</div>
         </button>
 
+        <button onClick={onPlans} style={{
+          background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, textAlign: 'left',
+        }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>🗓️ Plans</div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Build weekly templates with target sets and exercises</div>
+        </button>
+
         <button onClick={onDiagnostics} style={{
           background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, textAlign: 'left',
         }}>
           <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>🧰 Diagnostics</div>
           <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Check API health and share logs</div>
         </button>
+      </div>
+    </div>
+  )
+}
+
+const WEEKDAY_OPTIONS = [
+  { value: 0, label: 'Sunday' },
+  { value: 1, label: 'Monday' },
+  { value: 2, label: 'Tuesday' },
+  { value: 3, label: 'Wednesday' },
+  { value: 4, label: 'Thursday' },
+  { value: 5, label: 'Friday' },
+  { value: 6, label: 'Saturday' },
+]
+
+const makeRepRange = (min, max) => (min === '' && max === '' ? null : `[${Number(min)},${Number(max)}]`)
+const makeWeightRange = (min, max) => (min === '' && max === '' ? null : `[${Number(min)},${Number(max)}]`)
+const parseRange = (value) => {
+  if (!value || typeof value !== 'string') return { min: '', max: '' }
+  const cleaned = value.replace(/[\[\]()]/g, '')
+  const [min = '', max = ''] = cleaned.split(',')
+  return { min, max }
+}
+
+function PlanListPanel({ plans, selectedPlanId, loading, error, onSelectPlan, onCreate, onUpdate, onDelete }) {
+  const [newName, setNewName] = useState('')
+  const [newGoal, setNewGoal] = useState('')
+
+  return (
+    <div style={{ border: '1px solid var(--border)', borderRadius: 14, padding: 14, background: 'var(--surface)' }}>
+      <div style={{ fontSize: 12, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)', marginBottom: 10 }}>PLAN LIST</div>
+      {loading && <div style={{ fontSize: 13, color: 'var(--text-dim)' }}>Loading plans…</div>}
+      {!loading && error && <div style={{ fontSize: 13, color: 'var(--red)' }}>{error}</div>}
+      {!loading && !error && plans.length === 0 && <div style={{ fontSize: 13, color: 'var(--text-dim)' }}>No plans yet. Create one below.</div>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+        {plans.map((plan) => {
+          const isSelected = selectedPlanId === plan.id
+          return (
+            <div key={plan.id} style={{ border: `1px solid ${isSelected ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 10, padding: 10 }}>
+              <button onClick={() => onSelectPlan(plan.id)} style={{ width: '100%', textAlign: 'left' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{plan.name || 'Untitled plan'}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{plan.goal || 'No goal set'}</div>
+                  </div>
+                  <Pill text={plan.isActive ? 'ACTIVE' : 'INACTIVE'} color={plan.isActive ? 'var(--green)' : 'var(--text-dim)'} />
+                </div>
+              </button>
+              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <button onClick={() => onUpdate(plan.id, { isActive: !plan.isActive })} style={{ fontSize: 12, color: 'var(--accent)' }}>
+                  {plan.isActive ? 'Deactivate' : 'Activate'}
+                </button>
+                <button onClick={() => onDelete(plan.id)} style={{ fontSize: 12, color: 'var(--red)' }}>Delete</button>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
+        <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="New plan name"
+          style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: 10, color: 'var(--text)' }} />
+        <input value={newGoal} onChange={(e) => setNewGoal(e.target.value)} placeholder="Optional goal"
+          style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: 10, color: 'var(--text)' }} />
+        <button onClick={() => {
+          onCreate({ name: newName, goal: newGoal, isActive: true })
+          setNewName('')
+          setNewGoal('')
+        }} style={{ padding: 10, borderRadius: 10, background: 'var(--accent)', color: '#000', fontWeight: 700 }}>Create plan</button>
+      </div>
+    </div>
+  )
+}
+
+function PlanEditor({ plan, onUpdate }) {
+  const [name, setName] = useState(plan?.name || '')
+  const [goal, setGoal] = useState(plan?.goal || '')
+
+  useEffect(() => {
+    setName(plan?.name || '')
+    setGoal(plan?.goal || '')
+  }, [plan?.id, plan?.name, plan?.goal])
+
+  if (!plan) {
+    return <div style={{ border: '1px solid var(--border)', borderRadius: 14, padding: 14, background: 'var(--surface)', color: 'var(--text-dim)', fontSize: 13 }}>Select a plan to edit metadata.</div>
+  }
+
+  return (
+    <div style={{ border: '1px solid var(--border)', borderRadius: 14, padding: 14, background: 'var(--surface)' }}>
+      <div style={{ fontSize: 12, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)', marginBottom: 10 }}>PLAN METADATA</div>
+      <div style={{ display: 'grid', gap: 8 }}>
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Plan name"
+          style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: 10, color: 'var(--text)' }} />
+        <input value={goal} onChange={(e) => setGoal(e.target.value)} placeholder="Goal"
+          style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: 10, color: 'var(--text)' }} />
+        <button onClick={() => onUpdate(plan.id, { name, goal })} style={{ padding: 10, borderRadius: 10, background: 'var(--blue)', color: '#011', fontWeight: 700 }}>Save metadata</button>
+      </div>
+    </div>
+  )
+}
+
+function PlanDayEditor({ plan, days, selectedDayId, loading, error, onSelectDay, onSaveDay, onDeleteDay }) {
+  const [weekday, setWeekday] = useState(1)
+  const [label, setLabel] = useState('')
+
+  useEffect(() => {
+    if (!plan) return
+    setWeekday(1)
+    setLabel('')
+  }, [plan?.id])
+
+  return (
+    <div style={{ border: '1px solid var(--border)', borderRadius: 14, padding: 14, background: 'var(--surface)' }}>
+      <div style={{ fontSize: 12, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)', marginBottom: 10 }}>PLAN DAYS</div>
+      {!plan && <div style={{ fontSize: 13, color: 'var(--text-dim)' }}>Choose a plan to manage weekday templates.</div>}
+      {plan && loading && <div style={{ fontSize: 13, color: 'var(--text-dim)' }}>Loading days…</div>}
+      {plan && !loading && error && <div style={{ fontSize: 13, color: 'var(--red)' }}>{error}</div>}
+      {plan && !loading && !error && days.length === 0 && <div style={{ fontSize: 13, color: 'var(--text-dim)' }}>No weekdays added yet.</div>}
+      {plan && (
+        <>
+          <div style={{ display: 'grid', gap: 8, marginBottom: 10 }}>
+            {days.map((day) => (
+              <div key={day.id} style={{ border: `1px solid ${selectedDayId === day.id ? 'var(--blue)' : 'var(--border)'}`, borderRadius: 10, padding: 10 }}>
+                <button onClick={() => onSelectDay(day.id)} style={{ width: '100%', textAlign: 'left' }}>
+                  <div style={{ fontSize: 14, color: 'var(--text)', fontWeight: 700 }}>{WEEKDAY_OPTIONS.find((opt) => opt.value === day.weekday)?.label || `Day ${day.weekday}`}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{day.label || 'No label'}</div>
+                </button>
+                <button onClick={() => onDeleteDay(day.id)} style={{ marginTop: 8, fontSize: 12, color: 'var(--red)' }}>Delete day</button>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'grid', gap: 8 }}>
+            <select value={weekday} onChange={(e) => setWeekday(Number(e.target.value))}
+              style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: 10, color: 'var(--text)' }}>
+              {WEEKDAY_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+            </select>
+            <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Optional label"
+              style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: 10, color: 'var(--text)' }} />
+            <button onClick={() => onSaveDay({ planId: plan.id, weekday, label })} style={{ padding: 10, borderRadius: 10, background: 'var(--blue)', color: '#011', fontWeight: 700 }}>Save weekday template</button>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function PlanItemEditor({ day, items, machines, loading, error, onSaveItem, onDeleteItem }) {
+  const [form, setForm] = useState({
+    id: null, equipmentId: '', targetSetType: 'working', targetSets: '', repMin: '', repMax: '', weightMin: '', weightMax: '', notes: '', orderIndex: 0,
+  })
+  const [showMachinePicker, setShowMachinePicker] = useState(false)
+
+  useEffect(() => {
+    setForm({ id: null, equipmentId: '', targetSetType: 'working', targetSets: '', repMin: '', repMax: '', weightMin: '', weightMax: '', notes: '', orderIndex: items.length })
+  }, [day?.id, items.length])
+
+  const applyExisting = (item) => {
+    const reps = parseRange(item.targetRepRange)
+    const weight = parseRange(item.targetWeightRange)
+    setForm({
+      id: item.id,
+      equipmentId: item.equipmentId || '',
+      targetSetType: item.targetSetType,
+      targetSets: item.targetSets ?? '',
+      repMin: reps.min,
+      repMax: reps.max,
+      weightMin: weight.min,
+      weightMax: weight.max,
+      notes: item.notes || '',
+      orderIndex: item.orderIndex ?? 0,
+    })
+  }
+
+  const selectedMachine = machines.find((m) => m.id === form.equipmentId)
+
+  return (
+    <div style={{ border: '1px solid var(--border)', borderRadius: 14, padding: 14, background: 'var(--surface)' }}>
+      <div style={{ fontSize: 12, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)', marginBottom: 10 }}>PLAN ITEMS</div>
+      {!day && <div style={{ fontSize: 13, color: 'var(--text-dim)' }}>Select a plan day to edit exercises and targets.</div>}
+      {day && loading && <div style={{ fontSize: 13, color: 'var(--text-dim)' }}>Loading plan items…</div>}
+      {day && !loading && error && <div style={{ fontSize: 13, color: 'var(--red)' }}>{error}</div>}
+      {day && !loading && !error && items.length === 0 && <div style={{ fontSize: 13, color: 'var(--text-dim)' }}>No items yet for this day.</div>}
+      {day && (
+        <>
+          <div style={{ display: 'grid', gap: 8, marginBottom: 10 }}>
+            {items.map((item) => (
+              <div key={item.id} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 10 }}>
+                <button onClick={() => applyExisting(item)} style={{ width: '100%', textAlign: 'left' }}>
+                  <div style={{ fontSize: 14, color: 'var(--text)', fontWeight: 700 }}>{item.equipment?.name || item.exercise || 'Unlinked exercise'}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{item.targetSetType} · sets {item.targetSets ?? '—'} · order {item.orderIndex}</div>
+                </button>
+                <button onClick={() => onDeleteItem(item.id)} style={{ marginTop: 8, fontSize: 12, color: 'var(--red)' }}>Delete item</button>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: 'grid', gap: 8 }}>
+            <button onClick={() => setShowMachinePicker((prev) => !prev)} style={{ textAlign: 'left', padding: 10, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)' }}>
+              {selectedMachine ? `Exercise: ${selectedMachine.name}` : 'Select exercise/equipment'}
+            </button>
+            {showMachinePicker && (
+              <div style={{ display: 'grid', gap: 8, maxHeight: 240, overflow: 'auto' }}>
+                {machines.map((machine) => (
+                  <MachineCard
+                    key={machine.id}
+                    machine={machine}
+                    compact
+                    onSelect={() => {
+                      setForm((prev) => ({ ...prev, equipmentId: machine.id }))
+                      setShowMachinePicker(false)
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+            <select value={form.targetSetType} onChange={(e) => setForm((prev) => ({ ...prev, targetSetType: e.target.value }))}
+              style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: 10, color: 'var(--text)' }}>
+              {SET_TYPE_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+            </select>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <input type="number" min="0" value={form.targetSets} onChange={(e) => setForm((prev) => ({ ...prev, targetSets: e.target.value }))} placeholder="Target sets"
+                style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: 10, color: 'var(--text)' }} />
+              <input type="number" min="0" value={form.orderIndex} onChange={(e) => setForm((prev) => ({ ...prev, orderIndex: e.target.value }))} placeholder="Order"
+                style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: 10, color: 'var(--text)' }} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <input type="number" min="0" value={form.repMin} onChange={(e) => setForm((prev) => ({ ...prev, repMin: e.target.value }))} placeholder="Rep min"
+                style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: 10, color: 'var(--text)' }} />
+              <input type="number" min="0" value={form.repMax} onChange={(e) => setForm((prev) => ({ ...prev, repMax: e.target.value }))} placeholder="Rep max"
+                style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: 10, color: 'var(--text)' }} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <input type="number" min="0" value={form.weightMin} onChange={(e) => setForm((prev) => ({ ...prev, weightMin: e.target.value }))} placeholder="Weight min"
+                style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: 10, color: 'var(--text)' }} />
+              <input type="number" min="0" value={form.weightMax} onChange={(e) => setForm((prev) => ({ ...prev, weightMax: e.target.value }))} placeholder="Weight max"
+                style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: 10, color: 'var(--text)' }} />
+            </div>
+            <textarea value={form.notes} onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))} rows={2} placeholder="Notes"
+              style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: 10, color: 'var(--text)', boxSizing: 'border-box' }} />
+            <button onClick={() => onSaveItem({
+              ...form,
+              planDayId: day.id,
+              targetRepRange: makeRepRange(form.repMin, form.repMax),
+              targetWeightRange: makeWeightRange(form.weightMin, form.weightMax),
+            })} style={{ padding: 10, borderRadius: 10, background: 'var(--accent)', color: '#000', fontWeight: 700 }}>
+              {form.id ? 'Update item' : 'Add item'}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function PlanScreen({ machines, onBack }) {
+  const [plans, setPlans] = useState([])
+  const [planStatus, setPlanStatus] = useState({ loading: true, error: null })
+  const [selectedPlanId, setSelectedPlanId] = useState(null)
+  const [days, setDays] = useState([])
+  const [dayStatus, setDayStatus] = useState({ loading: false, error: null })
+  const [selectedDayId, setSelectedDayId] = useState(null)
+  const [items, setItems] = useState([])
+  const [itemStatus, setItemStatus] = useState({ loading: false, error: null })
+
+  const selectedPlan = plans.find((plan) => plan.id === selectedPlanId) || null
+  const selectedDay = days.find((day) => day.id === selectedDayId) || null
+
+  const validateDay = (day) => Number.isInteger(day.weekday) && day.weekday >= 0 && day.weekday <= 6
+  const validateItem = (item) => {
+    if (!SET_TYPE_OPTIONS.includes(item.targetSetType)) return 'Invalid set type selected.'
+    if (item.targetSets !== '' && Number(item.targetSets) <= 0) return 'Target sets must be greater than 0.'
+    if (Number(item.orderIndex) < 0) return 'Order index must be non-negative.'
+    const numericFields = [item.repMin, item.repMax, item.weightMin, item.weightMax].filter((v) => v !== '')
+    if (numericFields.some((value) => Number(value) < 0)) return 'Range targets must be non-negative.'
+    return null
+  }
+
+
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      setPlanStatus({ loading: true, error: null })
+      try {
+        const data = await getPlans()
+        if (!active) return
+        setPlans(data)
+        setSelectedPlanId((prev) => prev || data[0]?.id || null)
+        setPlanStatus({ loading: false, error: null })
+      } catch (error) {
+        if (!active) return
+        setPlanStatus({ loading: false, error: error?.userMessage || error?.message || 'Failed to load plans.' })
+      }
+    })()
+    return () => { active = false }
+  }, [])
+
+  useEffect(() => {
+    if (!selectedPlanId) {
+      setDays([])
+      setSelectedDayId(null)
+      return
+    }
+    let active = true
+    ;(async () => {
+      setDayStatus({ loading: true, error: null })
+      try {
+        const data = await getPlanDays(selectedPlanId)
+        if (!active) return
+        setDays(data)
+        setSelectedDayId((prev) => (data.some((day) => day.id === prev) ? prev : data[0]?.id || null))
+        setDayStatus({ loading: false, error: null })
+      } catch (error) {
+        if (!active) return
+        setDayStatus({ loading: false, error: error?.userMessage || error?.message || 'Failed to load plan days.' })
+      }
+    })()
+    return () => { active = false }
+  }, [selectedPlanId])
+
+  useEffect(() => {
+    if (!selectedDayId) {
+      setItems([])
+      return
+    }
+    let active = true
+    ;(async () => {
+      setItemStatus({ loading: true, error: null })
+      try {
+        const data = await getPlanItems(selectedDayId)
+        if (!active) return
+        setItems(data)
+        setItemStatus({ loading: false, error: null })
+      } catch (error) {
+        if (!active) return
+        setItemStatus({ loading: false, error: error?.userMessage || error?.message || 'Failed to load plan items.' })
+      }
+    })()
+    return () => { active = false }
+  }, [selectedDayId])
+
+  const handleCreatePlan = async (plan) => {
+    if (!plan.name?.trim()) return setPlanStatus((prev) => ({ ...prev, error: 'Plan name is required.' }))
+    const tempId = `temp-plan-${Date.now()}`
+    const optimistic = { id: tempId, name: plan.name.trim(), goal: plan.goal?.trim() || '', isActive: true }
+    const previous = plans
+    setPlans([optimistic, ...plans])
+    setSelectedPlanId(tempId)
+    try {
+      const saved = await dbCreatePlan(plan)
+      setPlans((current) => current.map((entry) => (entry.id === tempId ? saved : entry)))
+      setSelectedPlanId(saved.id)
+      setPlanStatus({ loading: false, error: null })
+    } catch (error) {
+      setPlans(previous)
+      setSelectedPlanId(previous[0]?.id || null)
+      setPlanStatus({ loading: false, error: error?.userMessage || error?.message || 'Failed to create plan.' })
+    }
+  }
+
+  const handleUpdatePlan = async (id, changes) => {
+    const previous = plans
+    setPlans((current) => current.map((entry) => (entry.id === id ? { ...entry, ...changes } : entry)))
+    try {
+      const saved = await dbUpdatePlan(id, changes)
+      setPlans((current) => current.map((entry) => (entry.id === id ? saved : entry)))
+      setPlanStatus({ loading: false, error: null })
+    } catch (error) {
+      setPlans(previous)
+      setPlanStatus({ loading: false, error: error?.userMessage || error?.message || 'Failed to update plan.' })
+    }
+  }
+
+  const handleDeletePlan = async (id) => {
+    const previous = plans
+    const next = plans.filter((entry) => entry.id !== id)
+    setPlans(next)
+    if (selectedPlanId === id) setSelectedPlanId(next[0]?.id || null)
+    try {
+      await dbDeletePlan(id)
+      setPlanStatus({ loading: false, error: null })
+    } catch (error) {
+      setPlans(previous)
+      setSelectedPlanId(id)
+      setPlanStatus({ loading: false, error: error?.userMessage || error?.message || 'Failed to delete plan.' })
+    }
+  }
+
+  const handleSaveDay = async (day) => {
+    if (!validateDay(day)) return setDayStatus((prev) => ({ ...prev, error: 'Weekday must be an integer between 0 and 6.' }))
+    const existing = days.find((entry) => entry.weekday === day.weekday)
+    const tempId = existing?.id || `temp-day-${Date.now()}`
+    const optimistic = { id: tempId, planId: day.planId, weekday: day.weekday, label: day.label || '' }
+    const previous = days
+    const next = existing ? days.map((entry) => (entry.id === existing.id ? optimistic : entry)) : [...days, optimistic].sort((a, b) => a.weekday - b.weekday)
+    setDays(next)
+    setSelectedDayId(tempId)
+    try {
+      const saved = await dbUpsertPlanDay({ ...day, id: existing?.id })
+      setDays((current) => current.map((entry) => (entry.id === tempId ? saved : entry)))
+      setSelectedDayId(saved.id)
+      setDayStatus({ loading: false, error: null })
+    } catch (error) {
+      setDays(previous)
+      setSelectedDayId(previous[0]?.id || null)
+      setDayStatus({ loading: false, error: error?.userMessage || error?.message || 'Failed to save day.' })
+    }
+  }
+
+  const handleDeleteDay = async (id) => {
+    const previous = days
+    const next = days.filter((entry) => entry.id !== id)
+    setDays(next)
+    if (selectedDayId === id) setSelectedDayId(next[0]?.id || null)
+    try {
+      await dbDeletePlanDay(id)
+      setDayStatus({ loading: false, error: null })
+    } catch (error) {
+      setDays(previous)
+      setSelectedDayId(id)
+      setDayStatus({ loading: false, error: error?.userMessage || error?.message || 'Failed to delete day.' })
+    }
+  }
+
+  const handleSaveItem = async (item) => {
+    const itemError = validateItem(item)
+    if (itemError) return setItemStatus((prev) => ({ ...prev, error: itemError }))
+    const tempId = item.id || `temp-item-${Date.now()}`
+    const payload = {
+      id: item.id || undefined,
+      planDayId: item.planDayId,
+      equipmentId: item.equipmentId || null,
+      targetSetType: item.targetSetType,
+      targetSets: item.targetSets === '' ? null : Number(item.targetSets),
+      targetRepRange: item.targetRepRange,
+      targetWeightRange: item.targetWeightRange,
+      notes: item.notes,
+      orderIndex: Number(item.orderIndex),
+    }
+    const optimistic = {
+      ...payload,
+      id: tempId,
+      equipment: machines.find((machine) => machine.id === payload.equipmentId) || null,
+    }
+    const previous = items
+    const next = item.id
+      ? items.map((entry) => (entry.id === item.id ? optimistic : entry))
+      : [...items, optimistic].sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0))
+    setItems(next)
+    try {
+      const saved = await dbUpsertPlanItem(payload)
+      setItems((current) => current.map((entry) => (entry.id === tempId ? saved : entry)))
+      setItemStatus({ loading: false, error: null })
+    } catch (error) {
+      setItems(previous)
+      setItemStatus({ loading: false, error: error?.userMessage || error?.message || 'Failed to save item.' })
+    }
+  }
+
+  const handleDeleteItem = async (id) => {
+    const previous = items
+    setItems(items.filter((entry) => entry.id !== id))
+    try {
+      await dbDeletePlanItem(id)
+      setItemStatus({ loading: false, error: null })
+    } catch (error) {
+      setItems(previous)
+      setItemStatus({ loading: false, error: error?.userMessage || error?.message || 'Failed to delete item.' })
+    }
+  }
+
+  return (
+    <div style={{ padding: '20px 16px', minHeight: '100dvh' }}>
+      <TopBar left={<BackBtn onClick={onBack} />} title="PLANS" right={null} />
+      <div style={{ display: 'grid', gap: 12 }}>
+        <PlanListPanel
+          plans={plans}
+          selectedPlanId={selectedPlanId}
+          loading={planStatus.loading}
+          error={planStatus.error}
+          onSelectPlan={setSelectedPlanId}
+          onCreate={handleCreatePlan}
+          onUpdate={handleUpdatePlan}
+          onDelete={handleDeletePlan}
+        />
+        <PlanEditor plan={selectedPlan} onUpdate={handleUpdatePlan} />
+        <PlanDayEditor
+          plan={selectedPlan}
+          days={days}
+          selectedDayId={selectedDayId}
+          loading={dayStatus.loading}
+          error={dayStatus.error}
+          onSelectDay={setSelectedDayId}
+          onSaveDay={handleSaveDay}
+          onDeleteDay={handleDeleteDay}
+        />
+        <PlanItemEditor
+          day={selectedDay}
+          items={items}
+          machines={machines}
+          loading={itemStatus.loading}
+          error={itemStatus.error}
+          onSaveItem={handleSaveItem}
+          onDeleteItem={handleDeleteItem}
+        />
       </div>
     </div>
   )
@@ -2409,6 +2924,7 @@ export default function App() {
             setAnalysisInitialTab('run')
             setScreen('analysis')
           }}
+          onPlans={() => setScreen('plans')}
           onDiagnostics={() => setScreen('diagnostics')}
           onSorenessSubmit={handleSorenessSubmit}
           onSorenessDismiss={handleSorenessDismiss}
@@ -2465,6 +2981,12 @@ export default function App() {
       {screen === 'diagnostics' && (
         <DiagnosticsScreen
           user={user}
+          onBack={() => setScreen('home')}
+        />
+      )}
+      {screen === 'plans' && (
+        <PlanScreen
+          machines={machines}
           onBack={() => setScreen('home')}
         />
       )}
