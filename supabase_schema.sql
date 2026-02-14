@@ -15,11 +15,15 @@ $$;
 
 -- Drop in dependency order for clean re-apply during development.
 drop view if exists public.session_summaries;
+drop view if exists public.equipment_set_counts;
 drop table if exists public.analysis_reports cascade;
 drop table if exists public.recommendation_scopes cascade;
 drop table if exists public.soreness_reports cascade;
 drop table if exists public.sets cascade;
 drop table if exists public.sessions cascade;
+drop table if exists public.plan_items cascade;
+drop table if exists public.plan_days cascade;
+drop table if exists public.plans cascade;
 drop table if exists public.machines cascade;
 drop table if exists public.user_preferences cascade;
 
@@ -167,6 +171,93 @@ create policy "Users manage own sessions" on public.sessions
   with check (auth.uid() = user_id);
 create index idx_sessions_user on public.sessions(user_id, started_at desc);
 create unique index uq_sessions_id_user on public.sessions(id, user_id);
+
+-- ─── PLANS (normalized workout planning model) ─────────────
+create table public.plans (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null check (length(trim(name)) > 0),
+  goal text,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table public.plan_days (
+  id uuid primary key default uuid_generate_v4(),
+  plan_id uuid not null references public.plans(id) on delete cascade,
+  weekday int not null check (weekday between 0 and 6),
+  label text,
+  created_at timestamptz not null default now(),
+  unique (plan_id, weekday)
+);
+
+create table public.plan_items (
+  id uuid primary key default uuid_generate_v4(),
+  plan_day_id uuid not null references public.plan_days(id) on delete cascade,
+  machine_id uuid references public.machines(id) on delete set null,
+  target_set_type text not null default 'working' check (
+    target_set_type in ('warmup', 'working', 'top', 'drop', 'backoff', 'failure')
+  ),
+  target_sets int check (target_sets is null or target_sets > 0),
+  target_rep_range int4range,
+  target_weight_range numrange,
+  notes text,
+  order_index int not null check (order_index >= 0),
+  unique (plan_day_id, order_index)
+);
+
+alter table public.plans enable row level security;
+create policy "Users manage own plans" on public.plans
+  for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+alter table public.plan_days enable row level security;
+create policy "Users manage own plan days" on public.plan_days
+  for all
+  using (
+    exists (
+      select 1
+      from public.plans p
+      where p.id = plan_days.plan_id
+        and p.user_id = auth.uid()
+    )
+  )
+  with check (
+    exists (
+      select 1
+      from public.plans p
+      where p.id = plan_days.plan_id
+        and p.user_id = auth.uid()
+    )
+  );
+
+alter table public.plan_items enable row level security;
+create policy "Users manage own plan items" on public.plan_items
+  for all
+  using (
+    exists (
+      select 1
+      from public.plan_days pd
+      join public.plans p on p.id = pd.plan_id
+      where pd.id = plan_items.plan_day_id
+        and p.user_id = auth.uid()
+    )
+  )
+  with check (
+    exists (
+      select 1
+      from public.plan_days pd
+      join public.plans p on p.id = pd.plan_id
+      where pd.id = plan_items.plan_day_id
+        and p.user_id = auth.uid()
+    )
+  );
+
+create index idx_plans_user_active_updated on public.plans(user_id, is_active, updated_at desc);
+create index idx_plan_days_plan_weekday on public.plan_days(plan_id, weekday);
+create index idx_plan_items_day_order on public.plan_items(plan_day_id, order_index);
 
 -- ─── SETS (set-centric ownership + grouping keys) ──────────
 create table public.sets (
@@ -361,6 +452,7 @@ create policy "Users manage own sets" on public.sets
 create index idx_sets_user_logged on public.sets(user_id, logged_at desc);
 create index idx_sets_bucket on public.sets(user_id, training_bucket_id, logged_at desc);
 create index idx_sets_cluster on public.sets(user_id, training_date, workout_cluster_id, logged_at desc);
+-- Canonical favorites lookup index (user + machine + recency).
 create index idx_sets_machine on public.sets(user_id, machine_id, logged_at desc);
 
 -- ─── SORENESS REPORTS (bucket linked, no session dependency) ─
@@ -440,3 +532,32 @@ from public.sets st
 left join public.machines m on m.id = st.machine_id
 left join lateral unnest(m.muscle_groups) as mg on true
 group by st.user_id, st.training_date, st.training_bucket_id;
+
+-- Canonical equipment volume signal for favorites/recommendations.
+-- Edge cases:
+--   * No data: users without any matching sets simply produce no rows.
+--   * Null machine_id: excluded because favorites must map to concrete equipment.
+--   * Ties: rank columns remain deterministic by applying machine_id as a secondary sort key.
+create or replace view public.equipment_set_counts
+with (security_invoker = true) as
+with machine_set_counts as (
+  select
+    st.user_id,
+    st.machine_id,
+    count(*) filter (where st.logged_at >= now() - interval '30 days')::bigint as sets_30d,
+    count(*) filter (where st.logged_at >= now() - interval '90 days')::bigint as sets_90d,
+    count(*)::bigint as sets_all
+  from public.sets st
+  where st.machine_id is not null
+  group by st.user_id, st.machine_id
+)
+select
+  msc.user_id,
+  msc.machine_id,
+  msc.sets_30d,
+  msc.sets_90d,
+  msc.sets_all,
+  rank() over (partition by msc.user_id order by msc.sets_30d desc, msc.machine_id) as rank_30d,
+  rank() over (partition by msc.user_id order by msc.sets_90d desc, msc.machine_id) as rank_90d,
+  rank() over (partition by msc.user_id order by msc.sets_all desc, msc.machine_id) as rank_all
+from machine_set_counts msc;
