@@ -6,6 +6,7 @@ import {
   getPlans, createPlan as dbCreatePlan, updatePlan as dbUpdatePlan, deletePlan as dbDeletePlan,
   getPlanDays, upsertPlanDay as dbUpsertPlanDay, deletePlanDay as dbDeletePlanDay,
   getPlanItems, upsertPlanItem as dbUpsertPlanItem, deletePlanItem as dbDeletePlanItem,
+  getTodayPlanSuggestions,
   bootstrapDefaultEquipmentCatalog,
   getPendingSoreness, submitSoreness, getRecentSoreness,
   getAnalysisReports, getAnalysisReport,
@@ -20,6 +21,17 @@ const fmtFull = (d) => new Date(d).toLocaleDateString('en-GB', { day: 'numeric',
 const fmtTime = (d) => new Date(d).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
 const fmtDur = (ms) => { const m = Math.floor(ms / 60000); return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m` }
 const fmtTimer = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+const PLAN_DAY_START_HOUR = 4
+
+const getEffectiveDayKey = (dateValue = new Date(), dayStartHour = PLAN_DAY_START_HOUR) => {
+  const date = dateValue instanceof Date ? new Date(dateValue) : new Date(dateValue)
+  if (Number.isNaN(date.getTime())) return new Date().toISOString().slice(0, 10)
+  const effective = new Date(date)
+  if (effective.getHours() < dayStartHour) {
+    effective.setDate(effective.getDate() - 1)
+  }
+  return effective.toISOString().slice(0, 10)
+}
 
 const fmtNumber = (value, digits = 1) => {
   if (!Number.isFinite(value)) return '0'
@@ -1393,6 +1405,9 @@ function LogSetScreen({
   const [activeSetSeconds, setActiveSetSeconds] = useState(0)
   const [logging, setLogging] = useState(false)
   const [feedback, setFeedback] = useState(null)
+  const [planSuggestions, setPlanSuggestions] = useState([])
+  const [planSuggestionsStatus, setPlanSuggestionsStatus] = useState({ loading: true, error: null })
+  const [effectiveDayKey, setEffectiveDayKey] = useState(() => getEffectiveDayKey())
   const restRef = useRef(null)
   const activeSetRef = useRef(null)
   const setStartTime = useRef(null)
@@ -1463,6 +1478,34 @@ function LogSetScreen({
       onLoadMachineHistory(selectedMachine.id)
     }
   }, [selectedMachine, onLoadMachineHistory])
+
+  const loadTodayPlanSuggestions = useCallback(async () => {
+    setPlanSuggestionsStatus((prev) => ({ ...prev, loading: true, error: null }))
+    try {
+      const suggestions = await getTodayPlanSuggestions({ dayStartHour: PLAN_DAY_START_HOUR })
+      const primarySuggestion = suggestions.find((entry) => entry?.items?.length) || suggestions[0] || null
+      const items = primarySuggestion?.items || []
+      setPlanSuggestions(items)
+      setPlanSuggestionsStatus({ loading: false, error: null })
+    } catch (error) {
+      addLog({ level: 'warn', event: 'plan_suggestions.load_failed', message: error?.message || 'Failed to load plan suggestions.' })
+      setPlanSuggestions([])
+      setPlanSuggestionsStatus({ loading: false, error: error?.message || 'Unable to load planned exercises right now.' })
+    }
+  }, [])
+
+  useEffect(() => {
+    loadTodayPlanSuggestions()
+  }, [loadTodayPlanSuggestions, effectiveDayKey])
+
+  useEffect(() => {
+    const tick = () => {
+      const nextDayKey = getEffectiveDayKey()
+      setEffectiveDayKey((current) => (current === nextDayKey ? current : nextDayKey))
+    }
+    const timer = setInterval(tick, 60000)
+    return () => clearInterval(timer)
+  }, [])
 
   const handleLog = async (durationSeconds = null, machineIdOverride = null) => {
     if (logging) return
@@ -1579,6 +1622,51 @@ function LogSetScreen({
     ...(includeCurrentSession ? [sessionMetrics.totalVolume] : []),
   ]
 
+  const effectiveDayStart = (() => {
+    const [year, month, day] = effectiveDayKey.split('-').map(Number)
+    const start = new Date()
+    if (Number.isFinite(year) && Number.isFinite(month) && Number.isFinite(day)) {
+      start.setFullYear(year, month - 1, day)
+    }
+    start.setHours(PLAN_DAY_START_HOUR, 0, 0, 0)
+    return start
+  })()
+
+  const setsInEffectiveDay = (() => {
+    const startMs = effectiveDayStart.getTime()
+    const endMs = startMs + 24 * 60 * 60 * 1000
+    return sets.filter((set) => {
+      const loggedMs = new Date(set.logged_at).getTime()
+      return Number.isFinite(loggedMs) && loggedMs >= startMs && loggedMs < endMs
+    })
+  })()
+
+  const planAdherence = (() => {
+    if (!planSuggestions.length) {
+      return { targetSets: 0, completedSets: 0, touchedExercises: 0 }
+    }
+
+    let targetSets = 0
+    let completedSets = 0
+    let touchedExercises = 0
+
+    planSuggestions.forEach((item) => {
+      const plannedSets = Number.isFinite(Number(item.targetSets)) ? Number(item.targetSets) : 0
+      const matchingSets = setsInEffectiveDay.filter((set) => {
+        if (item.equipmentId && set.machine_id !== item.equipmentId) return false
+        if (!item.targetSetType) return true
+        return (set.set_type || 'working') === item.targetSetType
+      })
+      if (matchingSets.length > 0) touchedExercises += 1
+      if (plannedSets > 0) {
+        targetSets += plannedSets
+        completedSets += Math.min(plannedSets, matchingSets.length)
+      }
+    })
+
+    return { targetSets, completedSets, touchedExercises }
+  })()
+
   return (
     <div style={{ padding: '20px 16px', paddingBottom: 100, minHeight: '100dvh' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -1587,6 +1675,65 @@ function LogSetScreen({
           <div style={{ fontSize: 11, color: 'var(--accent)', letterSpacing: 2, fontFamily: 'var(--font-code)' }}>{setCentricLoggingEnabled ? 'SET-FIRST LOGGING' : 'STANDARD LOGGING'}</div>
           <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>{sets.length} sets logged</div>
         </div>
+      </div>
+
+      <div style={{ marginBottom: 12, border: '1px solid var(--border)', borderRadius: 12, background: 'var(--surface)', padding: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)' }}>PLANNED TODAY</div>
+          {!planSuggestionsStatus.loading && planSuggestions.length > 0 && (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+              {planAdherence.targetSets > 0
+                ? `${planAdherence.completedSets}/${planAdherence.targetSets} planned sets completed`
+                : `${planAdherence.touchedExercises}/${planSuggestions.length} planned exercises touched`}
+            </div>
+          )}
+        </div>
+
+        {planSuggestionsStatus.loading && (
+          <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>Loading today's plan…</div>
+        )}
+
+        {!planSuggestionsStatus.loading && planSuggestionsStatus.error && (
+          <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>{planSuggestionsStatus.error}</div>
+        )}
+
+        {!planSuggestionsStatus.loading && !planSuggestionsStatus.error && planSuggestions.length === 0 && (
+          <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>No active plan items for today. You can still log any exercise.</div>
+        )}
+
+        {!planSuggestionsStatus.loading && !planSuggestionsStatus.error && planSuggestions.length > 0 && (
+          <div style={{ display: 'grid', gap: 8 }}>
+            {planSuggestions.map((item) => {
+              const suggestedMachine = machines.find((machine) => machine.id === item.equipmentId) || item.equipment
+              const matchedSets = setsInEffectiveDay.filter((set) => (
+                set.machine_id === item.equipmentId
+                && (set.set_type || 'working') === (item.targetSetType || 'working')
+              )).length
+              const targetLabel = item.targetSets ? `${matchedSets}/${item.targetSets} sets` : `${matchedSets} sets`
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => suggestedMachine && selectMachine(suggestedMachine)}
+                  disabled={!suggestedMachine || setInProgress}
+                  style={{
+                    width: '100%', textAlign: 'left', borderRadius: 10, padding: '9px 10px',
+                    border: '1px solid var(--border)', background: 'var(--surface2)',
+                    color: 'var(--text)', opacity: !suggestedMachine || setInProgress ? 0.6 : 1,
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+                    <div style={{ fontSize: 13, fontWeight: 700 }}>{item.exercise || suggestedMachine?.movement || 'Planned exercise'}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{targetLabel}</div>
+                  </div>
+                  <div style={{ marginTop: 2, fontSize: 11, color: 'var(--text-muted)' }}>
+                    {item.targetSetType || 'working'} • {item.targetSets ? `${item.targetSets} sets` : 'set target optional'}
+                    {item.targetRepRange ? ` • ${item.targetRepRange} reps` : ''}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* Machine selector button */}
