@@ -23,14 +23,21 @@ const fmtDur = (ms) => { const m = Math.floor(ms / 60000); return m < 60 ? `${m}
 const fmtTimer = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 const PLAN_DAY_START_HOUR = 4
 
+const getLocalDateKey = (date) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 const getEffectiveDayKey = (dateValue = new Date(), dayStartHour = PLAN_DAY_START_HOUR) => {
   const date = dateValue instanceof Date ? new Date(dateValue) : new Date(dateValue)
-  if (Number.isNaN(date.getTime())) return new Date().toISOString().slice(0, 10)
+  if (Number.isNaN(date.getTime())) return getLocalDateKey(new Date())
   const effective = new Date(date)
   if (effective.getHours() < dayStartHour) {
     effective.setDate(effective.getDate() - 1)
   }
-  return effective.toISOString().slice(0, 10)
+  return getLocalDateKey(effective)
 }
 
 const fmtNumber = (value, digits = 1) => {
