@@ -63,6 +63,9 @@ ROLLOUT_FLAGS = {
     "setCentricLogging": read_bool_env("SET_CENTRIC_LOGGING", True),
     "libraryScreenEnabled": read_bool_env("LIBRARY_SCREEN_ENABLED", True),
     "analysisOnDemandOnly": read_bool_env("ANALYSIS_ON_DEMAND_ONLY", True),
+    "plansEnabled": read_bool_env("PLANS_ENABLED", True),
+    "favoritesOrderingEnabled": read_bool_env("FAVORITES_ORDERING_ENABLED", True),
+    "homeDashboardEnabled": read_bool_env("HOME_DASHBOARD_ENABLED", True),
 }
 
 app.add_middleware(
