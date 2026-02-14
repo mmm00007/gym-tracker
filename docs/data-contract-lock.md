@@ -177,3 +177,61 @@ DB table name remains `machines`, but app-level semantics are `equipment`.
 - Persisted scope must always include grouping basis and set-type inclusion policy.
 - Scope rows are used for explainability and reproducibility of recommendations/analysis.
 - Clients should persist `public.recommendation_scopes` before recommendation calls and include `scope_id` in analysis/report payloads.
+
+---
+
+## Plan adherence contract
+
+### Matching strategy (`plan_items` ↔ logged sets)
+
+For adherence calculations, each `plan_items` row matches logged sets using a **deterministic key** and a training-day window:
+
+- Match key: `(machine_id, target_set_type)` from plan item to `(machine_id, set_type)` from set.
+- Set type fallback: missing values are normalized to `working` on both sides.
+- Training-day scope: only sets inside the selected `training_date` bucket are considered.
+  - Preferred source: `sets.training_date` when present.
+  - Fallback source: derive from `logged_at` using `day_start_hour` boundary in local user context.
+
+### Day boundary and timezone handling
+
+- The training day starts at `day_start_hour` (e.g., 04:00) and runs for 24h.
+- If a set timestamp is earlier than `day_start_hour`, it belongs to the previous training day.
+- Date-only keys (`YYYY-MM-DD`) are parsed with UTC-safe midday normalization to avoid off-by-one drift across DST/timezone offsets.
+
+### Planned vs completed formulas
+
+For a day (and analogously aggregated for a week):
+
+- `planned_sets = sum(max(target_sets, 0))` across items with numeric positive targets.
+- `completed_sets = sum(min(item_completed_sets, item_target_sets))` across items with targets.
+- `touched_items = count(items with >=1 matched set allocated)`.
+
+Primary ratio:
+
+- If `planned_sets > 0`:
+  - `adherence_ratio = completed_sets / planned_sets`.
+- Else (no numeric set targets):
+  - `adherence_ratio = touched_items / total_plan_items`.
+
+### Partial completion rules
+
+Per item:
+
+- **Complete**
+  - target-based item: `allocated_sets >= target_sets`
+  - no target_sets: at least one matched set (`touched`).
+- **Partial**
+  - target-based item only: `0 < allocated_sets < target_sets`.
+- **Not started**
+  - `allocated_sets = 0`.
+
+### Deterministic tie-breaking for duplicate keys
+
+When multiple `plan_items` share the same `(machine_id, set_type)` key on the same day:
+
+1. Sort items by `order_index` ascending.
+2. Tie-break by `id` lexicographically ascending.
+3. Allocate matched sets in that order until each target is filled.
+4. Any surplus matched sets are allocated to zero-target items in the same deterministic order.
+
+This ensures stable, reproducible adherence outputs across clients.

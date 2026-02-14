@@ -20,6 +20,10 @@ import {
   computeWorkloadBalanceIndex,
   buildSampleWarning,
 } from './lib/dashboardMetrics'
+import {
+  computeDayAdherence,
+  computeWeekAdherence,
+} from './lib/adherence'
 
 // ─── Helpers ───────────────────────────────────────────────
 const fmt = (d) => new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
@@ -512,6 +516,7 @@ function HomeScreen({
   sets,
   machines,
   libraryEnabled,
+  dayStartHour,
   onLogSets,
   onLibrary,
   onAnalysis,
@@ -522,8 +527,13 @@ function HomeScreen({
   onSorenessDismiss,
   onSignOut,
 }) {
+  const [todayPlanItems, setTodayPlanItems] = useState([])
   const workloadByMuscle = useMemo(() => computeWorkloadByMuscleGroup(sets, machines), [sets, machines])
   const weeklyConsistency = useMemo(() => computeWeeklyConsistency(sets, { rollingWeeks: 6 }), [sets])
+  const adherenceToday = useMemo(
+    () => computeDayAdherence(todayPlanItems, sets, { dayStartHour }),
+    [todayPlanItems, sets, dayStartHour],
+  )
   const balance = useMemo(
     () => computeWorkloadBalanceIndex(workloadByMuscle.groups),
     [workloadByMuscle.groups],
@@ -538,6 +548,22 @@ function HomeScreen({
     [workloadByMuscle.contributingSetCount, balance.activeGroups, weeklyConsistency.completedDays, weeklyConsistency.weeks.length],
   )
   const consistencyPoints = weeklyConsistency.weeks.map((week) => Number((week.ratio * 100).toFixed(1)))
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        const suggestions = await getTodayPlanSuggestions({ dayStartHour })
+        if (!active) return
+        const primarySuggestion = suggestions.find((entry) => entry?.items?.length) || suggestions[0] || null
+        setTodayPlanItems(primarySuggestion?.items || [])
+      } catch (error) {
+        if (!active) return
+        setTodayPlanItems([])
+      }
+    })()
+    return () => { active = false }
+  }, [dayStartHour])
 
   return (
     <div style={{ padding: '20px 16px', minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>
@@ -567,9 +593,18 @@ function HomeScreen({
       })}
 
       <div style={{ marginBottom: 14, border: '1px solid var(--border)', borderRadius: 16, padding: 14, background: 'var(--surface)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8 }}>
           <div style={{ fontSize: 12, letterSpacing: 1, color: 'var(--text-dim)', fontFamily: 'var(--font-code)' }}>DASHBOARD SNAPSHOT</div>
-          {sampleWarning && <Pill text="LOW SAMPLE" color="#ffb347" />}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <Pill text={`CONSISTENCY ${Math.round(weeklyConsistency.ratio * 100)}%`} color="var(--blue)" />
+            {todayPlanItems.length > 0 && (
+              <Pill
+                text={`ADHERENCE ${Math.round(adherenceToday.ratio * 100)}%`}
+                color={adherenceToday.ratio >= 0.8 ? 'var(--green)' : adherenceToday.ratio >= 0.5 ? '#ffb347' : 'var(--red)'}
+              />
+            )}
+            {sampleWarning && <Pill text="LOW SAMPLE" color="#ffb347" />}
+          </div>
         </div>
         {sampleWarning && <div style={{ fontSize: 12, color: '#ffb347', marginBottom: 12 }}>⚠ {sampleWarning}</div>}
 
@@ -925,7 +960,7 @@ function PlanItemEditor({ day, items, machines, loading, error, onSaveItem, onDe
   )
 }
 
-function PlanScreen({ machines, onBack }) {
+function PlanScreen({ machines, sets, onBack }) {
   const [plans, setPlans] = useState([])
   const [planStatus, setPlanStatus] = useState({ loading: true, error: null })
   const [selectedPlanId, setSelectedPlanId] = useState(null)
@@ -937,6 +972,26 @@ function PlanScreen({ machines, onBack }) {
 
   const selectedPlan = plans.find((plan) => plan.id === selectedPlanId) || null
   const selectedDay = days.find((day) => day.id === selectedDayId) || null
+
+  const selectedDayKey = useMemo(() => {
+    if (!selectedDay || !Number.isInteger(selectedDay.weekday)) return null
+    const now = new Date()
+    const currentWeekday = now.getDay()
+    const delta = selectedDay.weekday - currentWeekday
+    const target = new Date(now)
+    target.setDate(now.getDate() + delta)
+    return getLocalDateKey(target)
+  }, [selectedDay])
+
+  const selectedDayAdherence = useMemo(
+    () => computeDayAdherence(items, sets, { dayKey: selectedDayKey, dayStartHour: PLAN_DAY_START_HOUR }),
+    [items, sets, selectedDayKey],
+  )
+
+  const selectedWeekProgress = useMemo(
+    () => computeWeekAdherence({ planDays: selectedDay ? [selectedDay] : [], planItems: items, loggedSets: sets, dayStartHour: PLAN_DAY_START_HOUR }),
+    [selectedDay, items, sets],
+  )
 
   const validateDay = (day) => Number.isInteger(day.weekday) && day.weekday >= 0 && day.weekday <= 6
   const validateItem = (item) => {
@@ -1145,6 +1200,21 @@ function PlanScreen({ machines, onBack }) {
   return (
     <div style={{ padding: '20px 16px', minHeight: '100dvh' }}>
       <TopBar left={<BackBtn onClick={onBack} />} title="PLANS" right={null} />
+      <div style={{ marginBottom: 12, border: '1px solid var(--border)', borderRadius: 12, padding: 12, background: 'var(--surface)' }}>
+        <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 6, fontFamily: 'var(--font-code)', letterSpacing: 1 }}>PLAN PROGRESS</div>
+        <div style={{ fontSize: 13, color: 'var(--text)' }}>
+          {selectedDay
+            ? (selectedDayAdherence.plannedSets > 0
+              ? `${selectedDayAdherence.completedSets}/${selectedDayAdherence.plannedSets} sets completed for selected weekday`
+              : `${selectedDayAdherence.touchedItems}/${selectedDayAdherence.totalItems} exercises touched for selected weekday`)
+            : 'Select a weekday template to view adherence progress.'}
+        </div>
+        {selectedDay && (
+          <div style={{ marginTop: 4, fontSize: 12, color: 'var(--text-muted)' }}>
+            Week snapshot: {selectedWeekProgress.completedSets}/{selectedWeekProgress.plannedSets || 0} planned sets ({Math.round(selectedWeekProgress.ratio * 100)}%)
+          </div>
+        )}
+      </div>
       <div style={{ display: 'grid', gap: 12 }}>
         <PlanListPanel
           plans={plans}
@@ -1486,6 +1556,7 @@ function LogSetScreen({
   onBack,
   onOpenLibrary,
   libraryEnabled,
+  dayStartHour = PLAN_DAY_START_HOUR,
   setCentricLoggingEnabled,
 }) {
   const [view, setView] = useState('log')
@@ -1504,7 +1575,7 @@ function LogSetScreen({
   const [feedback, setFeedback] = useState(null)
   const [planSuggestions, setPlanSuggestions] = useState([])
   const [planSuggestionsStatus, setPlanSuggestionsStatus] = useState({ loading: true, error: null })
-  const [effectiveDayKey, setEffectiveDayKey] = useState(() => getEffectiveDayKey())
+  const [effectiveDayKey, setEffectiveDayKey] = useState(() => getEffectiveDayKey(new Date(), dayStartHour))
   const [favoritesWindow, setFavoritesWindow] = useState('30d')
   const [favoriteCountsByMachine, setFavoriteCountsByMachine] = useState({})
   const [favoriteLoadFailed, setFavoriteLoadFailed] = useState(false)
@@ -1582,7 +1653,7 @@ function LogSetScreen({
   const loadTodayPlanSuggestions = useCallback(async () => {
     setPlanSuggestionsStatus((prev) => ({ ...prev, loading: true, error: null }))
     try {
-      const suggestions = await getTodayPlanSuggestions({ dayStartHour: PLAN_DAY_START_HOUR })
+      const suggestions = await getTodayPlanSuggestions({ dayStartHour })
       const primarySuggestion = suggestions.find((entry) => entry?.items?.length) || suggestions[0] || null
       const items = primarySuggestion?.items || []
       setPlanSuggestions(items)
@@ -1592,7 +1663,7 @@ function LogSetScreen({
       setPlanSuggestions([])
       setPlanSuggestionsStatus({ loading: false, error: error?.message || 'Unable to load planned exercises right now.' })
     }
-  }, [])
+  }, [dayStartHour])
 
   useEffect(() => {
     loadTodayPlanSuggestions()
@@ -1627,12 +1698,12 @@ function LogSetScreen({
 
   useEffect(() => {
     const tick = () => {
-      const nextDayKey = getEffectiveDayKey()
+      const nextDayKey = getEffectiveDayKey(new Date(), dayStartHour)
       setEffectiveDayKey((current) => (current === nextDayKey ? current : nextDayKey))
     }
     const timer = setInterval(tick, 60000)
     return () => clearInterval(timer)
-  }, [])
+  }, [dayStartHour])
 
   const handleLog = async (durationSeconds = null, machineIdOverride = null) => {
     if (logging) return
@@ -1798,50 +1869,18 @@ function LogSetScreen({
     ...(includeCurrentSession ? [sessionMetrics.totalVolume] : []),
   ]
 
-  const effectiveDayStart = (() => {
-    const [year, month, day] = effectiveDayKey.split('-').map(Number)
-    const start = new Date()
-    if (Number.isFinite(year) && Number.isFinite(month) && Number.isFinite(day)) {
-      start.setFullYear(year, month - 1, day)
-    }
-    start.setHours(PLAN_DAY_START_HOUR, 0, 0, 0)
-    return start
-  })()
+  const adherenceToday = useMemo(
+    () => computeDayAdherence(planSuggestions, sets, { dayKey: effectiveDayKey, dayStartHour }),
+    [planSuggestions, sets, effectiveDayKey],
+  )
 
-  const setsInEffectiveDay = (() => {
-    const startMs = effectiveDayStart.getTime()
-    const endMs = startMs + 24 * 60 * 60 * 1000
-    return sets.filter((set) => {
-      const loggedMs = new Date(set.logged_at).getTime()
-      return Number.isFinite(loggedMs) && loggedMs >= startMs && loggedMs < endMs
-    })
-  })()
-
-  const planAdherence = (() => {
-    if (!planSuggestions.length) {
-      return { targetSets: 0, completedSets: 0, touchedExercises: 0 }
-    }
-
-    let targetSets = 0
-    let completedSets = 0
-    let touchedExercises = 0
-
-    planSuggestions.forEach((item) => {
-      const plannedSets = Number.isFinite(Number(item.targetSets)) ? Number(item.targetSets) : 0
-      const matchingSets = setsInEffectiveDay.filter((set) => {
-        if (item.equipmentId && set.machine_id !== item.equipmentId) return false
-        if (!item.targetSetType) return true
-        return (set.set_type || 'working') === item.targetSetType
-      })
-      if (matchingSets.length > 0) touchedExercises += 1
-      if (plannedSets > 0) {
-        targetSets += plannedSets
-        completedSets += Math.min(plannedSets, matchingSets.length)
-      }
-    })
-
-    return { targetSets, completedSets, touchedExercises }
-  })()
+  const adherenceItemById = useMemo(
+    () => adherenceToday.items.reduce((acc, item) => {
+      acc[item.id] = item
+      return acc
+    }, {}),
+    [adherenceToday.items],
+  )
 
   return (
     <div style={{ padding: '20px 16px', paddingBottom: 100, minHeight: '100dvh' }}>
@@ -1858,9 +1897,9 @@ function LogSetScreen({
           <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)' }}>PLANNED TODAY</div>
           {!planSuggestionsStatus.loading && planSuggestions.length > 0 && (
             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-              {planAdherence.targetSets > 0
-                ? `${planAdherence.completedSets}/${planAdherence.targetSets} planned sets completed`
-                : `${planAdherence.touchedExercises}/${planSuggestions.length} planned exercises touched`}
+              {adherenceToday.plannedSets > 0
+                ? `${adherenceToday.completedSets}/${adherenceToday.plannedSets} planned sets completed`
+                : `${adherenceToday.touchedItems}/${planSuggestions.length} planned exercises touched`}
             </div>
           )}
         </div>
@@ -1881,11 +1920,10 @@ function LogSetScreen({
           <div style={{ display: 'grid', gap: 8 }}>
             {planSuggestions.map((item) => {
               const suggestedMachine = machines.find((machine) => machine.id === item.equipmentId) || item.equipment
-              const matchedSets = setsInEffectiveDay.filter((set) => (
-                set.machine_id === item.equipmentId
-                && (set.set_type || 'working') === (item.targetSetType || 'working')
-              )).length
+              const adherenceItem = adherenceItemById[item.id]
+              const matchedSets = adherenceItem?.completedSets || 0
               const targetLabel = item.targetSets ? `${matchedSets}/${item.targetSets} sets` : `${matchedSets} sets`
+              const completionBadge = adherenceItem?.isComplete ? '✅ Done' : adherenceItem?.isPartial ? '🟡 Partial' : '⬜ Pending'
               return (
                 <button
                   key={item.id}
@@ -1902,7 +1940,7 @@ function LogSetScreen({
                     <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{targetLabel}</div>
                   </div>
                   <div style={{ marginTop: 2, fontSize: 11, color: 'var(--text-muted)' }}>
-                    {item.targetSetType || 'working'} • {item.targetSets ? `${item.targetSets} sets` : 'set target optional'}
+                    {completionBadge} • {item.targetSetType || 'working'} • {item.targetSets ? `${item.targetSets} sets` : 'set target optional'}
                     {item.targetRepRange ? ` • ${item.targetRepRange} reps` : ''}
                   </div>
                 </button>
@@ -3246,6 +3284,7 @@ export default function App() {
           sets={sets}
           machines={machines}
           libraryEnabled={libraryEnabled}
+          dayStartHour={PLAN_DAY_START_HOUR}
           onLogSets={() => setScreen('log')}
           onLibrary={() => {
             if (!libraryEnabled) {
@@ -3283,6 +3322,7 @@ export default function App() {
             setScreen('library')
           }}
           libraryEnabled={libraryEnabled}
+          dayStartHour={PLAN_DAY_START_HOUR}
           setCentricLoggingEnabled={setCentricLoggingEnabled}
         />
       )}
@@ -3322,6 +3362,7 @@ export default function App() {
       {screen === 'plans' && (
         <PlanScreen
           machines={machines}
+          sets={sets}
           onBack={() => setScreen('home')}
         />
       )}
