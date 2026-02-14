@@ -538,7 +538,8 @@ group by st.user_id, st.training_date, st.training_bucket_id;
 --   * No data: users without any matching sets simply produce no rows.
 --   * Null machine_id: excluded because favorites must map to concrete equipment.
 --   * Ties: rank columns remain deterministic by applying machine_id as a secondary sort key.
-create or replace view public.equipment_set_counts as
+create or replace view public.equipment_set_counts
+with (security_invoker = true) as
 with machine_set_counts as (
   select
     st.user_id,
