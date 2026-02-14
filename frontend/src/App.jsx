@@ -968,6 +968,7 @@ function PlanScreen({ machines, sets, onBack }) {
   const [dayStatus, setDayStatus] = useState({ loading: false, error: null })
   const [selectedDayId, setSelectedDayId] = useState(null)
   const [items, setItems] = useState([])
+  const [allDayItems, setAllDayItems] = useState([])
   const [itemStatus, setItemStatus] = useState({ loading: false, error: null })
 
   const selectedPlan = plans.find((plan) => plan.id === selectedPlanId) || null
@@ -976,10 +977,14 @@ function PlanScreen({ machines, sets, onBack }) {
   const selectedDayKey = useMemo(() => {
     if (!selectedDay || !Number.isInteger(selectedDay.weekday)) return null
     const now = new Date()
-    const currentWeekday = now.getDay()
+    const effectiveNow = new Date(now)
+    if (effectiveNow.getHours() < PLAN_DAY_START_HOUR) {
+      effectiveNow.setDate(effectiveNow.getDate() - 1)
+    }
+    const currentWeekday = effectiveNow.getDay()
     const delta = selectedDay.weekday - currentWeekday
-    const target = new Date(now)
-    target.setDate(now.getDate() + delta)
+    const target = new Date(effectiveNow)
+    target.setDate(effectiveNow.getDate() + delta)
     return getLocalDateKey(target)
   }, [selectedDay])
 
@@ -989,8 +994,8 @@ function PlanScreen({ machines, sets, onBack }) {
   )
 
   const selectedWeekProgress = useMemo(
-    () => computeWeekAdherence({ planDays: selectedDay ? [selectedDay] : [], planItems: items, loggedSets: sets, dayStartHour: PLAN_DAY_START_HOUR }),
-    [selectedDay, items, sets],
+    () => computeWeekAdherence({ planDays: days, planItems: allDayItems, loggedSets: sets, dayStartHour: PLAN_DAY_START_HOUR }),
+    [days, allDayItems, sets],
   )
 
   const validateDay = (day) => Number.isInteger(day.weekday) && day.weekday >= 0 && day.weekday <= 6
@@ -1002,6 +1007,14 @@ function PlanScreen({ machines, sets, onBack }) {
     if (numericFields.some((value) => Number(value) < 0)) return 'Range targets must be non-negative.'
     return null
   }
+
+  const replaceDayItemsInSnapshot = useCallback((planDayId, dayItems) => {
+    if (!planDayId) return
+    setAllDayItems((current) => {
+      const withoutCurrentDay = current.filter((entry) => (entry.planDayId || entry.plan_day_id) !== planDayId)
+      return [...withoutCurrentDay, ...dayItems]
+    })
+  }, [])
 
 
 
@@ -1027,6 +1040,7 @@ function PlanScreen({ machines, sets, onBack }) {
     if (!selectedPlanId) {
       setDays([])
       setSelectedDayId(null)
+      setAllDayItems([])
       return
     }
     let active = true
@@ -1045,6 +1059,30 @@ function PlanScreen({ machines, sets, onBack }) {
     })()
     return () => { active = false }
   }, [selectedPlanId])
+
+  useEffect(() => {
+    if (!days.length) {
+      setAllDayItems([])
+      return
+    }
+
+    let active = true
+    ;(async () => {
+      try {
+        const dayItems = await Promise.all(days.map(async (day) => ({
+          id: day.id,
+          items: await getPlanItems(day.id),
+        })))
+        if (!active) return
+        setAllDayItems(dayItems.flatMap((entry) => entry.items))
+      } catch {
+        if (!active) return
+        setAllDayItems([])
+      }
+    })()
+
+    return () => { active = false }
+  }, [days])
 
   useEffect(() => {
     if (!selectedDayId) {
@@ -1175,24 +1213,32 @@ function PlanScreen({ machines, sets, onBack }) {
       ? items.map((entry) => (entry.id === item.id ? optimistic : entry))
       : [...items, optimistic].sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0))
     setItems(next)
+    replaceDayItemsInSnapshot(payload.planDayId, next)
     try {
       const saved = await dbUpsertPlanItem(payload)
       setItems((current) => current.map((entry) => (entry.id === tempId ? saved : entry)))
+      setAllDayItems((current) => current.map((entry) => (
+        (entry.planDayId || entry.plan_day_id) === payload.planDayId && entry.id === tempId ? saved : entry
+      )))
       setItemStatus({ loading: false, error: null })
     } catch (error) {
       setItems(previous)
+      replaceDayItemsInSnapshot(payload.planDayId, previous)
       setItemStatus({ loading: false, error: error?.userMessage || error?.message || 'Failed to save item.' })
     }
   }
 
   const handleDeleteItem = async (id) => {
     const previous = items
-    setItems(items.filter((entry) => entry.id !== id))
+    const next = items.filter((entry) => entry.id !== id)
+    setItems(next)
+    replaceDayItemsInSnapshot(selectedDayId, next)
     try {
       await dbDeletePlanItem(id)
       setItemStatus({ loading: false, error: null })
     } catch (error) {
       setItems(previous)
+      replaceDayItemsInSnapshot(selectedDayId, previous)
       setItemStatus({ loading: false, error: error?.userMessage || error?.message || 'Failed to delete item.' })
     }
   }
