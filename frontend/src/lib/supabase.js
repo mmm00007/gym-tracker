@@ -419,7 +419,6 @@ export async function getEquipmentFavorites(window = '30d') {
     .from('equipment_set_counts')
     .select(`machine_id, sets_30d, sets_90d, sets_all, ${rankColumn}, equipment:machines(*)`)
     .order(rankColumn, { ascending: true })
-    .limit(20)
 
   throwMappedDbError(error, 'Unable to load equipment favorites')
 
