@@ -3,6 +3,38 @@ const toDate = (value) => {
   return Number.isNaN(date.getTime()) ? null : date
 }
 
+const parseLocalCalendarDate = (value) => {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed)
+  if (!match) return null
+
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  const date = new Date(year, month - 1, day)
+
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null
+  }
+
+  return date
+}
+
+const formatLocalDateKey = (value) => {
+  const date = toDate(value)
+  if (!date) return null
+
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 const startOfLocalDay = (value) => {
   const date = toDate(value)
   if (!date) return null
@@ -67,20 +99,22 @@ export function computeWeeklyConsistency(sets = [], { rollingWeeks = 6 } = {}) {
 
   const trainingDays = new Set()
   sets.forEach((set) => {
-    const day = startOfLocalDay(set?.training_date || set?.logged_at)
+    const day = set?.training_date
+      ? parseLocalCalendarDate(set.training_date)
+      : startOfLocalDay(set?.logged_at)
     if (!day) return
-    trainingDays.add(day.toISOString().slice(0, 10))
+    trainingDays.add(formatLocalDateKey(day))
   })
 
   const weeks = weekStarts.map((weekStart) => {
     const completedDays = Array.from({ length: 7 }, (_, offset) => {
       const day = new Date(weekStart)
       day.setDate(day.getDate() + offset)
-      return day.toISOString().slice(0, 10)
+      return formatLocalDateKey(day)
     }).filter((dayKey) => trainingDays.has(dayKey)).length
 
     return {
-      weekStart: weekStart.toISOString().slice(0, 10),
+      weekStart: formatLocalDateKey(weekStart),
       completedDays,
       possibleDays: 7,
       ratio: completedDays / 7,
