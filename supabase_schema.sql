@@ -287,7 +287,7 @@ create or replace function public.recompute_workout_clusters(
 )
 returns void
 language plpgsql
-set search_path = public
+set search_path = public, extensions
 as $$
 begin
   if p_user_id is null or p_training_date is null then
