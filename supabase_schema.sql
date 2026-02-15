@@ -9,6 +9,7 @@ create or replace function public.is_valid_timezone(tz text)
 returns boolean
 language sql
 stable
+set search_path = public
 as $$
   select exists (select 1 from pg_timezone_names where name = tz);
 $$;
@@ -286,6 +287,7 @@ create or replace function public.recompute_workout_clusters(
 )
 returns void
 language plpgsql
+set search_path = public, extensions
 as $$
 begin
   if p_user_id is null or p_training_date is null then
@@ -343,6 +345,7 @@ $$;
 create or replace function public.compute_set_grouping_fields()
 returns trigger
 language plpgsql
+set search_path = public
 as $$
 declare
   pref_day_start int := 4;
@@ -416,6 +419,7 @@ execute function public.validate_set_ownership();
 create or replace function public.refresh_workout_cluster_assignments()
 returns trigger
 language plpgsql
+set search_path = public
 as $$
 begin
   if pg_trigger_depth() > 1 then
@@ -518,7 +522,8 @@ create index idx_analysis_reports_user_created on public.analysis_reports(user_i
 create index idx_analysis_reports_user_type_created on public.analysis_reports(user_id, report_type, created_at desc);
 
 -- ─── HELPER VIEW (training-day summaries) ───────────────────
-create or replace view public.session_summaries as
+create or replace view public.session_summaries
+with (security_invoker = true) as
 select
   st.user_id,
   st.training_date,
