@@ -386,6 +386,7 @@ execute function public.compute_set_grouping_fields();
 create or replace function public.validate_set_ownership()
 returns trigger
 language plpgsql
+set search_path = public
 as $$
 begin
   if new.session_id is not null then
