@@ -44,8 +44,8 @@ create table public.user_preferences (
 alter table public.user_preferences enable row level security;
 create policy "Users manage own preferences" on public.user_preferences
   for all
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
 
 -- ─── MACHINES (canonical equipment model) ───────────────────
 create table public.machines (
@@ -81,8 +81,8 @@ create table public.machines (
 alter table public.machines enable row level security;
 create policy "Users manage own machines" on public.machines
   for all
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
 create index idx_machines_user on public.machines(user_id);
 create index idx_machines_equipment_type on public.machines(user_id, equipment_type);
 create unique index uq_machines_id_user on public.machines(id, user_id);
@@ -168,8 +168,8 @@ create table public.sessions (
 alter table public.sessions enable row level security;
 create policy "Users manage own sessions" on public.sessions
   for all
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
 create index idx_sessions_user on public.sessions(user_id, started_at desc);
 create unique index uq_sessions_id_user on public.sessions(id, user_id);
 
@@ -211,8 +211,8 @@ create table public.plan_items (
 alter table public.plans enable row level security;
 create policy "Users manage own plans" on public.plans
   for all
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
 
 alter table public.plan_days enable row level security;
 create policy "Users manage own plan days" on public.plan_days
@@ -222,7 +222,7 @@ create policy "Users manage own plan days" on public.plan_days
       select 1
       from public.plans p
       where p.id = plan_days.plan_id
-        and p.user_id = auth.uid()
+        and p.user_id = (select auth.uid())
     )
   )
   with check (
@@ -230,7 +230,7 @@ create policy "Users manage own plan days" on public.plan_days
       select 1
       from public.plans p
       where p.id = plan_days.plan_id
-        and p.user_id = auth.uid()
+        and p.user_id = (select auth.uid())
     )
   );
 
@@ -243,7 +243,7 @@ create policy "Users manage own plan items" on public.plan_items
       from public.plan_days pd
       join public.plans p on p.id = pd.plan_id
       where pd.id = plan_items.plan_day_id
-        and p.user_id = auth.uid()
+        and p.user_id = (select auth.uid())
     )
   )
   with check (
@@ -252,7 +252,7 @@ create policy "Users manage own plan items" on public.plan_items
       from public.plan_days pd
       join public.plans p on p.id = pd.plan_id
       where pd.id = plan_items.plan_day_id
-        and p.user_id = auth.uid()
+        and p.user_id = (select auth.uid())
     )
   );
 
@@ -452,8 +452,8 @@ execute function public.refresh_workout_cluster_assignments();
 alter table public.sets enable row level security;
 create policy "Users manage own sets" on public.sets
   for all
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
 create index idx_sets_user_logged on public.sets(user_id, logged_at desc);
 create index idx_sets_bucket on public.sets(user_id, training_bucket_id, logged_at desc);
 create index idx_sets_cluster on public.sets(user_id, training_date, workout_cluster_id, logged_at desc);
@@ -474,8 +474,8 @@ create table public.soreness_reports (
 alter table public.soreness_reports enable row level security;
 create policy "Users manage own soreness" on public.soreness_reports
   for all
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
 create index idx_soreness_user_bucket on public.soreness_reports(user_id, training_bucket_id);
 create index idx_soreness_user_reported on public.soreness_reports(user_id, reported_at desc);
 
@@ -495,8 +495,8 @@ create table public.recommendation_scopes (
 alter table public.recommendation_scopes enable row level security;
 create policy "Users manage own recommendation scopes" on public.recommendation_scopes
   for all
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
 create index idx_recommendation_scopes_user on public.recommendation_scopes(user_id, created_at desc);
 
 -- ─── ANALYSIS REPORTS (persisted recommendation + trend outputs) ─
@@ -517,8 +517,8 @@ create table public.analysis_reports (
 alter table public.analysis_reports enable row level security;
 create policy "Users manage own analysis reports" on public.analysis_reports
   for all
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
 create index idx_analysis_reports_user_created on public.analysis_reports(user_id, created_at desc);
 create index idx_analysis_reports_user_type_created on public.analysis_reports(user_id, report_type, created_at desc);
 
