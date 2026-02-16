@@ -68,6 +68,8 @@ const MUSCLE_BASELINE_COEFFICIENT = {
 const DEFAULT_BASELINE_COEFFICIENT = 1
 const MIN_STABLE_SESSIONS_PER_GROUP = 3
 
+const isFiniteNonNegative = (value) => Number.isFinite(value) && value >= 0
+
 const computeMedian = (values = []) => {
   if (!values.length) return 0
   const sorted = [...values].sort((a, b) => a - b)
@@ -120,13 +122,13 @@ export function computeWorkloadByMuscleGroup(sets = [], machines = []) {
 
   const allGroupSessionVolumes = Array.from(groupSessionVolumes.values())
     .flatMap((sessions) => Array.from(sessions.values()))
-    .filter((value) => Number.isFinite(value) && value > 0)
+    .filter(isFiniteNonNegative)
   const globalGroupSessionMedian = computeMedian(allGroupSessionVolumes)
 
   const groups = Array.from(totals.entries())
     .map(([muscleGroup, rawVolume]) => {
       const perSession = Array.from(groupSessionVolumes.get(muscleGroup)?.values() || [])
-        .filter((value) => Number.isFinite(value) && value > 0)
+        .filter(isFiniteNonNegative)
       const observedSessions = perSession.length
       const observedMedian = computeMedian(perSession)
       const priorBaseline = (globalGroupSessionMedian || 1)
