@@ -3659,7 +3659,8 @@ export default function App() {
   }, [restTimerEnabled])
 
   useEffect(() => {
-    if (!restTimerLastSetAtMs) {
+    const restTimerUiActive = restTimerEnabled && screen === 'log'
+    if (!restTimerLastSetAtMs || !restTimerUiActive) {
       setRestTimerSeconds(0)
       return undefined
     }
@@ -3669,7 +3670,7 @@ export default function App() {
     tick()
     const timer = setInterval(tick, 1000)
     return () => clearInterval(timer)
-  }, [restTimerLastSetAtMs])
+  }, [restTimerEnabled, restTimerLastSetAtMs, screen])
 
   // Auth listener
   useEffect(() => {
