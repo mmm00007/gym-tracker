@@ -104,6 +104,7 @@ export default function Accordion({
               role="region"
               aria-labelledby={sectionButtonId}
               aria-hidden={!isExpanded}
+              inert={!isExpanded ? '' : undefined}
               className="accordion__panel"
               style={{
                 maxHeight: isExpanded ? `${sectionHeights[section.key] || 0}px` : '0px',
