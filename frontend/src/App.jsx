@@ -2252,14 +2252,13 @@ function LogSetScreen({
     }))
     .filter((entry) => Number.isFinite(entry.timestamp) && entry.timestamp >= trendCutoff)
     .sort((a, b) => a.timestamp - b.timestamp)
-  const includeCurrentSession = setsForMachine.length > 0
-  const currentSessionSignals = extractProgressionSignals(setsForMachine)
+  const latestTrendSignals = trendPoints.length ? trendPoints[trendPoints.length - 1].signals : null
   const progressionSeries = [
     {
       key: 'volumeLoad',
       label: 'Volume load trend',
       color: 'var(--accent)',
-      points: [...trendPoints.map((entry) => entry.metrics.totalVolume), ...(includeCurrentSession ? [sessionMetrics.totalVolume] : [])],
+      points: trendPoints.map((entry) => entry.metrics.totalVolume),
       formatter: (value) => `${fmtNumber(value, 0)} kg`,
     },
     {
@@ -2268,7 +2267,6 @@ function LogSetScreen({
       color: 'var(--blue)',
       points: [
         ...trendPoints.map((entry) => entry.signals.topSetWeightInRange).filter((value) => Number.isFinite(value)),
-        ...(includeCurrentSession && Number.isFinite(currentSessionSignals.topSetWeightInRange) ? [currentSessionSignals.topSetWeightInRange] : []),
       ],
       formatter: (value) => `${fmtNumber(value, 1)} kg`,
       emptyText: `No top sets in ${TARGET_TOP_SET_REP_RANGE.min}-${TARGET_TOP_SET_REP_RANGE.max} reps for this timeframe.`,
@@ -2279,7 +2277,6 @@ function LogSetScreen({
       color: '#88d8b0',
       points: [
         ...trendPoints.map((entry) => entry.signals.estOneRm).filter((value) => Number.isFinite(value)),
-        ...(includeCurrentSession && Number.isFinite(currentSessionSignals.estOneRm) ? [currentSessionSignals.estOneRm] : []),
       ],
       formatter: (value) => `${fmtNumber(value, 1)} kg`,
       emptyText: 'No working/top sets yet in this timeframe.',
@@ -2290,13 +2287,12 @@ function LogSetScreen({
       color: '#ff8a5c',
       points: [
         ...trendPoints.map((entry) => entry.signals.totalWorkingReps).filter((value) => Number.isFinite(value) && value > 0),
-        ...(includeCurrentSession && currentSessionSignals.totalWorkingReps > 0 ? [currentSessionSignals.totalWorkingReps] : []),
       ],
       formatter: (value) => fmtNumber(value, 0),
       emptyText: 'No working-set reps logged in this timeframe.',
     },
   ]
-  const nextTarget = recommendNextTarget(currentSessionSignals, selectedMachine)
+  const nextTarget = recommendNextTarget(latestTrendSignals, selectedMachine)
 
   return (
     <div style={{ padding: '20px 16px', paddingBottom: 100, minHeight: '100dvh' }}>
