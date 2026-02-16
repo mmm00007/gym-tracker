@@ -50,9 +50,45 @@ const startOfLocalWeek = (value) => {
   return day
 }
 
+const MUSCLE_BASELINE_COEFFICIENT = {
+  Chest: 1,
+  Back: 1.1,
+  Shoulders: 0.8,
+  Biceps: 0.55,
+  Triceps: 0.55,
+  Legs: 1.35,
+  Core: 0.6,
+  Glutes: 1,
+  Calves: 0.5,
+  Forearms: 0.45,
+  Hamstrings: 0.8,
+  Quadriceps: 0.95,
+}
+
+const DEFAULT_BASELINE_COEFFICIENT = 1
+const MIN_STABLE_SESSIONS_PER_GROUP = 3
+
+const computeMedian = (values = []) => {
+  if (!values.length) return 0
+  const sorted = [...values].sort((a, b) => a - b)
+  const middle = Math.floor(sorted.length / 2)
+  return sorted.length % 2
+    ? sorted[middle]
+    : (sorted[middle - 1] + sorted[middle]) / 2
+}
+
+const toTrainingSessionKey = (set) => {
+  if (set?.training_bucket_id) return `bucket:${set.training_bucket_id}`
+  const explicitDate = parseLocalCalendarDate(set?.training_date)
+  if (explicitDate) return `day:${formatLocalDateKey(explicitDate)}`
+  const loggedDate = formatLocalDateKey(set?.logged_at)
+  return loggedDate ? `day:${loggedDate}` : null
+}
+
 export function computeWorkloadByMuscleGroup(sets = [], machines = []) {
   const machineById = new Map(machines.map((machine) => [machine.id, machine]))
   const totals = new Map()
+  const groupSessionVolumes = new Map()
   let totalWorkload = 0
   let contributingSetCount = 0
 
@@ -67,23 +103,64 @@ export function computeWorkloadByMuscleGroup(sets = [], machines = []) {
 
     const setVolume = reps * weight
     const contributionPerGroup = setVolume / groups.length
+    const sessionKey = toTrainingSessionKey(set)
 
     groups.forEach((group) => {
       totals.set(group, (totals.get(group) || 0) + contributionPerGroup)
+
+      if (!sessionKey) return
+      const sessions = groupSessionVolumes.get(group) || new Map()
+      sessions.set(sessionKey, (sessions.get(sessionKey) || 0) + contributionPerGroup)
+      groupSessionVolumes.set(group, sessions)
     })
 
     totalWorkload += setVolume
     contributingSetCount += 1
   })
 
+  const allGroupSessionVolumes = Array.from(groupSessionVolumes.values())
+    .flatMap((sessions) => Array.from(sessions.values()))
+    .filter((value) => Number.isFinite(value) && value > 0)
+  const globalGroupSessionMedian = computeMedian(allGroupSessionVolumes)
+
   const groups = Array.from(totals.entries())
-    .map(([muscleGroup, workload]) => ({ muscleGroup, workload }))
-    .sort((a, b) => b.workload - a.workload)
+    .map(([muscleGroup, rawVolume]) => {
+      const perSession = Array.from(groupSessionVolumes.get(muscleGroup)?.values() || [])
+        .filter((value) => Number.isFinite(value) && value > 0)
+      const observedSessions = perSession.length
+      const observedMedian = computeMedian(perSession)
+      const priorBaseline = (globalGroupSessionMedian || 1)
+        * (MUSCLE_BASELINE_COEFFICIENT[muscleGroup] || DEFAULT_BASELINE_COEFFICIENT)
+      const sparseWeight = Math.min(1, observedSessions / MIN_STABLE_SESSIONS_PER_GROUP)
+      const blendedBaseline = (observedMedian * sparseWeight) + (priorBaseline * (1 - sparseWeight))
+      const normalizedRawScore = rawVolume / Math.max(blendedBaseline, 1)
+      const normalizedScore = observedSessions >= MIN_STABLE_SESSIONS_PER_GROUP
+        ? normalizedRawScore
+        : 1 + ((normalizedRawScore - 1) * sparseWeight)
+
+      return {
+        muscleGroup,
+        workload: rawVolume,
+        rawVolume,
+        normalizedScore,
+        baselineVolume: blendedBaseline,
+        observedSessions,
+        sparseData: observedSessions < MIN_STABLE_SESSIONS_PER_GROUP,
+      }
+    })
+    .sort((a, b) => b.normalizedScore - a.normalizedScore)
 
   return {
     groups,
     totalWorkload,
     contributingSetCount,
+    normalization: {
+      method: 'blended_group_session_median',
+      description: 'Normalized score = raw volume ÷ blended baseline, where baseline combines each group\'s median per-session volume with a coefficient-weighted global group-session median. Scores are shrunk toward 1.0 until at least 3 sessions exist for that group.',
+      minStableSessionsPerGroup: MIN_STABLE_SESSIONS_PER_GROUP,
+      globalGroupSessionMedian,
+      muscleBaselineCoefficient: MUSCLE_BASELINE_COEFFICIENT,
+    },
   }
 }
 
