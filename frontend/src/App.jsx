@@ -21,6 +21,7 @@ import {
   SegmentedButtons,
 } from './components/uiPrimitives'
 import HistoryScreen from './screens/HistoryScreen'
+import MachineCard from './components/machines/MachineCard'
 import {
   computeWorkloadByMuscleGroup,
   computeWeeklyConsistency,
@@ -506,70 +507,6 @@ function CompactNumberControl({ label, value, onChange, min, max, step, unit, co
             {action.label}
           </button>
         ))}
-      </div>
-    </div>
-  )
-}
-
-function MachineCard({ machine, onSelect, onEdit, compact, usageBadge }) {
-  const primaryColor = mc(machine.muscle_groups?.[0])
-  const thumbnails = machine.thumbnails || []
-  const thumb = thumbnails[0]
-  return (
-    <div onClick={onSelect} style={{
-      background: 'linear-gradient(135deg, var(--surface), var(--surface2))', border: '1px solid var(--border)',
-      borderRadius: 16, padding: compact ? 12 : 14, cursor: 'pointer', borderLeft: `3px solid ${primaryColor}`,
-      minHeight: compact ? 210 : 236,
-    }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div style={{
-          width: '100%', height: compact ? 130 : 148, borderRadius: 12, overflow: 'hidden', flexShrink: 0,
-          background: 'var(--surface2)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: 'var(--text-dim)', fontSize: 28, position: 'relative',
-        }}>
-          {thumb ? (
-            <img src={thumb} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-          ) : (
-            <span>🏋️</span>
-          )}
-          {thumbnails.length > 1 && (
-            <div style={{
-              position: 'absolute', bottom: 4, right: 4, background: 'rgba(0,0,0,0.6)', color: '#fff',
-              fontSize: 10, padding: '2px 6px', borderRadius: 999, fontWeight: 700,
-            }}>+{thumbnails.length - 1}</div>
-          )}
-        </div>
-        <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--font-mono)', marginBottom: 4 }}>{machine.name}</div>
-            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>{machine.movement}</div>
-            {usageBadge && (
-              <div style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-                fontSize: 11,
-                color: 'var(--text-dim)',
-                border: '1px solid var(--border)',
-                background: 'var(--surface2)',
-                borderRadius: 999,
-                padding: '2px 8px',
-                marginBottom: 6,
-              }}>
-                <span style={{ fontFamily: 'var(--font-code)' }}>{usageBadge}</span>
-              </div>
-            )}
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {machine.muscle_groups?.map((m, i) => <Pill key={i} text={m} color={mc(m)} />)}
-            </div>
-          </div>
-          {onEdit && (
-            <button onClick={(e) => { e.stopPropagation(); onEdit() }} style={{
-              border: '1px solid var(--border-light)', borderRadius: 8, color: 'var(--text-muted)',
-              padding: '4px 10px', fontSize: 12, height: 'fit-content',
-            }}>✎</button>
-          )}
-        </div>
       </div>
     </div>
   )
@@ -1420,6 +1357,7 @@ function PlanItemEditor({ day, items, machines, loading, error, onSaveItem, onDe
                     key={machine.id}
                     machine={machine}
                     compact
+                    getMuscleColor={mc}
                     onSelect={() => {
                       setForm((prev) => ({ ...prev, equipmentId: machine.id }))
                       setShowMachinePicker(false)
@@ -2089,14 +2027,21 @@ function LibraryScreen({ machines, onSaveMachine, onDeleteMachine, onBack }) {
           <div>No exercises in your library yet.</div>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div className="machine-grid">
           {filteredMachines.length === 0 && (
-            <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-dim)', fontSize: 13 }}>
+            <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-dim)', fontSize: 13, gridColumn: '1 / -1' }}>
               No entries match your current filters.
             </div>
           )}
           {filteredMachines.map((machine) => (
-            <MachineCard key={machine.id} machine={machine} compact onSelect={() => setEditingMachine(machine)} onEdit={() => setEditingMachine(machine)} />
+            <MachineCard
+              key={machine.id}
+              machine={machine}
+              compact
+              getMuscleColor={mc}
+              onSelect={() => setEditingMachine(machine)}
+              onEdit={() => setEditingMachine(machine)}
+            />
           ))}
         </div>
       )}
@@ -2524,9 +2469,9 @@ function LogSetScreen({
             <div>{libraryEnabled ? 'No exercises yet. Add one from Library.' : 'No exercises available yet.'}</div>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div className="machine-grid">
             {filteredMachines.length === 0 && (
-              <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-dim)', fontSize: 13 }}>
+              <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-dim)', fontSize: 13, gridColumn: '1 / -1' }}>
                 No exercises for that muscle group yet.
               </div>
             )}
@@ -2535,6 +2480,7 @@ function LogSetScreen({
                 key={m.id}
                 machine={m}
                 usageBadge={usageBadgeForMachine(m.id)}
+                getMuscleColor={mc}
                 onSelect={() => selectMachine(m)}
               />
             ))}
