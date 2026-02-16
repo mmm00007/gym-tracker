@@ -858,6 +858,7 @@ function HomeScreen({
   const todayKey = useMemo(() => getEffectiveDayKey(new Date(), dayStartHour), [dayStartHour])
   const selectedDay = selectedDayKey ? monthHeatmap.days.find((day) => day.dayKey === selectedDayKey) || null : null
   const selectedDayDetails = selectedDayKey ? dailyAggregateByKey.get(selectedDayKey) || null : null
+  const heroTitleFontSize = 'clamp(2.1rem, 10vw, 3rem)'
 
   const getHeatColor = (volume, maxVolume) => {
     if (!volume || !maxVolume) return 'var(--surface)'
@@ -893,10 +894,21 @@ function HomeScreen({
         <button onClick={onSignOut} style={{ color: 'var(--text-dim)', fontSize: 12, padding: 8 }}>Sign out</button>
       </div>
 
-      <div style={{ textAlign: 'center', marginTop: 24, marginBottom: 32 }}>
+      <div style={{ textAlign: 'center', marginTop: 24, marginBottom: 32, minWidth: 0 }}>
         <div style={{ fontSize: 13, letterSpacing: 6, color: 'var(--text-dim)', textTransform: 'uppercase', marginBottom: 8, fontFamily: 'var(--font-code)' }}>iron</div>
-        <h1 style={{ fontSize: 48, fontWeight: 900, margin: 0, background: 'linear-gradient(135deg, var(--accent), var(--blue))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontFamily: 'var(--font-mono)', letterSpacing: -2 }}>TRACKER</h1>
-        <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 8, letterSpacing: 3, fontFamily: 'var(--font-code)' }}>AI-POWERED GYM LOG</div>
+        <h1 style={{
+          fontSize: heroTitleFontSize,
+          lineHeight: 1,
+          fontWeight: 900,
+          margin: 0,
+          background: 'linear-gradient(135deg, var(--accent), var(--blue))',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+          fontFamily: 'var(--font-mono)',
+          letterSpacing: 'clamp(-1px, -0.2vw, -2px)',
+          overflowWrap: 'anywhere',
+        }}>TRACKER</h1>
+        <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 8, letterSpacing: 3, fontFamily: 'var(--font-code)', overflowWrap: 'anywhere' }}>AI-POWERED GYM LOG</div>
       </div>
 
       {pendingSoreness.map(s => {
@@ -931,17 +943,17 @@ function HomeScreen({
         {sampleWarning && <div style={{ fontSize: 12, color: '#ffb347', marginBottom: 12 }}>⚠ {sampleWarning}</div>}
 
         <div className="page-grid" style={{ gap: 10 }}>
-          <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 12, padding: 12 }}>
+          <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 12, padding: 12, minWidth: 0, overflow: 'hidden' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <div style={{ fontSize: 13, fontWeight: 700 }}>Muscle-group normalized workload</div>
+              <div style={{ fontSize: 13, fontWeight: 700, minWidth: 0, overflowWrap: 'anywhere' }}>Muscle-group normalized workload</div>
               <span title="Raw volume formula: set volume = reps × weight, split equally across each machine's listed muscle groups. Normalized score = raw volume ÷ blended baseline (group median per-session volume + coefficient-weighted global median). Sparse groups (under 3 sessions) are shrunk toward 1.0 to avoid overreaction." style={{ fontSize: 12, color: 'var(--text-dim)' }}>ⓘ</span>
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Normalized training load by muscle group</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
-              <div style={{ fontSize: 20, fontFamily: 'var(--font-mono)', fontWeight: 800 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 20, fontFamily: 'var(--font-mono)', fontWeight: 800, minWidth: 0, overflowWrap: 'anywhere' }}>
                 {topWorkloadGroup ? `${topWorkloadGroup.muscleGroup} (${fmtNumber(topWorkloadGroup.normalizedScore, 2)}x)` : 'No data'}
               </div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', minWidth: 0, overflowWrap: 'anywhere' }}>
                 {workloadByMuscle.contributingSetCount} contributing sets
               </div>
             </div>
@@ -957,9 +969,9 @@ function HomeScreen({
             {!!workloadByMuscle.groups.length && (
               <div style={{ display: 'grid', gap: 6 }}>
                 {workloadByMuscle.groups.slice(0, 4).map((entry) => (
-                  <div key={entry.muscleGroup} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div key={entry.muscleGroup} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: 'wrap' }}>
                     <Pill text={entry.muscleGroup} color={mc(entry.muscleGroup)} />
-                    <div title={`Raw volume ${fmtNumber(entry.rawVolume, 0)} | Baseline ${fmtNumber(entry.baselineVolume, 0)} | Sessions ${entry.observedSessions}`} style={{ textAlign: 'right' }}>
+                    <div title={`Raw volume ${fmtNumber(entry.rawVolume, 0)} | Baseline ${fmtNumber(entry.baselineVolume, 0)} | Sessions ${entry.observedSessions}`} style={{ textAlign: 'right', minWidth: 0, marginLeft: 'auto' }}>
                       <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{fmtNumber(entry.normalizedScore, 2)}x</div>
                       <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>raw {fmtNumber(entry.rawVolume, 0)}</div>
                     </div>
@@ -969,18 +981,18 @@ function HomeScreen({
             )}
           </div>
 
-          <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 12, padding: 12 }}>
+          <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 12, padding: 12, minWidth: 0, overflow: 'hidden' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-              <div style={{ fontSize: 13, fontWeight: 700 }}>Weekly consistency</div>
+              <div style={{ fontSize: 13, fontWeight: 700, minWidth: 0, overflowWrap: 'anywhere' }}>Weekly consistency</div>
               <span title="Primary value uses the current week: completed training days / 7. Trend line shows the same ratio for each week over a rolling 6-week window. A completed day is any local calendar day with ≥1 logged set." style={{ fontSize: 12, color: 'var(--text-dim)' }}>ⓘ</span>
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Training days this week</div>
             {!weeklyConsistency.completedDays && <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 6 }}>No completed training days in the current 6-week window.</div>}
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
-              <div style={{ fontSize: 20, fontFamily: 'var(--font-mono)', fontWeight: 800 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 20, fontFamily: 'var(--font-mono)', fontWeight: 800, minWidth: 0 }}>
                 {lowSampleConsistency ? 'Building baseline' : `${fmtNumber(currentWeekConsistency.ratio * 100, 1)}%`}
               </div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', minWidth: 0 }}>
                 {currentWeekConsistency.completedDays} / {currentWeekConsistency.possibleDays} days
               </div>
             </div>
@@ -990,18 +1002,18 @@ function HomeScreen({
             {!!consistencyPoints.length && <MiniLineChart points={consistencyPoints} color="var(--blue)" height={52} />}
           </div>
 
-          <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 12, padding: 12 }}>
+          <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 12, padding: 12, minWidth: 0, overflow: 'hidden' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8 }}>
-              <div>
+              <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 700 }}>Monthly training volume</div>
-                <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>Heat intensity by total daily volume</div>
+                <div style={{ fontSize: 12, color: 'var(--text-dim)', overflowWrap: 'anywhere' }}>Heat intensity by total daily volume</div>
               </div>
               <button onClick={() => { setHeatmapMonth(getMonthStart(new Date())); setSelectedDayKey(todayKey) }} style={{ fontSize: 11, border: '1px solid var(--border)', borderRadius: 8, padding: '6px 8px', color: 'var(--text-muted)' }}>Today</button>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 8 }}>
+            <div style={{ display: 'grid', alignItems: 'center', gridTemplateColumns: '44px minmax(0, 1fr) 44px', marginBottom: 8, gap: 8 }}>
               <button onClick={() => setHeatmapMonth((month) => shiftMonth(month, -1))} style={{ fontSize: 14, color: 'var(--text-muted)', padding: '4px 8px' }}>←</button>
-              <div style={{ fontSize: 13, fontFamily: 'var(--font-mono)' }}>{monthLabel(monthHeatmap.monthStart)}</div>
+              <div style={{ fontSize: 13, fontFamily: 'var(--font-mono)', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{monthLabel(monthHeatmap.monthStart)}</div>
               <button onClick={() => setHeatmapMonth((month) => shiftMonth(month, 1))} style={{ fontSize: 14, color: 'var(--text-muted)', padding: '4px 8px' }}>→</button>
             </div>
 
@@ -1060,17 +1072,17 @@ function HomeScreen({
             )}
           </div>
 
-          <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 12, padding: 12 }}>
+          <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 12, padding: 12, minWidth: 0, overflow: 'hidden' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <div style={{ fontSize: 13, fontWeight: 700 }}>Workload distribution balance</div>
+              <div style={{ fontSize: 13, fontWeight: 700, minWidth: 0, overflowWrap: 'anywhere' }}>Workload distribution balance</div>
               <span title="Balance index (Shannon evenness): H = -Σ pᵢ ln(pᵢ), where pᵢ = muscle-group workload share. Index = H / ln(k), with k = number of active muscle groups. Range 0-1 (1 = perfectly even)." style={{ fontSize: 12, color: 'var(--text-dim)' }}>ⓘ</span>
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Balanced across active groups</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
-              <div style={{ fontSize: 20, fontFamily: 'var(--font-mono)', fontWeight: 800 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 20, fontFamily: 'var(--font-mono)', fontWeight: 800, minWidth: 0 }}>
                 {lowSampleBalance ? 'Collecting data' : `${fmtNumber(balance.index * 100, 1)}%`}
               </div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', minWidth: 0, overflowWrap: 'anywhere' }}>
                 {balance.activeGroups} active groups from {workloadByMuscle.contributingSetCount} sets
               </div>
             </div>
@@ -1086,49 +1098,49 @@ function HomeScreen({
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <button onClick={onLogSets} style={{
           background: 'linear-gradient(135deg, var(--accent), var(--accent-dark))', borderRadius: 16,
-          padding: 22, textAlign: 'left', boxShadow: '0 0 40px var(--accent)22',
+          padding: 22, textAlign: 'left', boxShadow: '0 0 40px var(--accent)22', minHeight: 44, minWidth: 44, width: '100%',
         }}>
           <div style={{ fontSize: 18, fontWeight: 900, color: '#000', fontFamily: 'var(--font-mono)' }}>📝 Log Sets</div>
-          <div style={{ fontSize: 13, color: '#022', marginTop: 4 }}>Capture sets directly without starting a session</div>
+          <div style={{ fontSize: 13, color: '#022', marginTop: 4, overflowWrap: 'anywhere' }}>Capture sets directly without starting a session</div>
         </button>
 
         {libraryEnabled && (
           <button onClick={onLibrary} style={{
-            background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, textAlign: 'left',
+            background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, textAlign: 'left', minHeight: 44, minWidth: 44, width: '100%',
           }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>📚 Library</div>
-            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Manage exercises and defaults</div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4, overflowWrap: 'anywhere' }}>Manage exercises and defaults</div>
           </button>
         )}
 
         <button onClick={onAnalysis} style={{
-          background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, textAlign: 'left',
+          background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, textAlign: 'left', minHeight: 44, minWidth: 44, width: '100%',
         }}>
           <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>📈 Analyze</div>
-          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Detailed progression and set-type insights</div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4, overflowWrap: 'anywhere' }}>Detailed progression and set-type insights</div>
         </button>
 
         <button onClick={onHistory} style={{
-          background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, textAlign: 'left',
+          background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, textAlign: 'left', minHeight: 44, minWidth: 44, width: '100%',
         }}>
           <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>📊 History</div>
-          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Training-day timeline and recent sets</div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4, overflowWrap: 'anywhere' }}>Training-day timeline and recent sets</div>
         </button>
 
         {plansEnabled && (
           <button onClick={onPlans} style={{
-            background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, textAlign: 'left',
+            background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, textAlign: 'left', minHeight: 44, minWidth: 44, width: '100%',
           }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>🗓️ Plans</div>
-            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Build weekly templates with target sets and exercises</div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4, overflowWrap: 'anywhere' }}>Build weekly templates with target sets and exercises</div>
           </button>
         )}
 
         <button onClick={onDiagnostics} style={{
-          background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, textAlign: 'left',
+          background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20, textAlign: 'left', minHeight: 44, minWidth: 44, width: '100%',
         }}>
           <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>🧰 Diagnostics</div>
-          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Check API health and share logs</div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4, overflowWrap: 'anywhere' }}>Check API health and share logs</div>
         </button>
       </div>
     </div>
