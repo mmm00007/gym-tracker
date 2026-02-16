@@ -2237,6 +2237,83 @@ function LogSetScreen({
     [adherenceToday.items],
   )
 
+  const setsForMachine = selectedMachine ? sets.filter(s => s.machine_id === selectedMachine.id) : []
+  const historyForMachine = selectedMachine ? (machineHistory[selectedMachine.id] || []) : []
+  const sessionMetrics = buildMetrics(setsForMachine)
+  const trendCutoff = Date.now() - (TREND_TIMEFRAME_OPTIONS.find((option) => option.key === trendTimeframe)?.ms || TREND_TIMEFRAME_OPTIONS[1].ms)
+  const trendPoints = historyForMachine
+    .map((entry) => ({
+      ...entry,
+      timestamp: new Date(entry.ended_at || entry.training_date).getTime(),
+      metrics: entry.metrics || buildMetrics(entry.sets || []),
+      signals: extractProgressionSignals(entry.sets || []),
+    }))
+    .filter((entry) => Number.isFinite(entry.timestamp) && entry.timestamp >= trendCutoff)
+    .sort((a, b) => a.timestamp - b.timestamp)
+  const latestTrendSignals = trendPoints.length ? trendPoints[trendPoints.length - 1].signals : null
+  const progressionSeries = [
+    {
+      key: 'volumeLoad',
+      label: 'Volume load trend',
+      color: 'var(--accent)',
+      points: trendPoints.map((entry) => entry.metrics.totalVolume),
+      formatter: (value) => `${fmtNumber(value, 0)} kg`,
+    },
+    {
+      key: 'topSetWeight',
+      label: `Top-set weight (${TARGET_TOP_SET_REP_RANGE.min}-${TARGET_TOP_SET_REP_RANGE.max} reps)`,
+      color: 'var(--blue)',
+      points: [
+        ...trendPoints.map((entry) => entry.signals.topSetWeightInRange).filter((value) => Number.isFinite(value)),
+      ],
+      formatter: (value) => `${fmtNumber(value, 1)} kg`,
+      emptyText: `No top sets in ${TARGET_TOP_SET_REP_RANGE.min}-${TARGET_TOP_SET_REP_RANGE.max} reps for this timeframe.`,
+    },
+    {
+      key: 'estOneRm',
+      label: 'Estimated 1RM (working sets)',
+      color: '#88d8b0',
+      points: [
+        ...trendPoints.map((entry) => entry.signals.estOneRm).filter((value) => Number.isFinite(value)),
+      ],
+      formatter: (value) => `${fmtNumber(value, 1)} kg`,
+      emptyText: 'No working/top sets yet in this timeframe.',
+    },
+    {
+      key: 'workingReps',
+      label: 'Total reps in working sets',
+      color: '#ff8a5c',
+      points: [
+        ...trendPoints.map((entry) => entry.signals.totalWorkingReps).filter((value) => Number.isFinite(value) && value > 0),
+      ],
+      formatter: (value) => fmtNumber(value, 0),
+      emptyText: 'No working-set reps logged in this timeframe.',
+    },
+  ]
+  const nextTarget = recommendNextTarget(latestTrendSignals, selectedMachine)
+  const interactionLocked = setInProgress || Boolean(pendingTimedLog)
+  const setTypeOptions = SET_TYPE_OPTIONS.map((type) => ({ value: type, label: type }))
+
+  const actionState = !setCentricLoggingEnabled
+    ? 'manual'
+    : pendingTimedLog
+      ? 'confirm'
+      : setInProgress
+        ? 'stop'
+        : 'start'
+
+  useEffect(() => {
+    measureSectionHeights()
+  }, [
+    measureSectionHeights,
+    selectedMachine?.id,
+    setsForMachine.length,
+    sets.length,
+    trendTimeframe,
+    historyForMachine.length,
+    progressionSeries.length,
+  ])
+
   // Select view
   if (view === 'select') {
     const compareBySecondaryOrder = (a, b) => {
@@ -2339,84 +2416,6 @@ function LogSetScreen({
       </div>
     )
   }
-
-  // Main log view
-  const setsForMachine = selectedMachine ? sets.filter(s => s.machine_id === selectedMachine.id) : []
-  const historyForMachine = selectedMachine ? (machineHistory[selectedMachine.id] || []) : []
-  const sessionMetrics = buildMetrics(setsForMachine)
-  const trendCutoff = Date.now() - (TREND_TIMEFRAME_OPTIONS.find((option) => option.key === trendTimeframe)?.ms || TREND_TIMEFRAME_OPTIONS[1].ms)
-  const trendPoints = historyForMachine
-    .map((entry) => ({
-      ...entry,
-      timestamp: new Date(entry.ended_at || entry.training_date).getTime(),
-      metrics: entry.metrics || buildMetrics(entry.sets || []),
-      signals: extractProgressionSignals(entry.sets || []),
-    }))
-    .filter((entry) => Number.isFinite(entry.timestamp) && entry.timestamp >= trendCutoff)
-    .sort((a, b) => a.timestamp - b.timestamp)
-  const latestTrendSignals = trendPoints.length ? trendPoints[trendPoints.length - 1].signals : null
-  const progressionSeries = [
-    {
-      key: 'volumeLoad',
-      label: 'Volume load trend',
-      color: 'var(--accent)',
-      points: trendPoints.map((entry) => entry.metrics.totalVolume),
-      formatter: (value) => `${fmtNumber(value, 0)} kg`,
-    },
-    {
-      key: 'topSetWeight',
-      label: `Top-set weight (${TARGET_TOP_SET_REP_RANGE.min}-${TARGET_TOP_SET_REP_RANGE.max} reps)`,
-      color: 'var(--blue)',
-      points: [
-        ...trendPoints.map((entry) => entry.signals.topSetWeightInRange).filter((value) => Number.isFinite(value)),
-      ],
-      formatter: (value) => `${fmtNumber(value, 1)} kg`,
-      emptyText: `No top sets in ${TARGET_TOP_SET_REP_RANGE.min}-${TARGET_TOP_SET_REP_RANGE.max} reps for this timeframe.`,
-    },
-    {
-      key: 'estOneRm',
-      label: 'Estimated 1RM (working sets)',
-      color: '#88d8b0',
-      points: [
-        ...trendPoints.map((entry) => entry.signals.estOneRm).filter((value) => Number.isFinite(value)),
-      ],
-      formatter: (value) => `${fmtNumber(value, 1)} kg`,
-      emptyText: 'No working/top sets yet in this timeframe.',
-    },
-    {
-      key: 'workingReps',
-      label: 'Total reps in working sets',
-      color: '#ff8a5c',
-      points: [
-        ...trendPoints.map((entry) => entry.signals.totalWorkingReps).filter((value) => Number.isFinite(value) && value > 0),
-      ],
-      formatter: (value) => fmtNumber(value, 0),
-      emptyText: 'No working-set reps logged in this timeframe.',
-    },
-  ]
-  const nextTarget = recommendNextTarget(latestTrendSignals, selectedMachine)
-  const interactionLocked = setInProgress || Boolean(pendingTimedLog)
-  const setTypeOptions = SET_TYPE_OPTIONS.map((type) => ({ value: type, label: type }))
-
-  const actionState = !setCentricLoggingEnabled
-    ? 'manual'
-    : pendingTimedLog
-      ? 'confirm'
-      : setInProgress
-        ? 'stop'
-        : 'start'
-
-  useEffect(() => {
-    measureSectionHeights()
-  }, [
-    measureSectionHeights,
-    selectedMachine?.id,
-    setsForMachine.length,
-    sets.length,
-    trendTimeframe,
-    historyForMachine.length,
-    progressionSeries.length,
-  ])
 
   const sectionToggleButtonStyle = {
     width: '100%',
