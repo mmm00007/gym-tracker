@@ -34,6 +34,7 @@ const fmtTime = (d) => new Date(d).toLocaleTimeString('en-GB', { hour: '2-digit'
 const fmtDur = (ms) => { const m = Math.floor(ms / 60000); return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m` }
 const fmtTimer = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 const PLAN_DAY_START_HOUR = 4
+const REST_TIMER_ENABLED_STORAGE_KEY = 'gym-tracker.rest-timer-enabled'
 
 const getLocalDateKey = (date) => {
   const year = date.getFullYear()
@@ -1920,6 +1921,10 @@ function LogSetScreen({
   dayStartHour = PLAN_DAY_START_HOUR,
   setCentricLoggingEnabled,
   favoritesOrderingEnabled,
+  restTimerEnabled,
+  onSetRestTimerEnabled,
+  restTimerSeconds,
+  restTimerLastSetAtMs,
 }) {
   const [view, setView] = useState('log')
   const [selectedMachine, setSelectedMachine] = useState(null)
@@ -1928,8 +1933,6 @@ function LogSetScreen({
   const [weight, setWeight] = useState(20)
   const [setType, setSetType] = useState('working')
   const [setTypeByMachine, setSetTypeByMachine] = useState({})
-  const [restSeconds, setRestSeconds] = useState(0)
-  const [restTimerEnabled, setRestTimerEnabled] = useState(true)
   const [trendTimeframe, setTrendTimeframe] = useState('1w')
   const [setInProgress, setSetInProgress] = useState(false)
   const [activeSetSeconds, setActiveSetSeconds] = useState(0)
@@ -1947,11 +1950,9 @@ function LogSetScreen({
     allSets: false,
   })
   const [sectionHeights, setSectionHeights] = useState({ snapshot: 0, machineSets: 0, allSets: 0 })
-  const restRef = useRef(null)
   const activeSetRef = useRef(null)
   const setStartTime = useRef(null)
   const setMachineIdRef = useRef(null)
-  const lastSetTime = useRef(null)
   const feedbackTimeoutRef = useRef(null)
   const snapshotSectionRef = useRef(null)
   const machineSetsSectionRef = useRef(null)
@@ -1990,20 +1991,6 @@ function LogSetScreen({
     if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current)
     if (activeSetRef.current) clearInterval(activeSetRef.current)
   }, [])
-
-  // Rest timer
-  useEffect(() => {
-    if (sets.length > 0) {
-      lastSetTime.current = new Date(sets[sets.length - 1].logged_at).getTime()
-    }
-    const tick = () => {
-      if (lastSetTime.current) {
-        setRestSeconds(Math.floor((Date.now() - lastSetTime.current) / 1000))
-      }
-    }
-    restRef.current = setInterval(tick, 1000)
-    return () => clearInterval(restRef.current)
-  }, [sets.length])
 
   useEffect(() => {
     if (!setInProgress) return undefined
@@ -2111,14 +2098,12 @@ function LogSetScreen({
     if (!targetMachineId) return
     const targetMachine = machines.find((m) => m.id === targetMachineId) || selectedMachine
     setLogging(true)
-    const rest = restTimerEnabled && lastSetTime.current
-      ? Math.floor((Date.now() - lastSetTime.current) / 1000)
+    const rest = restTimerEnabled && restTimerLastSetAtMs
+      ? Math.floor((Date.now() - restTimerLastSetAtMs) / 1000)
       : null
     try {
       await onLogSet(targetMachineId, reps, weight, durationSeconds, rest, setType)
       setSetTypeByMachine((prev) => ({ ...prev, [targetMachineId]: setType }))
-      lastSetTime.current = Date.now()
-      setRestSeconds(0)
       if (navigator.vibrate) navigator.vibrate(50)
       const weightLabel = isBodyweightExercise(targetMachine) ? `${weight}kg additional` : `${weight}kg`
       showFeedback(`Logged ${reps} × ${weightLabel} (${setType})`, 'success')
@@ -2517,7 +2502,7 @@ function LogSetScreen({
           {setCentricLoggingEnabled && (
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)' }}>REST TIMER</div>
-            <button onClick={() => setRestTimerEnabled((enabled) => !enabled)} style={{
+            <button onClick={() => onSetRestTimerEnabled(!restTimerEnabled)} style={{
               border: `1px solid ${restTimerEnabled ? 'var(--accent)' : 'var(--border)'}`,
               background: restTimerEnabled ? 'var(--accent)22' : 'var(--surface2)',
               color: restTimerEnabled ? 'var(--accent)' : 'var(--text-muted)',
@@ -2530,7 +2515,7 @@ function LogSetScreen({
           )}
 
           {/* Rest timer */}
-          {setCentricLoggingEnabled && restTimerEnabled && sets.length > 0 && restSeconds > 0 && <RestTimer seconds={restSeconds} />}
+          {setCentricLoggingEnabled && restTimerEnabled && restTimerLastSetAtMs && restTimerSeconds > 0 && <RestTimer seconds={restTimerSeconds} />}
 
           <SliderInput label="Reps" value={reps} onChange={setReps} min={1} max={30} step={1} unit="" color="var(--accent)" />
           <QuickAdjust value={reps} onChange={setReps} step={1} color="var(--accent)" min={1} />
@@ -3661,6 +3646,30 @@ export default function App() {
   const [machineHistoryStatus, setMachineHistoryStatus] = useState({})
   const [featureFlags, setFeatureFlags] = useState(DEFAULT_FLAGS)
   const [featureFlagsLoading, setFeatureFlagsLoading] = useState(true)
+  const [restTimerEnabled, setRestTimerEnabled] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.localStorage.getItem(REST_TIMER_ENABLED_STORAGE_KEY) === 'true'
+  })
+  const [restTimerLastSetAtMs, setRestTimerLastSetAtMs] = useState(null)
+  const [restTimerSeconds, setRestTimerSeconds] = useState(0)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(REST_TIMER_ENABLED_STORAGE_KEY, String(restTimerEnabled))
+  }, [restTimerEnabled])
+
+  useEffect(() => {
+    if (!restTimerLastSetAtMs) {
+      setRestTimerSeconds(0)
+      return undefined
+    }
+    const tick = () => {
+      setRestTimerSeconds(Math.max(0, Math.floor((Date.now() - restTimerLastSetAtMs) / 1000)))
+    }
+    tick()
+    const timer = setInterval(tick, 1000)
+    return () => clearInterval(timer)
+  }, [restTimerLastSetAtMs])
 
   // Auth listener
   useEffect(() => {
@@ -3740,10 +3749,25 @@ export default function App() {
     setMachineHistoryStatus({})
   }, [sets.length])
 
+  useEffect(() => {
+    if (!sets.length) {
+      setRestTimerLastSetAtMs(null)
+      return
+    }
+    const latestSetTimestamp = sets.reduce((latest, set) => {
+      const loggedAt = new Date(set.logged_at).getTime()
+      if (Number.isNaN(loggedAt)) return latest
+      return loggedAt > latest ? loggedAt : latest
+    }, 0)
+    setRestTimerLastSetAtMs((prev) => (prev === latestSetTimestamp ? prev : latestSetTimestamp || null))
+  }, [sets])
+
   // ─── Actions ─────────────────────────────────────────────
   const handleLogSet = async (machineId, reps, weight, duration, rest, setType = 'working') => {
     const s = await dbLogSet(null, machineId, reps, weight, duration, rest, setType)
     setSets(prev => [...prev, s])
+    const loggedAtMs = new Date(s.logged_at).getTime()
+    setRestTimerLastSetAtMs(Number.isNaN(loggedAtMs) ? Date.now() : loggedAtMs)
   }
 
   const handleDeleteSet = async (id) => {
@@ -3899,6 +3923,10 @@ export default function App() {
           dayStartHour={PLAN_DAY_START_HOUR}
           setCentricLoggingEnabled={setCentricLoggingEnabled}
           favoritesOrderingEnabled={favoritesOrderingEnabled}
+          restTimerEnabled={restTimerEnabled}
+          onSetRestTimerEnabled={setRestTimerEnabled}
+          restTimerSeconds={restTimerSeconds}
+          restTimerLastSetAtMs={restTimerLastSetAtMs}
         />
       )}
       {libraryEnabled && screen === 'library' && (
