@@ -3778,12 +3778,8 @@ function DiagnosticsScreen({ user, machines, onBack, onDataRefresh }) {
 
     setHistoricalSeedStatus({ state: 'loading', message: 'Generating 90 days of sample workouts...' })
     try {
-      const chunkSize = 200
-      for (let idx = 0; idx < rows.length; idx += chunkSize) {
-        const chunk = rows.slice(idx, idx + chunkSize)
-        const { error } = await supabase.from('sets').insert(chunk)
-        if (error) throw error
-      }
+      const { error } = await supabase.from('sets').insert(rows)
+      if (error) throw error
       await onDataRefresh?.()
       setHistoricalSeedStatus({
         state: 'success',
