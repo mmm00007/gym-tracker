@@ -51,3 +51,52 @@ Representative viewport matrix used for visual QA:
 - [ ] **Image visibility:** thumbnails/illustrations remain visible, uncropped (unless intentionally cropped), and not hidden behind overlays.
 - [ ] **Safe-area handling:** iOS/Android safe-area insets are respected at top/bottom, especially around bottom nav and edge controls.
 - [ ] **Legacy branch removal:** confirm old layout-specific branches are removed only after parity is validated.
+
+## Automated screenshot harness (rerunnable)
+
+Use the automation harness to capture baseline screenshots for the five primary screens in all required viewports.
+
+### Output contract
+Screenshots are saved deterministically to:
+
+- `docs/qa-artifacts/responsive-ui-v2/home/{phone|tablet|desktop}.png`
+- `docs/qa-artifacts/responsive-ui-v2/library/{phone|tablet|desktop}.png`
+- `docs/qa-artifacts/responsive-ui-v2/history/{phone|tablet|desktop}.png`
+- `docs/qa-artifacts/responsive-ui-v2/plans/{phone|tablet|desktop}.png`
+- `docs/qa-artifacts/responsive-ui-v2/analysis/{phone|tablet|desktop}.png`
+
+Viewport mapping used by the script:
+- `phone` → `360x800`
+- `tablet` → `768x1024`
+- `desktop` → `1440x900`
+
+### Prerequisites
+1. Start the frontend app (or any deployed build URL) so it is reachable from the harness.
+2. Ensure a valid user account exists for the environment under test.
+3. Install Playwright if not already available:
+   - `cd frontend && npm install --save-dev playwright`
+4. Export QA credentials used by `AuthScreen` in `App.jsx`:
+   - `export QA_USERNAME="<username>"`
+   - `export QA_PASSWORD="<password>"`
+
+Optional:
+- `export QA_BASE_URL="http://127.0.0.1:4173"` (defaults to this value)
+
+### Run commands
+From repository root:
+
+```bash
+cd frontend
+npm run dev
+```
+
+In another terminal:
+
+```bash
+cd frontend
+QA_BASE_URL="http://127.0.0.1:5173" QA_USERNAME="<username>" QA_PASSWORD="<password>" npm run qa:responsive-ui-v2
+```
+
+### Result logging
+- Record pass/fail notes in `docs/qa-artifacts/responsive-ui-v2/results.md`.
+- If a checklist item requires a special state (e.g. overflow menu open), capture an additional screenshot and reference that path in the notes column.

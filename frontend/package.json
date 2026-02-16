@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "qa:responsive-ui-v2": "node scripts/responsiveQaCapture.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",
