@@ -78,6 +78,8 @@ const TREND_TIMEFRAME_OPTIONS = [
   { key: '1w', label: '1W', ms: 7 * 24 * 60 * 60 * 1000 },
   { key: '1m', label: '1M', ms: 30 * 24 * 60 * 60 * 1000 },
 ]
+const TARGET_TOP_SET_REP_RANGE = { min: 6, max: 8 }
+const DEFAULT_LOAD_INCREMENT_KG = 2.5
 
 const isBodyweightExercise = (machine) => machine?.equipment_type === 'bodyweight'
 
@@ -86,6 +88,48 @@ const weightLabelForMachine = (machine) => (isBodyweightExercise(machine) ? 'Add
 const filterSetsByType = (sets, setTypes) => {
   if (!setTypes?.length) return sets
   return sets.filter((set) => setTypes.includes(set.set_type || 'working'))
+}
+
+const extractProgressionSignals = (sets = []) => {
+  const workingSets = sets.filter((set) => {
+    const setType = set.set_type || 'working'
+    return setType === 'working' || setType === 'top'
+  })
+  const topSetInRange = workingSets
+    .filter((set) => set.reps >= TARGET_TOP_SET_REP_RANGE.min && set.reps <= TARGET_TOP_SET_REP_RANGE.max)
+    .reduce((best, set) => {
+      if (!best || set.weight > best.weight || (set.weight === best.weight && set.reps > best.reps)) return set
+      return best
+    }, null)
+
+  return {
+    topSetWeightInRange: topSetInRange ? topSetInRange.weight : null,
+    estOneRm: workingSets.length ? Math.max(...workingSets.map((set) => estimate1RM(set.weight, set.reps))) : null,
+    totalWorkingReps: workingSets.reduce((sum, set) => sum + set.reps, 0),
+    topSetDetails: topSetInRange ? { reps: topSetInRange.reps, weight: topSetInRange.weight } : null,
+  }
+}
+
+const recommendNextTarget = (signals, machine) => {
+  if (!signals?.topSetDetails) {
+    return {
+      recommendation: 'Need a top set in 6-8 reps first',
+      rationale: 'Log at least one working/top set in the target rep range to unlock progression guidance.',
+    }
+  }
+
+  const increment = DEFAULT_LOAD_INCREMENT_KG
+  if (signals.topSetDetails.reps >= TARGET_TOP_SET_REP_RANGE.max) {
+    return {
+      recommendation: `+${fmtNumber(increment, 1)} kg`,
+      rationale: `Top set hit ${signals.topSetDetails.weight}×${signals.topSetDetails.reps}; move load up and rebuild reps.`,
+    }
+  }
+
+  return {
+    recommendation: '+1 rep',
+    rationale: `Top set at ${signals.topSetDetails.weight}×${signals.topSetDetails.reps}; add reps before adding load.`,
+  }
 }
 
 const buildMetrics = (sets) => {
@@ -2204,14 +2248,51 @@ function LogSetScreen({
       ...entry,
       timestamp: new Date(entry.ended_at || entry.training_date).getTime(),
       metrics: entry.metrics || buildMetrics(entry.sets || []),
+      signals: extractProgressionSignals(entry.sets || []),
     }))
     .filter((entry) => Number.isFinite(entry.timestamp) && entry.timestamp >= trendCutoff)
     .sort((a, b) => a.timestamp - b.timestamp)
-  const includeCurrentSession = setsForMachine.length > 0
-  const trendValues = [
-    ...trendPoints.map((entry) => entry.metrics.totalVolume),
-    ...(includeCurrentSession ? [sessionMetrics.totalVolume] : []),
+  const latestTrendSignals = trendPoints.length ? trendPoints[trendPoints.length - 1].signals : null
+  const progressionSeries = [
+    {
+      key: 'volumeLoad',
+      label: 'Volume load trend',
+      color: 'var(--accent)',
+      points: trendPoints.map((entry) => entry.metrics.totalVolume),
+      formatter: (value) => `${fmtNumber(value, 0)} kg`,
+    },
+    {
+      key: 'topSetWeight',
+      label: `Top-set weight (${TARGET_TOP_SET_REP_RANGE.min}-${TARGET_TOP_SET_REP_RANGE.max} reps)`,
+      color: 'var(--blue)',
+      points: [
+        ...trendPoints.map((entry) => entry.signals.topSetWeightInRange).filter((value) => Number.isFinite(value)),
+      ],
+      formatter: (value) => `${fmtNumber(value, 1)} kg`,
+      emptyText: `No top sets in ${TARGET_TOP_SET_REP_RANGE.min}-${TARGET_TOP_SET_REP_RANGE.max} reps for this timeframe.`,
+    },
+    {
+      key: 'estOneRm',
+      label: 'Estimated 1RM (working sets)',
+      color: '#88d8b0',
+      points: [
+        ...trendPoints.map((entry) => entry.signals.estOneRm).filter((value) => Number.isFinite(value)),
+      ],
+      formatter: (value) => `${fmtNumber(value, 1)} kg`,
+      emptyText: 'No working/top sets yet in this timeframe.',
+    },
+    {
+      key: 'workingReps',
+      label: 'Total reps in working sets',
+      color: '#ff8a5c',
+      points: [
+        ...trendPoints.map((entry) => entry.signals.totalWorkingReps).filter((value) => Number.isFinite(value) && value > 0),
+      ],
+      formatter: (value) => fmtNumber(value, 0),
+      emptyText: 'No working-set reps logged in this timeframe.',
+    },
   ]
+  const nextTarget = recommendNextTarget(latestTrendSignals, selectedMachine)
 
   return (
     <div style={{ padding: '20px 16px', paddingBottom: 100, minHeight: '100dvh' }}>
@@ -2402,8 +2483,8 @@ function LogSetScreen({
             ) : (
               <div style={{ background: 'var(--surface)', borderRadius: 14, padding: 14, border: '1px solid var(--border)' }}>
                 <div style={{ marginBottom: 12 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Volume load trend</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Progression signals</div>
                     <div style={{ display: 'flex', gap: 6 }}>
                       {TREND_TIMEFRAME_OPTIONS.map((option) => {
                         const active = trendTimeframe === option.key
@@ -2421,11 +2502,49 @@ function LogSetScreen({
                       })}
                     </div>
                   </div>
-                  {trendValues.length ? (
-                    <MiniLineChart points={trendValues} color="var(--accent)" height={60} />
-                  ) : (
-                    <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>No history in selected timeframe yet.</div>
-                  )}
+
+                  <div style={{ display: 'grid', gap: 12 }}>
+                    {progressionSeries.map((series) => {
+                      const latest = series.points.length ? series.points[series.points.length - 1] : null
+                      const previous = series.points.length > 1 ? series.points[series.points.length - 2] : null
+                      const delta = latest !== null && previous !== null ? latest - previous : null
+                      return (
+                        <div key={series.key} style={{ background: 'var(--surface2)', borderRadius: 12, border: '1px solid var(--border)', padding: 10 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                            <div style={{ fontSize: 12, color: 'var(--text)' }}>{series.label}</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                              {latest !== null ? (
+                                <>
+                                  {series.formatter(latest)}
+                                  {delta !== null && (
+                                    <span style={{ color: delta >= 0 ? 'var(--accent)' : 'var(--red)', marginLeft: 6 }}>
+                                      {delta >= 0 ? '+' : ''}{series.formatter(delta)}
+                                    </span>
+                                  )}
+                                </>
+                              ) : (
+                                'No data'
+                              )}
+                            </div>
+                          </div>
+                          {series.points.length >= 2 ? (
+                            <MiniLineChart points={series.points} color={series.color} height={54} />
+                          ) : (
+                            <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>
+                              {series.emptyText || 'Need at least 2 sessions in this timeframe to chart a trend.'}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+                <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginBottom: 4 }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 6, letterSpacing: 1, fontFamily: 'var(--font-code)' }}>NEXT TARGET</div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+                    <div style={{ fontSize: 18, fontFamily: 'var(--font-mono)', fontWeight: 800, color: 'var(--accent)' }}>{nextTarget.recommendation}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'right' }}>{nextTarget.rationale}</div>
+                  </div>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
                   <MetricCard label="Total volume" value={`${fmtNumber(sessionMetrics.totalVolume, 0)} kg`} />
