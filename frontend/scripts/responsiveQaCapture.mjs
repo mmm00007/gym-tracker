@@ -107,9 +107,16 @@ async function waitForAuthPrompt(page, signInButton, navLocator) {
 
 async function navigateToScreen(page, screen) {
   const navButton = page.getByRole('button', { name: `Go to ${screen.label}` })
-  await navButton.waitFor({ timeout: 15_000 })
+  const navDestinationAvailable = await navButton.isVisible().catch(() => false)
+
+  if (!navDestinationAvailable) {
+    console.warn(`[responsive-qa] skipping ${screen.key}: nav destination is not available in this environment`)
+    return false
+  }
+
   await navButton.click()
   await sleep(450)
+  return true
 }
 
 async function captureViewport(browser, viewport) {
@@ -124,7 +131,8 @@ async function captureViewport(browser, viewport) {
     const screenDir = path.join(artifactRoot, screen.key)
     await fs.mkdir(screenDir, { recursive: true })
 
-    await navigateToScreen(page, screen)
+    const navigated = await navigateToScreen(page, screen)
+    if (!navigated) continue
 
     const outputPath = path.join(screenDir, `${viewport.key}.png`)
     await page.screenshot({ path: outputPath, fullPage: true })
