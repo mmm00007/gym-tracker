@@ -118,7 +118,7 @@ const recommendNextTarget = (signals, machine) => {
     }
   }
 
-  const increment = isBodyweightExercise(machine) ? 1 : DEFAULT_LOAD_INCREMENT_KG
+  const increment = DEFAULT_LOAD_INCREMENT_KG
   if (signals.topSetDetails.reps >= TARGET_TOP_SET_REP_RANGE.max) {
     return {
       recommendation: `+${fmtNumber(increment, 1)} kg`,
