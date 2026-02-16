@@ -7,6 +7,7 @@ const DEFAULT_FLAGS = Object.freeze({
   plansEnabled: true,
   favoritesOrderingEnabled: true,
   homeDashboardEnabled: true,
+  responsiveUiV2: true,
 })
 
 const ENV_FLAG_MAP = Object.freeze({
@@ -16,6 +17,7 @@ const ENV_FLAG_MAP = Object.freeze({
   plansEnabled: import.meta.env.VITE_PLANS_ENABLED,
   favoritesOrderingEnabled: import.meta.env.VITE_FAVORITES_ORDERING_ENABLED,
   homeDashboardEnabled: import.meta.env.VITE_HOME_DASHBOARD_ENABLED,
+  responsiveUiV2: import.meta.env.VITE_RESPONSIVE_UI_V2,
 })
 
 function parseBooleanFlag(value, fallback) {
@@ -36,6 +38,7 @@ function withEnvDefaults(baseFlags = DEFAULT_FLAGS) {
     plansEnabled: parseBooleanFlag(ENV_FLAG_MAP.plansEnabled, baseFlags.plansEnabled),
     favoritesOrderingEnabled: parseBooleanFlag(ENV_FLAG_MAP.favoritesOrderingEnabled, baseFlags.favoritesOrderingEnabled),
     homeDashboardEnabled: parseBooleanFlag(ENV_FLAG_MAP.homeDashboardEnabled, baseFlags.homeDashboardEnabled),
+    responsiveUiV2: parseBooleanFlag(ENV_FLAG_MAP.responsiveUiV2, baseFlags.responsiveUiV2),
   }
 }
 
@@ -61,6 +64,7 @@ export async function getFeatureFlags() {
       plansEnabled: parseBooleanFlag(remoteFlags?.plansEnabled, envDefaultFlags.plansEnabled),
       favoritesOrderingEnabled: parseBooleanFlag(remoteFlags?.favoritesOrderingEnabled, envDefaultFlags.favoritesOrderingEnabled),
       homeDashboardEnabled: parseBooleanFlag(remoteFlags?.homeDashboardEnabled, envDefaultFlags.homeDashboardEnabled),
+      responsiveUiV2: parseBooleanFlag(remoteFlags?.responsiveUiV2, envDefaultFlags.responsiveUiV2),
     }
   } catch {
     return withEnvDefaults(DEFAULT_FLAGS)

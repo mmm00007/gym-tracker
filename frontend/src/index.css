@@ -84,9 +84,6 @@ body {
   padding: var(--space-5) var(--space-4) max(var(--space-5), env(safe-area-inset-bottom));
 }
 
-.screen-frame--bottom-nav {
-  padding-bottom: max(100px, env(safe-area-inset-bottom));
-}
 
 .page-grid {
   display: grid;

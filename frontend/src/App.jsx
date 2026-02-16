@@ -2625,7 +2625,7 @@ function LogSetScreen({
   }
 
   return (
-    <div className="screen-frame screen-frame--bottom-nav">
+    <div className="screen-frame">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <BackBtn onClick={onBack} />
         <div style={{ textAlign: 'right' }}>
@@ -4165,6 +4165,7 @@ export default function App() {
   const plansEnabled = resolvedFlags.plansEnabled
   const favoritesOrderingEnabled = resolvedFlags.favoritesOrderingEnabled
   const homeDashboardEnabled = resolvedFlags.homeDashboardEnabled
+  const responsiveUiV2Enabled = resolvedFlags.responsiveUiV2
   const navigationMode = useNavigationLayoutMode()
   const primaryDestinations = useMemo(() => getPrimaryDestinations(resolvedFlags), [resolvedFlags])
 
@@ -4218,7 +4219,7 @@ export default function App() {
   const navigationLayout = navigationMode === 'phone' ? 'bottom' : navigationMode === 'tablet' ? 'rail' : 'top'
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" data-responsive-ui={responsiveUiV2Enabled ? 'v2' : 'legacy'}>
       <div className={`page-container app-layout app-layout--${navigationMode} ${showNavigation ? 'app-layout--with-nav' : ''}`}>
         {showNavigation && (
           <div className={`app-nav-slot app-nav-slot--${navigationLayout}`}>
