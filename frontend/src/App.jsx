@@ -394,13 +394,14 @@ function MachineCard({ machine, onSelect, onEdit, compact, usageBadge }) {
   return (
     <div onClick={onSelect} style={{
       background: 'linear-gradient(135deg, var(--surface), var(--surface2))', border: '1px solid var(--border)',
-      borderRadius: 14, padding: compact ? 12 : 16, cursor: 'pointer', borderLeft: `3px solid ${primaryColor}`,
+      borderRadius: 16, padding: compact ? 12 : 14, cursor: 'pointer', borderLeft: `3px solid ${primaryColor}`,
+      minHeight: compact ? 210 : 236,
     }}>
-      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style={{
-          width: compact ? 48 : 60, height: compact ? 48 : 60, borderRadius: 12, overflow: 'hidden', flexShrink: 0,
+          width: '100%', height: compact ? 130 : 148, borderRadius: 12, overflow: 'hidden', flexShrink: 0,
           background: 'var(--surface2)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: 'var(--text-dim)', fontSize: 20, position: 'relative',
+          color: 'var(--text-dim)', fontSize: 28, position: 'relative',
         }}>
           {thumb ? (
             <img src={thumb} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -416,8 +417,8 @@ function MachineCard({ machine, onSelect, onEdit, compact, usageBadge }) {
         </div>
         <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', gap: 12 }}>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--font-mono)', marginBottom: 4 }}>{machine.name}</div>
-            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 6 }}>{machine.movement}</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--font-mono)', marginBottom: 4 }}>{machine.name}</div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>{machine.movement}</div>
             {usageBadge && (
               <div style={{
                 display: 'inline-flex',
@@ -2023,6 +2024,7 @@ function LogSetScreen({
     machineSets: true,
     allSets: false,
   })
+  const [instructionImageExpanded, setInstructionImageExpanded] = useState(false)
   const [sectionHeights, setSectionHeights] = useState({ snapshot: 0, machineSets: 0, allSets: 0 })
   const activeSetRef = useRef(null)
   const setStartTime = useRef(null)
@@ -2082,6 +2084,7 @@ function LogSetScreen({
 
   const selectMachine = (m) => {
     setSelectedMachine(m)
+    setInstructionImageExpanded(false)
     const machineSets = sets.filter(s => s.machine_id === m.id)
     if (machineSets.length) {
       const last = machineSets[machineSets.length - 1]
@@ -2620,11 +2623,36 @@ function LogSetScreen({
 
           {selectedMachine.instruction_image && (
             <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 12, marginBottom: 16, border: '1px solid var(--border)' }}>
-              <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, marginBottom: 8, fontFamily: 'var(--font-code)' }}>
-                INSTRUCTION IMAGE
-              </div>
-              <img src={selectedMachine.instruction_image} alt="" style={{ width: '100%', borderRadius: 10, objectFit: 'cover', border: '1px solid var(--border)' }} />
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>{selectedMachine.movement}</div>
+              <button
+                type="button"
+                onClick={() => setInstructionImageExpanded((prev) => !prev)}
+                style={{
+                  width: '100%',
+                  border: '1px solid var(--border)',
+                  background: 'var(--surface2)',
+                  borderRadius: 10,
+                  minHeight: 40,
+                  padding: '8px 12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: instructionImageExpanded ? 10 : 0,
+                  color: 'var(--text)',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  letterSpacing: 1,
+                  fontFamily: 'var(--font-code)',
+                }}
+              >
+                <span>{instructionImageExpanded ? 'HIDE MACHINE THUMBNAIL' : 'SHOW MACHINE THUMBNAIL'}</span>
+                <span aria-hidden="true" style={{ color: 'var(--text-muted)', fontSize: 16 }}>{instructionImageExpanded ? '▾' : '▸'}</span>
+              </button>
+              {instructionImageExpanded && (
+                <>
+                  <img src={selectedMachine.instruction_image} alt="" style={{ width: '100%', borderRadius: 10, objectFit: 'cover', border: '1px solid var(--border)' }} />
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>{selectedMachine.movement}</div>
+                </>
+              )}
             </div>
           )}
 
