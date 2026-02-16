@@ -6,7 +6,7 @@ const fmtDur = (ms) => { const m = Math.floor(ms / 60000); return m < 60 ? `${m}
 
 export default function HistoryScreen({ trainingBuckets, machines, onBack, getMuscleColor }) {
   return (
-    <PageScaffold>
+    <PageScaffold className="screen-frame">
       <TopAppBar left={<button onClick={onBack} style={{ color: 'var(--text-muted)', fontSize: 15, padding: 4 }}>← Back</button>} title="HISTORY" />
       {trainingBuckets.length === 0 ? (
         <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-dim)' }}>
