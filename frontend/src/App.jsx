@@ -20,6 +20,7 @@ import {
   Chip,
   SegmentedButtons,
 } from './components/uiPrimitives'
+import Accordion from './components/Accordion'
 import HistoryScreen from './screens/HistoryScreen'
 import MachineCard from './components/machines/MachineCard'
 import {
@@ -2094,14 +2095,10 @@ function LogSetScreen({
     allSets: false,
   })
   const [instructionImageExpanded, setInstructionImageExpanded] = useState(false)
-  const [sectionHeights, setSectionHeights] = useState({ snapshot: 0, machineSets: 0, allSets: 0 })
   const activeSetRef = useRef(null)
   const setStartTime = useRef(null)
   const setMachineIdRef = useRef(null)
   const feedbackTimeoutRef = useRef(null)
-  const snapshotSectionRef = useRef(null)
-  const machineSetsSectionRef = useRef(null)
-  const allSetsSectionRef = useRef(null)
 
   useEffect(() => {
     if (setCentricLoggingEnabled) return
@@ -2112,14 +2109,6 @@ function LogSetScreen({
     setFeedback({ message, tone })
     if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current)
     feedbackTimeoutRef.current = setTimeout(() => setFeedback(null), 1600)
-  }, [])
-
-  const measureSectionHeights = useCallback(() => {
-    setSectionHeights({
-      snapshot: snapshotSectionRef.current?.scrollHeight || 0,
-      machineSets: machineSetsSectionRef.current?.scrollHeight || 0,
-      allSets: allSetsSectionRef.current?.scrollHeight || 0,
-    })
   }, [])
 
   const toggleSection = useCallback((key) => {
@@ -2374,17 +2363,6 @@ function LogSetScreen({
         ? 'stop'
         : 'start'
 
-  useEffect(() => {
-    measureSectionHeights()
-  }, [
-    measureSectionHeights,
-    selectedMachine?.id,
-    setsForMachine.length,
-    sets.length,
-    trendTimeframe,
-    historyForMachine.length,
-    progressionSeries.length,
-  ])
 
   // Select view
   if (view === 'select') {
@@ -2490,64 +2468,160 @@ function LogSetScreen({
     )
   }
 
-  const sectionToggleButtonStyle = {
-    width: '100%',
-    minHeight: 44,
-    padding: '10px 12px',
-    borderRadius: 12,
-    border: '1px solid var(--border)',
-    background: 'var(--surface)',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 10,
-    textAlign: 'left',
-    marginBottom: 8,
-  }
+  const accordionSections = []
 
-  const renderSectionHeader = (key, label) => {
-    const isExpanded = expandedSections[key]
-    return (
-      <button
-        type="button"
-        aria-expanded={isExpanded}
-        aria-controls={`section-${key}`}
-        onClick={() => toggleSection(key)}
-        style={sectionToggleButtonStyle}
-      >
-        <span style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 2, fontFamily: 'var(--font-code)' }}>{label}</span>
-        <span
-          aria-hidden="true"
-          style={{
-            fontSize: 14,
-            color: 'var(--text-muted)',
-            transform: `rotate(${isExpanded ? 0 : -90}deg)`,
-            transition: 'transform 200ms ease',
-            lineHeight: 1,
-          }}
-        >
-          ▾
-        </span>
-      </button>
-    )
-  }
+  if (selectedMachine) {
+    accordionSections.push({
+      key: 'snapshot',
+      label: 'MACHINE SNAPSHOT',
+      content: (
+        setsForMachine.length === 0 ? (
+          <div style={{ fontSize: 13, color: 'var(--text-dim)', background: 'var(--surface)', borderRadius: 12, padding: 12, border: '1px solid var(--border)' }}>
+            Log your first set to see live metrics for this machine.
+          </div>
+        ) : (
+          <div style={{ background: 'var(--surface)', borderRadius: 14, padding: 14, border: '1px solid var(--border)' }}>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Progression signals</div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {TREND_TIMEFRAME_OPTIONS.map((option) => {
+                    const active = trendTimeframe === option.key
+                    return (
+                      <button key={option.key} onClick={() => setTrendTimeframe(option.key)} style={{
+                        borderRadius: 999,
+                        border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                        background: active ? 'var(--accent)22' : 'var(--surface2)',
+                        color: active ? 'var(--accent)' : 'var(--text-muted)',
+                        fontSize: 11,
+                        fontWeight: 700,
+                        padding: '3px 8px',
+                      }}>{option.label}</button>
+                    )
+                  })}
+                </div>
+              </div>
 
-  const getSectionBodyStyle = (key) => ({
-    pointerEvents: expandedSections[key] ? 'auto' : 'none',
-    overflow: 'hidden',
-    maxHeight: expandedSections[key] ? `${sectionHeights[key]}px` : '0px',
-    opacity: expandedSections[key] ? 1 : 0,
-    transform: `translateY(${expandedSections[key] ? 0 : -4}px)`,
-    transition: 'max-height 260ms ease, opacity 220ms ease, transform 220ms ease',
-    willChange: 'max-height, opacity, transform',
-  })
+              <div style={{ display: 'grid', gap: 12 }}>
+                {progressionSeries.map((series) => {
+                  const latest = series.points.length ? series.points[series.points.length - 1] : null
+                  const previous = series.points.length > 1 ? series.points[series.points.length - 2] : null
+                  const delta = latest !== null && previous !== null ? latest - previous : null
+                  return (
+                    <div key={series.key} style={{ background: 'var(--surface2)', borderRadius: 12, border: '1px solid var(--border)', padding: 10 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                        <div style={{ fontSize: 12, color: 'var(--text)' }}>{series.label}</div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                          {latest !== null ? (
+                            <>
+                              {series.formatter(latest)}
+                              {delta !== null && (
+                                <span style={{ color: delta >= 0 ? 'var(--accent)' : 'var(--red)', marginLeft: 6 }}>
+                                  {delta >= 0 ? '+' : ''}{series.formatter(delta)}
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            'No data'
+                          )}
+                        </div>
+                      </div>
+                      {series.points.length >= 2 ? (
+                        <MiniLineChart points={series.points} color={series.color} height={54} />
+                      ) : (
+                        <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>
+                          {series.emptyText || 'Need at least 2 sessions to show a trend.'}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginBottom: 4 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 6, letterSpacing: 1, fontFamily: 'var(--font-code)' }}>NEXT TARGET</div>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+                <div style={{ fontSize: 18, fontFamily: 'var(--font-mono)', fontWeight: 800, color: 'var(--accent)' }}>{nextTarget.recommendation}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'right' }}>{nextTarget.rationale}</div>
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+              <MetricCard label="Total volume" value={`${fmtNumber(sessionMetrics.totalVolume, 0)} kg`} />
+              <MetricCard label="Total sets" value={fmtNumber(sessionMetrics.totalSets, 0)} />
+              <MetricCard label="Total reps" value={fmtNumber(sessionMetrics.totalReps, 0)} />
+              <MetricCard label="Avg load/rep" value={`${fmtNumber(sessionMetrics.avgLoad, 1)} kg`} />
+              <MetricCard label="Avg reps/set" value={fmtNumber(sessionMetrics.avgRepsPerSet, 1)} />
+              <MetricCard label="Max weight (5-8)" value={`${fmtNumber(sessionMetrics.maxStandardized, 1)} kg`} sub="Fallback: session max" />
+              <MetricCard label="Est. 1RM" value={`${fmtNumber(sessionMetrics.estOneRm, 1)} kg`} sub={sessionMetrics.bestSet ? `${sessionMetrics.bestSet.weight}×${sessionMetrics.bestSet.reps}` : null} />
+              <MetricCard label="Hard sets" value={fmtNumber(sessionMetrics.hardSets, 0)} sub="Proxy: ≤8 reps or ≥90% max" />
+            </div>
+          </div>
+        )
+      ),
+    })
 
-  const getSectionBodyA11yProps = (key) => {
-    const isExpanded = expandedSections[key]
-    return {
-      'aria-hidden': !isExpanded,
-      inert: isExpanded ? undefined : '',
+    if (setsForMachine.length > 0) {
+      accordionSections.push({
+        key: 'machineSets',
+        label: `SETS ON THIS MACHINE (${setsForMachine.length})`,
+        content: (
+          <div>
+            {setsForMachine.map((s, i) => (
+              <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <div style={{
+                  width: 28, height: 28, borderRadius: 8, background: 'var(--accent)22', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700,
+                  color: 'var(--accent)', fontFamily: 'var(--font-mono)', flexShrink: 0,
+                }}>{i + 1}</div>
+                <div style={{ flex: 1, fontSize: 16, fontFamily: 'var(--font-mono)', color: '#ccc' }}>
+                  <span style={{ color: 'var(--accent)', fontWeight: 700 }}>{s.reps}</span>
+                  <span style={{ color: 'var(--text-dim)' }}> × </span>
+                  <span style={{ color: 'var(--blue)', fontWeight: 700 }}>{s.weight}</span>
+                  <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>
+                    {isBodyweightExercise(selectedMachine) ? 'kg additional' : 'kg'}
+                  </span>
+                </div>
+                {s.rest_seconds && <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>{fmtTimer(s.rest_seconds)} rest</span>}
+                <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>{fmtTime(s.logged_at)}</span>
+                <button aria-label="Delete set" onClick={() => onDeleteSet(s.id)} style={{ color: 'var(--red)', fontSize: 16, padding: 4 }}>×</button>
+              </div>
+            ))}
+          </div>
+        ),
+      })
     }
+  }
+
+  if (sets.length > 0) {
+    accordionSections.push({
+      key: 'allSets',
+      label: `ALL SETS (${sets.length})`,
+      content: (
+        <div>
+          {[...sets].reverse().map((s) => {
+            const m = machines.find((ma) => ma.id === s.machine_id)
+            return (
+              <div key={s.id} style={{
+                background: 'var(--surface)', borderRadius: 12, padding: '10px 14px', marginBottom: 6,
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                borderLeft: `3px solid ${mc(m?.muscle_groups?.[0])}`,
+              }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#ccc' }}>{m?.movement || 'Unknown'}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>{fmtTime(s.logged_at)}</div>
+                </div>
+                <div style={{ fontFamily: 'var(--font-mono)' }}>
+                  <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--accent)' }}>{s.reps}</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-dim)' }}> × </span>
+                  <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--blue)' }}>{s.weight}</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>{isBodyweightExercise(m) ? 'kg additional' : 'kg'}</span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      ),
+    })
   }
 
   return (
@@ -2769,159 +2843,17 @@ function LogSetScreen({
             </div>
           </div>
 
-          <div style={{ marginBottom: 24 }}>
-            {renderSectionHeader('snapshot', 'MACHINE SNAPSHOT')}
-            <div id="section-snapshot" style={getSectionBodyStyle('snapshot')} {...getSectionBodyA11yProps('snapshot')}>
-              <div ref={snapshotSectionRef}>
-            {setsForMachine.length === 0 ? (
-              <div style={{ fontSize: 13, color: 'var(--text-dim)', background: 'var(--surface)', borderRadius: 12, padding: 12, border: '1px solid var(--border)' }}>
-                Log your first set to see live metrics for this machine.
-              </div>
-            ) : (
-              <div style={{ background: 'var(--surface)', borderRadius: 14, padding: 14, border: '1px solid var(--border)' }}>
-                <div style={{ marginBottom: 12 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Progression signals</div>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      {TREND_TIMEFRAME_OPTIONS.map((option) => {
-                        const active = trendTimeframe === option.key
-                        return (
-                          <button key={option.key} onClick={() => setTrendTimeframe(option.key)} style={{
-                            borderRadius: 999,
-                            border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
-                            background: active ? 'var(--accent)22' : 'var(--surface2)',
-                            color: active ? 'var(--accent)' : 'var(--text-muted)',
-                            fontSize: 11,
-                            fontWeight: 700,
-                            padding: '3px 8px',
-                          }}>{option.label}</button>
-                        )
-                      })}
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'grid', gap: 12 }}>
-                    {progressionSeries.map((series) => {
-                      const latest = series.points.length ? series.points[series.points.length - 1] : null
-                      const previous = series.points.length > 1 ? series.points[series.points.length - 2] : null
-                      const delta = latest !== null && previous !== null ? latest - previous : null
-                      return (
-                        <div key={series.key} style={{ background: 'var(--surface2)', borderRadius: 12, border: '1px solid var(--border)', padding: 10 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                            <div style={{ fontSize: 12, color: 'var(--text)' }}>{series.label}</div>
-                            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                              {latest !== null ? (
-                                <>
-                                  {series.formatter(latest)}
-                                  {delta !== null && (
-                                    <span style={{ color: delta >= 0 ? 'var(--accent)' : 'var(--red)', marginLeft: 6 }}>
-                                      {delta >= 0 ? '+' : ''}{series.formatter(delta)}
-                                    </span>
-                                  )}
-                                </>
-                              ) : (
-                                'No data'
-                              )}
-                            </div>
-                          </div>
-                          {series.points.length >= 2 ? (
-                            <MiniLineChart points={series.points} color={series.color} height={54} />
-                          ) : (
-                            <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>
-                              {series.emptyText || 'Need at least 2 sessions in this timeframe to chart a trend.'}
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-                <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginBottom: 4 }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 6, letterSpacing: 1, fontFamily: 'var(--font-code)' }}>NEXT TARGET</div>
-                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
-                    <div style={{ fontSize: 18, fontFamily: 'var(--font-mono)', fontWeight: 800, color: 'var(--accent)' }}>{nextTarget.recommendation}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'right' }}>{nextTarget.rationale}</div>
-                  </div>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
-                  <MetricCard label="Total volume" value={`${fmtNumber(sessionMetrics.totalVolume, 0)} kg`} />
-                  <MetricCard label="Total sets" value={fmtNumber(sessionMetrics.totalSets, 0)} />
-                  <MetricCard label="Total reps" value={fmtNumber(sessionMetrics.totalReps, 0)} />
-                  <MetricCard label="Avg load/rep" value={`${fmtNumber(sessionMetrics.avgLoad, 1)} kg`} />
-                  <MetricCard label="Avg reps/set" value={fmtNumber(sessionMetrics.avgRepsPerSet, 1)} />
-                  <MetricCard label="Max weight (5-8)" value={`${fmtNumber(sessionMetrics.maxStandardized, 1)} kg`} sub="Fallback: session max" />
-                  <MetricCard label="Est. 1RM" value={`${fmtNumber(sessionMetrics.estOneRm, 1)} kg`} sub={sessionMetrics.bestSet ? `${sessionMetrics.bestSet.weight}×${sessionMetrics.bestSet.reps}` : null} />
-                  <MetricCard label="Hard sets" value={fmtNumber(sessionMetrics.hardSets, 0)} sub="Proxy: ≤8 reps or ≥90% max" />
-                </div>
-              </div>
-            )}
-                        </div>
-            </div>
-          </div>
-
-          {setsForMachine.length > 0 && (
-            <div style={{ marginBottom: 20 }}>
-              {renderSectionHeader('machineSets', `SETS ON THIS MACHINE (${setsForMachine.length})`)}
-              <div id="section-machineSets" style={getSectionBodyStyle('machineSets')} {...getSectionBodyA11yProps('machineSets')}>
-                <div ref={machineSetsSectionRef}>
-              {setsForMachine.map((s, i) => (
-                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                  <div style={{
-                    width: 28, height: 28, borderRadius: 8, background: 'var(--accent)22', display: 'flex',
-                    alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700,
-                    color: 'var(--accent)', fontFamily: 'var(--font-mono)', flexShrink: 0,
-                  }}>{i + 1}</div>
-                  <div style={{ flex: 1, fontSize: 16, fontFamily: 'var(--font-mono)', color: '#ccc' }}>
-                    <span style={{ color: 'var(--accent)', fontWeight: 700 }}>{s.reps}</span>
-                    <span style={{ color: 'var(--text-dim)' }}> × </span>
-                    <span style={{ color: 'var(--blue)', fontWeight: 700 }}>{s.weight}</span>
-                    <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>
-                      {isBodyweightExercise(selectedMachine) ? 'kg additional' : 'kg'}
-                    </span>
-                  </div>
-                  {s.rest_seconds && <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>{fmtTimer(s.rest_seconds)} rest</span>}
-                  <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>{fmtTime(s.logged_at)}</span>
-                  <button onClick={() => onDeleteSet(s.id)} style={{ color: 'var(--red)44', fontSize: 16, padding: 4 }}>×</button>
-                </div>
-              ))}
-                </div>
-              </div>
+          {accordionSections.length > 0 && (
+            <div style={{ marginBottom: 24 }}>
+              <Accordion
+                ariaLabel="Workout log sections"
+                sections={accordionSections}
+                expandedSections={expandedSections}
+                onToggle={toggleSection}
+              />
             </div>
           )}
-
         </>
-      )}
-
-      {/* Full session log */}
-      {sets.length > 0 && (
-        <div>
-          {renderSectionHeader('allSets', `ALL SETS (${sets.length})`)}
-          <div id="section-allSets" style={getSectionBodyStyle('allSets')} {...getSectionBodyA11yProps('allSets')}>
-            <div ref={allSetsSectionRef}>
-          {[...sets].reverse().map(s => {
-            const m = machines.find(ma => ma.id === s.machine_id)
-            return (
-              <div key={s.id} style={{
-                background: 'var(--surface)', borderRadius: 12, padding: '10px 14px', marginBottom: 6,
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                borderLeft: `3px solid ${mc(m?.muscle_groups?.[0])}`,
-              }}>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: '#ccc' }}>{m?.movement || 'Unknown'}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>{fmtTime(s.logged_at)}</div>
-                </div>
-                <div style={{ fontFamily: 'var(--font-mono)' }}>
-                  <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--accent)' }}>{s.reps}</span>
-                  <span style={{ fontSize: 12, color: 'var(--text-dim)' }}> × </span>
-                  <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--blue)' }}>{s.weight}</span>
-                  <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>{isBodyweightExercise(m) ? 'kg additional' : 'kg'}</span>
-                </div>
-              </div>
-            )
-          })}
-            </div>
-          </div>
-        </div>
       )}
 
       {feedback && (
@@ -3872,6 +3804,43 @@ function AppNavigation({
   onOpenDiagnostics,
 }) {
   const [isOverflowOpen, setIsOverflowOpen] = useState(false)
+  const navButtonRefs = useRef([])
+
+  const focusNavButton = (index) => {
+    if (!destinations.length) return
+    const totalButtons = destinations.length + 1
+    const normalized = (index + totalButtons) % totalButtons
+    navButtonRefs.current[normalized]?.focus()
+  }
+
+  const onNavKeyDown = (event, buttonIndex) => {
+    const horizontal = layout !== 'rail'
+    const nextKey = horizontal ? 'ArrowRight' : 'ArrowDown'
+    const previousKey = horizontal ? 'ArrowLeft' : 'ArrowUp'
+
+    if (event.key === nextKey) {
+      event.preventDefault()
+      focusNavButton(buttonIndex + 1)
+      return
+    }
+
+    if (event.key === previousKey) {
+      event.preventDefault()
+      focusNavButton(buttonIndex - 1)
+      return
+    }
+
+    if (event.key === 'Home') {
+      event.preventDefault()
+      focusNavButton(0)
+      return
+    }
+
+    if (event.key === 'End') {
+      event.preventDefault()
+      focusNavButton(destinations.length)
+    }
+  }
 
   const navStyle = layout === 'bottom'
     ? {
@@ -3894,11 +3863,13 @@ function AppNavigation({
   return (
     <nav aria-label="Primary" style={navStyle}>
       <div style={{ display: 'flex', flexDirection: layout === 'rail' ? 'column' : 'row', gap: 8, alignItems: 'stretch' }}>
-        {destinations.map((destination) => {
+        {destinations.map((destination, index) => {
           const active = activeScreen === destination.key
           return (
             <button
               key={destination.key}
+              ref={(node) => { navButtonRefs.current[index] = node }}
+              onKeyDown={(event) => onNavKeyDown(event, index)}
               onClick={() => {
                 setIsOverflowOpen(false)
                 onNavigate(destination.key)
@@ -3927,8 +3898,12 @@ function AppNavigation({
         })}
         <div style={{ position: 'relative', flex: layout === 'bottom' || layout === 'top' ? 1 : 'none' }}>
           <button
+            ref={(node) => { navButtonRefs.current[destinations.length] = node }}
+            onKeyDown={(event) => onNavKeyDown(event, destinations.length)}
             onClick={() => setIsOverflowOpen((open) => !open)}
             aria-label="Open secondary menu"
+            aria-haspopup="menu"
+            aria-controls="secondary-menu"
             aria-expanded={isOverflowOpen}
             style={{
               width: '100%',
@@ -3946,7 +3921,7 @@ function AppNavigation({
             <span style={{ fontSize: 12 }}>More</span>
           </button>
           {isOverflowOpen && (
-            <div style={{
+            <div id="secondary-menu" role="menu" style={{
               position: 'absolute',
               right: 0,
               bottom: layout === 'bottom' ? 'calc(100% + 8px)' : 'auto',
@@ -3960,6 +3935,7 @@ function AppNavigation({
               zIndex: 40,
             }}>
               <button
+                role="menuitem"
                 onClick={() => {
                   setIsOverflowOpen(false)
                   onOpenDiagnostics()
@@ -4255,7 +4231,7 @@ export default function App() {
             />
           </div>
         )}
-        <div className={`app-content-slot ${navigationLayout === 'bottom' && showNavigation ? 'app-content-slot--bottom-nav' : ''}`}>
+        <main className={`app-content-slot page-transition ${navigationLayout === 'bottom' && showNavigation ? 'app-content-slot--bottom-nav' : ''}`} aria-label="Primary content">
           {screen === 'home' && (
             <HomeScreen
               pendingSoreness={pendingSoreness}
@@ -4339,7 +4315,7 @@ export default function App() {
               onBack={() => setScreen('home')}
             />
           )}
-        </div>
+        </main>
       </div>
     </div>
   )
