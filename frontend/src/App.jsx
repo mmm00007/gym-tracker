@@ -1002,7 +1002,7 @@ function HomeScreen({
             {!!consistencyPoints.length && <MiniLineChart points={consistencyPoints} color="var(--blue)" height={52} />}
           </div>
 
-          <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 12, padding: 12, minWidth: 0, overflow: 'hidden' }}>
+          <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 12, padding: 12, minWidth: 0 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8 }}>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 700 }}>Monthly training volume</div>
