@@ -115,3 +115,45 @@ button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 }
 
 .fade-in { animation: slideUp 0.3s ease-out; }
+
+
+.app-layout {
+  display: block;
+}
+
+.app-content-slot {
+  min-width: 0;
+}
+
+.app-content-slot--bottom-nav {
+  padding-bottom: 84px;
+}
+
+@media (min-width: 768px) {
+  .app-layout--tablet.app-layout--with-nav {
+    display: grid;
+    grid-template-columns: 132px minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+  }
+
+  .app-layout--tablet .app-nav-slot {
+    position: sticky;
+    top: 16px;
+    align-self: start;
+  }
+}
+
+@media (min-width: 1200px) {
+  .app-layout--desktop.app-layout--with-nav {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .app-layout--desktop .app-content-slot {
+    max-width: 1120px;
+    width: 100%;
+    margin: 0 auto;
+  }
+}

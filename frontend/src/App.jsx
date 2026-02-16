@@ -82,6 +82,50 @@ const TREND_TIMEFRAME_OPTIONS = [
 const TARGET_TOP_SET_REP_RANGE = { min: 6, max: 8 }
 const DEFAULT_LOAD_INCREMENT_KG = 2.5
 const HISTORICAL_SAMPLE_DAYS = 90
+const BREAKPOINT_TABLET = 768
+const BREAKPOINT_DESKTOP = 1200
+
+const PRIMARY_DESTINATIONS = [
+  { key: 'home', label: 'Home', icon: '🏠' },
+  { key: 'log', label: 'Log', icon: '📝' },
+  { key: 'library', label: 'Library', icon: '📚', isVisible: (flags) => flags.libraryScreenEnabled },
+  { key: 'history', label: 'History', icon: '📊' },
+  { key: 'analysis', label: 'Analysis', icon: '📈' },
+  { key: 'plans', label: 'Plans', icon: '🗓️', isVisible: (flags) => flags.plansEnabled },
+]
+
+const getPrimaryDestinations = (flags) => PRIMARY_DESTINATIONS.filter((destination) => (
+  destination.isVisible ? destination.isVisible(flags) : true
+))
+
+function useMediaQuery(query) {
+  const getMatches = useCallback(() => {
+    if (typeof window === 'undefined') return false
+    return window.matchMedia(query).matches
+  }, [query])
+
+  const [matches, setMatches] = useState(getMatches)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+    const mediaQueryList = window.matchMedia(query)
+    const onChange = (event) => setMatches(event.matches)
+    setMatches(mediaQueryList.matches)
+    mediaQueryList.addEventListener('change', onChange)
+    return () => mediaQueryList.removeEventListener('change', onChange)
+  }, [query])
+
+  return matches
+}
+
+function useNavigationLayoutMode() {
+  const isDesktop = useMediaQuery(`(min-width: ${BREAKPOINT_DESKTOP}px)`)
+  const isTablet = useMediaQuery(`(min-width: ${BREAKPOINT_TABLET}px)`)
+
+  if (isDesktop) return 'desktop'
+  if (isTablet) return 'tablet'
+  return 'phone'
+}
 
 const HISTORICAL_SPLIT_TEMPLATES = {
   push: [
@@ -3942,6 +3986,126 @@ function DiagnosticsScreen({ user, machines, onBack, onDataRefresh }) {
   )
 }
 
+function AppNavigation({
+  destinations,
+  activeScreen,
+  onNavigate,
+  layout,
+  onOpenDiagnostics,
+}) {
+  const [isOverflowOpen, setIsOverflowOpen] = useState(false)
+
+  const navStyle = layout === 'bottom'
+    ? {
+        position: 'fixed',
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 30,
+        borderTop: '1px solid var(--border)',
+        background: 'color-mix(in oklab, var(--surface) 95%, #000 5%)',
+        padding: '10px 12px max(10px, env(safe-area-inset-bottom))',
+      }
+    : {
+        border: '1px solid var(--border)',
+        borderRadius: 18,
+        background: 'var(--surface)',
+        padding: 10,
+      }
+
+  return (
+    <nav aria-label="Primary" style={navStyle}>
+      <div style={{ display: 'flex', flexDirection: layout === 'rail' ? 'column' : 'row', gap: 8, alignItems: 'stretch' }}>
+        {destinations.map((destination) => {
+          const active = activeScreen === destination.key
+          return (
+            <button
+              key={destination.key}
+              onClick={() => {
+                setIsOverflowOpen(false)
+                onNavigate(destination.key)
+              }}
+              aria-label={`Go to ${destination.label}`}
+              aria-current={active ? 'page' : undefined}
+              style={{
+                flex: layout === 'bottom' || layout === 'top' ? 1 : 'none',
+                minWidth: layout === 'rail' ? 94 : 0,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: layout === 'rail' ? 'flex-start' : 'center',
+                gap: 8,
+                borderRadius: 12,
+                border: `1px solid ${active ? 'var(--accent)' : 'transparent'}`,
+                background: active ? 'color-mix(in oklab, var(--accent) 18%, transparent)' : 'transparent',
+                color: active ? 'var(--text)' : 'var(--text-muted)',
+                fontWeight: active ? 700 : 500,
+                padding: layout === 'rail' ? '12px 10px' : '10px 8px',
+              }}
+            >
+              <span aria-hidden="true" style={{ fontSize: 16 }}>{destination.icon}</span>
+              <span style={{ fontSize: 12, letterSpacing: 0.2 }}>{destination.label}</span>
+            </button>
+          )
+        })}
+        <div style={{ position: 'relative', flex: layout === 'bottom' || layout === 'top' ? 1 : 'none' }}>
+          <button
+            onClick={() => setIsOverflowOpen((open) => !open)}
+            aria-label="Open secondary menu"
+            aria-expanded={isOverflowOpen}
+            style={{
+              width: '100%',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: layout === 'rail' ? 'flex-start' : 'center',
+              gap: 8,
+              borderRadius: 12,
+              border: '1px solid transparent',
+              color: 'var(--text-muted)',
+              padding: layout === 'rail' ? '12px 10px' : '10px 8px',
+            }}
+          >
+            <span aria-hidden="true" style={{ fontSize: 16 }}>⋯</span>
+            <span style={{ fontSize: 12 }}>More</span>
+          </button>
+          {isOverflowOpen && (
+            <div style={{
+              position: 'absolute',
+              right: 0,
+              bottom: layout === 'bottom' ? 'calc(100% + 8px)' : 'auto',
+              top: layout === 'bottom' ? 'auto' : 'calc(100% + 8px)',
+              minWidth: 170,
+              borderRadius: 12,
+              border: '1px solid var(--border)',
+              background: 'var(--surface2)',
+              boxShadow: '0 10px 24px rgba(0,0,0,0.35)',
+              padding: 6,
+              zIndex: 40,
+            }}>
+              <button
+                onClick={() => {
+                  setIsOverflowOpen(false)
+                  onOpenDiagnostics()
+                }}
+                aria-label="Open diagnostics"
+                style={{
+                  width: '100%',
+                  textAlign: 'left',
+                  borderRadius: 8,
+                  padding: '10px 12px',
+                  color: 'var(--text)',
+                  fontSize: 13,
+                }}
+              >
+                🧰 Diagnostics
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </nav>
+  )
+}
+
 // ─── Main App ──────────────────────────────────────────────
 
 export default function App() {
@@ -4147,6 +4311,15 @@ export default function App() {
   const plansEnabled = resolvedFlags.plansEnabled
   const favoritesOrderingEnabled = resolvedFlags.favoritesOrderingEnabled
   const homeDashboardEnabled = resolvedFlags.homeDashboardEnabled
+  const navigationMode = useNavigationLayoutMode()
+  const primaryDestinations = useMemo(() => getPrimaryDestinations(resolvedFlags), [resolvedFlags])
+
+  const navigateToScreen = useCallback((nextScreen) => {
+    if (nextScreen === 'analysis') {
+      setAnalysisInitialTab('run')
+    }
+    setScreen(nextScreen)
+  }, [])
 
   useEffect(() => {
     if (!featureFlagsLoading) return
@@ -4187,112 +4360,107 @@ export default function App() {
   }
 
   // ─── Screens ─────────────────────────────────────────────
+  const showNavigation = screen !== 'diagnostics'
+  const navigationLayout = navigationMode === 'phone' ? 'bottom' : navigationMode === 'tablet' ? 'rail' : 'top'
+
   return (
     <div className="app-shell">
-      <div className="page-container">
-        {screen === 'home' && (
-          <HomeScreen
-          pendingSoreness={pendingSoreness}
-          sets={sets}
-          machines={machines}
-          libraryEnabled={libraryEnabled}
-          plansEnabled={plansEnabled}
-          homeDashboardEnabled={homeDashboardEnabled}
-          dayStartHour={PLAN_DAY_START_HOUR}
-          onLogSets={() => setScreen('log')}
-          onLibrary={() => {
-            if (!libraryEnabled) {
-              addLog({ level: 'warn', event: 'feature_flags.library_fallback', message: 'Library entry is disabled by feature flag.' })
-              return
-            }
-            setScreen('library')
-          }}
-          onHistory={() => setScreen('history')}
-          onAnalysis={() => {
-            setAnalysisInitialTab('run')
-            setScreen('analysis')
-          }}
-          onPlans={() => {
-            if (!plansEnabled) {
-              addLog({ level: 'warn', event: 'feature_flags.plans_fallback', message: 'Plans entry is disabled by feature flag.' })
-              return
-            }
-            setScreen('plans')
-          }}
-          onDiagnostics={() => setScreen('diagnostics')}
-          onSorenessSubmit={handleSorenessSubmit}
-          onSorenessDismiss={handleSorenessDismiss}
-          onSignOut={async () => { await signOut(); setUser(null); setScreen('home') }}
-          />
+      <div className={`page-container app-layout app-layout--${navigationMode} ${showNavigation ? 'app-layout--with-nav' : ''}`}>
+        {showNavigation && (
+          <div className={`app-nav-slot app-nav-slot--${navigationLayout}`}>
+            <AppNavigation
+              destinations={primaryDestinations}
+              activeScreen={screen}
+              onNavigate={navigateToScreen}
+              layout={navigationLayout}
+              onOpenDiagnostics={() => setScreen('diagnostics')}
+            />
+          </div>
         )}
-        {screen === 'log' && (
-          <LogSetScreen
-          sets={sets}
-          machines={machines}
-          machineHistory={machineHistory}
-          onLoadMachineHistory={loadMachineHistory}
-          onLogSet={handleLogSet}
-          onDeleteSet={handleDeleteSet}
-          onBack={() => setScreen('home')}
-          onOpenLibrary={() => {
-            if (!libraryEnabled) {
-              addLog({ level: 'warn', event: 'feature_flags.library_fallback', message: 'Library entry from log screen is disabled by feature flag.' })
-              return
-            }
-            setScreen('library')
-          }}
-          libraryEnabled={libraryEnabled}
-          dayStartHour={PLAN_DAY_START_HOUR}
-          setCentricLoggingEnabled={setCentricLoggingEnabled}
-          favoritesOrderingEnabled={favoritesOrderingEnabled}
-          restTimerEnabled={restTimerEnabled}
-          onSetRestTimerEnabled={setRestTimerEnabled}
-          restTimerSeconds={restTimerSeconds}
-          restTimerLastSetAtMs={restTimerLastSetAtMs}
-          />
-        )}
-        {libraryEnabled && screen === 'library' && (
-          <LibraryScreen
-          machines={machines}
-          onSaveMachine={handleSaveMachine}
-          onDeleteMachine={handleDeleteMachine}
-          onBack={() => setScreen('home')}
-          />
-        )}
-        {screen === 'history' && (
-          <HistoryScreen
-          trainingBuckets={trainingBuckets}
-          machines={machines}
-          onBack={() => setScreen('home')}
-          />
-        )}
-        {screen === 'analysis' && (
-          <AnalysisScreen
-          machines={machines}
-          machineHistory={machineHistory}
-          onLoadMachineHistory={loadMachineHistory}
-          onBack={() => setScreen('home')}
-          initialTab={analysisInitialTab}
-          analysisOnDemandOnly={analysisOnDemandOnly}
-          trainingBuckets={trainingBuckets}
-          sorenessHistory={sorenessHistory}
-          />
-        )}
-        {screen === 'diagnostics' && (
-          <DiagnosticsScreen
-          user={user}
-          machines={machines}
-          onBack={() => setScreen('home')}
-          onDataRefresh={loadData}
-          />
-        )}
-        {plansEnabled && screen === 'plans' && (
-          <PlanScreen
-          machines={machines}
-          sets={sets}
-          onBack={() => setScreen('home')}
-          />
-        )}
+        <div className={`app-content-slot ${navigationLayout === 'bottom' && showNavigation ? 'app-content-slot--bottom-nav' : ''}`}>
+          {screen === 'home' && (
+            <HomeScreen
+              pendingSoreness={pendingSoreness}
+              sets={sets}
+              machines={machines}
+              libraryEnabled={libraryEnabled}
+              plansEnabled={plansEnabled}
+              homeDashboardEnabled={homeDashboardEnabled}
+              dayStartHour={PLAN_DAY_START_HOUR}
+              onLogSets={() => navigateToScreen('log')}
+              onLibrary={() => navigateToScreen('library')}
+              onHistory={() => navigateToScreen('history')}
+              onAnalysis={() => navigateToScreen('analysis')}
+              onPlans={() => navigateToScreen('plans')}
+              onDiagnostics={() => setScreen('diagnostics')}
+              onSorenessSubmit={handleSorenessSubmit}
+              onSorenessDismiss={handleSorenessDismiss}
+              onSignOut={async () => { await signOut(); setUser(null); setScreen('home') }}
+            />
+          )}
+          {screen === 'log' && (
+            <LogSetScreen
+              sets={sets}
+              machines={machines}
+              machineHistory={machineHistory}
+              onLoadMachineHistory={loadMachineHistory}
+              onLogSet={handleLogSet}
+              onDeleteSet={handleDeleteSet}
+              onBack={() => setScreen('home')}
+              onOpenLibrary={() => navigateToScreen('library')}
+              libraryEnabled={libraryEnabled}
+              dayStartHour={PLAN_DAY_START_HOUR}
+              setCentricLoggingEnabled={setCentricLoggingEnabled}
+              favoritesOrderingEnabled={favoritesOrderingEnabled}
+              restTimerEnabled={restTimerEnabled}
+              onSetRestTimerEnabled={setRestTimerEnabled}
+              restTimerSeconds={restTimerSeconds}
+              restTimerLastSetAtMs={restTimerLastSetAtMs}
+            />
+          )}
+          {libraryEnabled && screen === 'library' && (
+            <LibraryScreen
+              machines={machines}
+              onSaveMachine={handleSaveMachine}
+              onDeleteMachine={handleDeleteMachine}
+              onBack={() => setScreen('home')}
+            />
+          )}
+          {screen === 'history' && (
+            <HistoryScreen
+              trainingBuckets={trainingBuckets}
+              machines={machines}
+              onBack={() => setScreen('home')}
+            />
+          )}
+          {screen === 'analysis' && (
+            <AnalysisScreen
+              machines={machines}
+              machineHistory={machineHistory}
+              onLoadMachineHistory={loadMachineHistory}
+              onBack={() => setScreen('home')}
+              initialTab={analysisInitialTab}
+              analysisOnDemandOnly={analysisOnDemandOnly}
+              trainingBuckets={trainingBuckets}
+              sorenessHistory={sorenessHistory}
+            />
+          )}
+          {screen === 'diagnostics' && (
+            <DiagnosticsScreen
+              user={user}
+              machines={machines}
+              onBack={() => setScreen('home')}
+              onDataRefresh={loadData}
+            />
+          )}
+          {plansEnabled && screen === 'plans' && (
+            <PlanScreen
+              machines={machines}
+              sets={sets}
+              onBack={() => setScreen('home')}
+            />
+          )}
+        </div>
       </div>
     </div>
   )
