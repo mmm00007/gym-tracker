@@ -314,6 +314,79 @@ function QuickAdjust({ value, onChange, step, color, min = 0 }) {
   )
 }
 
+function SegmentedControl({ label, options, value, onChange }) {
+  return (
+    <div>
+      <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, marginBottom: 8, fontFamily: 'var(--font-code)' }}>{label}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(92px, 1fr))', gap: 8 }}>
+        {options.map((option) => {
+          const active = value === option.value
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onChange(option.value)}
+              style={{
+                textTransform: 'capitalize',
+                minHeight: 44,
+                padding: '8px 10px',
+                borderRadius: 10,
+                border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                background: active ? 'var(--accent)22' : 'var(--surface2)',
+                color: active ? 'var(--accent)' : 'var(--text-muted)',
+                fontSize: 12,
+                fontWeight: 700,
+              }}
+            >
+              {option.label}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function CompactNumberControl({ label, value, onChange, min, max, step, unit, color }) {
+  const applyDelta = (delta) => onChange(Math.max(min, Math.min(max, Number((value + delta).toFixed(2)))))
+  return (
+    <div style={{ background: 'var(--surface2)', borderRadius: 12, border: '1px solid var(--border)', padding: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)' }}>{label}</div>
+        <div style={{ fontSize: 24, color, fontFamily: 'var(--font-mono)', fontWeight: 800, lineHeight: 1 }}>
+          {value}<span style={{ fontSize: 12, color: 'var(--text-dim)', marginLeft: 4 }}>{unit}</span>
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+        {[
+          { key: 'minusBig', label: `-${step * 5}`, delta: -step * 5 },
+          { key: 'minus', label: `-${step}`, delta: -step },
+          { key: 'plus', label: `+${step}`, delta: step },
+          { key: 'plusBig', label: `+${step * 5}`, delta: step * 5 },
+        ].map((action) => (
+          <button
+            key={action.key}
+            type="button"
+            onClick={() => applyDelta(action.delta)}
+            style={{
+              minHeight: 42,
+              borderRadius: 10,
+              border: `1px solid ${action.delta > 0 ? color : 'var(--red)'}44`,
+              color: action.delta > 0 ? color : 'var(--red)',
+              background: 'var(--surface)',
+              fontSize: 13,
+              fontWeight: 700,
+              fontFamily: 'var(--font-mono)',
+            }}
+          >
+            {action.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function MachineCard({ machine, onSelect, onEdit, compact, usageBadge }) {
   const primaryColor = mc(machine.muscle_groups?.[0])
   const thumbnails = machine.thumbnails || []
@@ -1935,6 +2008,7 @@ function LogSetScreen({
   const [setTypeByMachine, setSetTypeByMachine] = useState({})
   const [trendTimeframe, setTrendTimeframe] = useState('1w')
   const [setInProgress, setSetInProgress] = useState(false)
+  const [pendingTimedLog, setPendingTimedLog] = useState(null)
   const [activeSetSeconds, setActiveSetSeconds] = useState(0)
   const [logging, setLogging] = useState(false)
   const [feedback, setFeedback] = useState(null)
@@ -2116,14 +2190,14 @@ function LogSetScreen({
   }
 
   const handleStartSet = () => {
-    if (!selectedMachine || logging || setInProgress) return
+    if (!selectedMachine || logging || setInProgress || pendingTimedLog) return
     setMachineIdRef.current = selectedMachine.id
     setStartTime.current = Date.now()
     setActiveSetSeconds(0)
     setSetInProgress(true)
   }
 
-  const handleStopSet = async () => {
+  const handleStopSet = () => {
     if (!setInProgress || !setStartTime.current) return
     const durationSeconds = Math.max(1, Math.floor((Date.now() - setStartTime.current) / 1000))
     const machineId = setMachineIdRef.current || selectedMachine.id
@@ -2131,7 +2205,18 @@ function LogSetScreen({
     setStartTime.current = null
     setMachineIdRef.current = null
     setActiveSetSeconds(0)
-    await handleLog(durationSeconds, machineId)
+    setPendingTimedLog({ durationSeconds, machineId })
+  }
+
+  const handleConfirmTimedLog = async () => {
+    if (!pendingTimedLog) return
+    const payload = pendingTimedLog
+    setPendingTimedLog(null)
+    await handleLog(payload.durationSeconds, payload.machineId)
+  }
+
+  const handleCancelTimedLog = () => {
+    setPendingTimedLog(null)
   }
 
   const adherenceToday = useMemo(
@@ -2305,6 +2390,16 @@ function LogSetScreen({
     },
   ]
   const nextTarget = recommendNextTarget(latestTrendSignals, selectedMachine)
+  const interactionLocked = setInProgress || Boolean(pendingTimedLog)
+  const setTypeOptions = SET_TYPE_OPTIONS.map((type) => ({ value: type, label: type }))
+
+  const actionState = !setCentricLoggingEnabled
+    ? 'manual'
+    : pendingTimedLog
+      ? 'confirm'
+      : setInProgress
+        ? 'stop'
+        : 'start'
 
   useEffect(() => {
     measureSectionHeights()
@@ -2424,11 +2519,11 @@ function LogSetScreen({
                 <button
                   key={item.id}
                   onClick={() => suggestedMachine && selectMachine(suggestedMachine)}
-                  disabled={!suggestedMachine || setInProgress}
+                  disabled={!suggestedMachine || interactionLocked}
                   style={{
                     width: '100%', textAlign: 'left', borderRadius: 10, padding: '9px 10px',
                     border: '1px solid var(--border)', background: 'var(--surface2)',
-                    color: 'var(--text)', opacity: !suggestedMachine || setInProgress ? 0.6 : 1,
+                    color: 'var(--text)', opacity: !suggestedMachine || interactionLocked ? 0.6 : 1,
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
@@ -2446,49 +2541,79 @@ function LogSetScreen({
         )}
       </div>
 
-      {/* Machine selector button */}
-      <button onClick={() => { if (!setInProgress) setView('select') }} disabled={setInProgress} style={{
-        width: '100%', padding: 16, borderRadius: 14, cursor: 'pointer', textAlign: 'left', marginBottom: 16,
-        border: selectedMachine ? `2px solid ${mc(selectedMachine.muscle_groups?.[0])}44` : '2px dashed var(--text-dim)',
-        background: selectedMachine ? 'var(--surface)' : 'var(--surface)',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        opacity: setInProgress ? 0.65 : 1,
-      }}>
-        {selectedMachine ? (
-          <div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--font-mono)' }}>{selectedMachine.movement}</div>
-            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>{selectedMachine.name}</div>
-          </div>
-        ) : (
-          <div style={{ color: 'var(--text-muted)', fontSize: 15 }}>Tap to select an exercise</div>
-        )}
-        <span style={{ color: 'var(--text-dim)', fontSize: 20 }}>›</span>
-      </button>
+      {/* Exercise */}
+      <div style={{ marginBottom: 14, border: '1px solid var(--border)', borderRadius: 14, background: 'var(--surface)', padding: 14 }}>
+        <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, marginBottom: 10, fontFamily: 'var(--font-code)' }}>EXERCISE</div>
+        <button onClick={() => { if (!interactionLocked) setView('select') }} disabled={interactionLocked} style={{
+          width: '100%', minHeight: 52, padding: 14, borderRadius: 12, cursor: 'pointer', textAlign: 'left',
+          border: selectedMachine ? `2px solid ${mc(selectedMachine.muscle_groups?.[0])}44` : '2px dashed var(--text-dim)',
+          background: 'var(--surface2)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          opacity: interactionLocked ? 0.65 : 1,
+        }}>
+          {selectedMachine ? (
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--font-mono)' }}>{selectedMachine.movement}</div>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>{selectedMachine.name}</div>
+            </div>
+          ) : (
+            <div style={{ color: 'var(--text-muted)', fontSize: 15 }}>Tap to select an exercise</div>
+          )}
+          <span style={{ color: 'var(--text-dim)', fontSize: 20 }}>›</span>
+        </button>
+      </div>
 
       {selectedMachine && (
         <>
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, marginBottom: 8, fontFamily: 'var(--font-code)' }}>SET TYPE</div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {SET_TYPE_OPTIONS.map((type) => {
-                const active = setType === type
-                return (
-                  <button key={type} onClick={() => setSetType(type)} style={{
-                    textTransform: 'capitalize',
-                    padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
-                    background: active ? 'var(--accent)22' : 'var(--surface2)', color: active ? 'var(--accent)' : 'var(--text-muted)',
-                    fontSize: 12, fontWeight: 700,
-                  }}>{type}</button>
-                )
-              })}
+          <div style={{ marginBottom: 14, border: '1px solid var(--border)', borderRadius: 14, background: 'var(--surface)', padding: 14 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, marginBottom: 10, fontFamily: 'var(--font-code)' }}>SET CONFIGURATION</div>
+            <SegmentedControl label="SET TYPE" options={setTypeOptions} value={setType} onChange={setSetType} />
+            <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
+              <CompactNumberControl label="REPS" value={reps} onChange={setReps} min={1} max={30} step={1} unit="" color="var(--accent)" />
+              <CompactNumberControl label={weightLabelForMachine(selectedMachine).toUpperCase()} value={weight} onChange={setWeight} min={0} max={200} step={2.5} unit="kg" color="var(--blue)" />
             </div>
           </div>
 
           {selectedMachine.notes && (
-            <div style={{ background: '#1a1a2e', borderRadius: 12, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#88a', borderLeft: '3px solid #4444ff' }}>
+            <div style={{ background: '#1a1a2e', borderRadius: 12, padding: '10px 14px', marginBottom: 14, fontSize: 13, color: '#88a', borderLeft: '3px solid #4444ff' }}>
               💡 {selectedMachine.notes}
             </div>
           )}
+
+          <div style={{ marginBottom: 16, border: '1px solid var(--border)', borderRadius: 14, background: 'var(--surface)', padding: 14 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, marginBottom: 10, fontFamily: 'var(--font-code)' }}>ACTIVE SET CONTROLS</div>
+            {setCentricLoggingEnabled && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)' }}>REST TIMER</div>
+                <button onClick={() => onSetRestTimerEnabled(!restTimerEnabled)} style={{
+                  border: `1px solid ${restTimerEnabled ? 'var(--accent)' : 'var(--border)'}`,
+                  background: restTimerEnabled ? 'var(--accent)22' : 'var(--surface2)',
+                  color: restTimerEnabled ? 'var(--accent)' : 'var(--text-muted)',
+                  borderRadius: 999,
+                  minHeight: 36,
+                  padding: '6px 12px',
+                  fontSize: 12,
+                  fontWeight: 700,
+                }}>{restTimerEnabled ? 'ON' : 'OFF'}</button>
+              </div>
+            )}
+
+            {setCentricLoggingEnabled && restTimerEnabled && restTimerLastSetAtMs && restTimerSeconds > 0 && <RestTimer seconds={restTimerSeconds} />}
+
+            {setCentricLoggingEnabled && setInProgress && (
+              <div style={{ marginBottom: 8, fontSize: 13, color: 'var(--blue)', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                Set in progress: {fmtTimer(activeSetSeconds)}
+                <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>Exercise selection is locked until you stop this set.</div>
+              </div>
+            )}
+
+            {setCentricLoggingEnabled && pendingTimedLog && (
+              <div style={{ marginBottom: 8, fontSize: 12, color: 'var(--text-muted)' }}>
+                Timed set captured ({fmtTimer(pendingTimedLog.durationSeconds)}). Confirm to log or cancel.
+              </div>
+            )}
+          </div>
+
           {selectedMachine.instruction_image && (
             <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 12, marginBottom: 16, border: '1px solid var(--border)' }}>
               <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, marginBottom: 8, fontFamily: 'var(--font-code)' }}>
@@ -2499,62 +2624,48 @@ function LogSetScreen({
             </div>
           )}
 
-          {setCentricLoggingEnabled && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)' }}>REST TIMER</div>
-            <button onClick={() => onSetRestTimerEnabled(!restTimerEnabled)} style={{
-              border: `1px solid ${restTimerEnabled ? 'var(--accent)' : 'var(--border)'}`,
-              background: restTimerEnabled ? 'var(--accent)22' : 'var(--surface2)',
-              color: restTimerEnabled ? 'var(--accent)' : 'var(--text-muted)',
-              borderRadius: 999,
-              padding: '4px 10px',
-              fontSize: 12,
-              fontWeight: 700,
-            }}>{restTimerEnabled ? 'ON' : 'OFF'}</button>
+          <div style={{ position: 'sticky', bottom: 12, zIndex: 5, marginBottom: 20 }}>
+            <div style={{ borderRadius: 14, border: '1px solid var(--border)', background: 'rgba(11,13,16,0.92)', backdropFilter: 'blur(4px)', padding: 10 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, marginBottom: 8, fontFamily: 'var(--font-code)' }}>SUBMIT</div>
+              {actionState === 'start' && (
+                <button onClick={handleStartSet} disabled={logging || !selectedMachine} style={{
+                  width: '100%', minHeight: 52, borderRadius: 12, fontSize: 16, fontWeight: 800,
+                  background: 'linear-gradient(135deg, var(--accent), var(--accent-dark))', color: '#041018',
+                  border: 'none', fontFamily: 'var(--font-mono)', opacity: logging ? 0.6 : 1,
+                }}>START</button>
+              )}
+
+              {actionState === 'stop' && (
+                <button onClick={handleStopSet} disabled={logging || !setInProgress} style={{
+                  width: '100%', minHeight: 52, borderRadius: 12, fontSize: 16, fontWeight: 800,
+                  background: 'linear-gradient(135deg, var(--blue), #49a9ff)', color: '#041018',
+                  border: 'none', fontFamily: 'var(--font-mono)', opacity: logging ? 0.6 : 1,
+                }}>STOP & LOG</button>
+              )}
+
+              {actionState === 'confirm' && (
+                <div style={{ display: 'grid', gap: 8 }}>
+                  <button onClick={handleConfirmTimedLog} disabled={logging || !pendingTimedLog} style={{
+                    width: '100%', minHeight: 52, borderRadius: 12, fontSize: 16, fontWeight: 900,
+                    background: 'linear-gradient(135deg, var(--accent), var(--accent-dark))', color: '#041018',
+                    border: 'none', fontFamily: 'var(--font-mono)', opacity: logging ? 0.6 : 1,
+                  }}>CONFIRM LOG</button>
+                  <button onClick={handleCancelTimedLog} disabled={logging} style={{
+                    width: '100%', minHeight: 44, borderRadius: 10, fontSize: 13, fontWeight: 700,
+                    background: 'var(--surface2)', color: 'var(--text-muted)', border: '1px solid var(--border)',
+                  }}>Cancel</button>
+                </div>
+              )}
+
+              {actionState === 'manual' && (
+                <button onClick={() => handleLog()} disabled={logging} style={{
+                  width: '100%', minHeight: 52, borderRadius: 12, fontSize: 16, fontWeight: 900,
+                  background: 'linear-gradient(135deg, var(--accent), var(--accent-dark))', color: '#041018',
+                  border: 'none', fontFamily: 'var(--font-mono)', opacity: logging ? 0.6 : 1,
+                }}>LOG SET</button>
+              )}
             </div>
-          )}
-
-          {/* Rest timer */}
-          {setCentricLoggingEnabled && restTimerEnabled && restTimerLastSetAtMs && restTimerSeconds > 0 && <RestTimer seconds={restTimerSeconds} />}
-
-          <SliderInput label="Reps" value={reps} onChange={setReps} min={1} max={30} step={1} unit="" color="var(--accent)" />
-          <QuickAdjust value={reps} onChange={setReps} step={1} color="var(--accent)" min={1} />
-          <SliderInput label={weightLabelForMachine(selectedMachine)} value={weight} onChange={setWeight} min={0} max={200} step={2.5} unit="kg" color="var(--blue)" />
-          <QuickAdjust value={weight} onChange={setWeight} step={2.5} color="var(--blue)" />
-
-          {setCentricLoggingEnabled && setInProgress && (
-            <div style={{ marginBottom: 12, fontSize: 13, color: 'var(--blue)', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
-              Set in progress: {fmtTimer(activeSetSeconds)}
-              <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>Exercise selection is locked until you stop this set.</div>
-            </div>
-          )}
-
-          {setCentricLoggingEnabled && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
-            <button onClick={handleStartSet} disabled={logging || setInProgress} style={{
-              width: '100%', padding: 14, borderRadius: 12, fontSize: 14, fontWeight: 800,
-              background: 'var(--surface2)', color: setInProgress ? 'var(--text-dim)' : 'var(--accent)',
-              border: `1px solid ${setInProgress ? 'var(--border)' : 'var(--accent)66'}`,
-              fontFamily: 'var(--font-mono)',
-              opacity: logging ? 0.6 : 1,
-            }}>START SET</button>
-            <button onClick={handleStopSet} disabled={logging || !setInProgress} style={{
-              width: '100%', padding: 14, borderRadius: 12, fontSize: 14, fontWeight: 800,
-              background: setInProgress ? 'linear-gradient(135deg, var(--blue), #49a9ff)' : 'var(--surface2)',
-              color: setInProgress ? '#041018' : 'var(--text-dim)',
-              border: '1px solid var(--border)',
-              fontFamily: 'var(--font-mono)',
-              opacity: logging ? 0.6 : 1,
-            }}>STOP & LOG</button>
-            </div>
-          )}
-
-          <button onClick={() => handleLog()} disabled={logging || (setCentricLoggingEnabled && setInProgress)} style={{
-            width: '100%', padding: 20, borderRadius: 14, fontSize: 20, fontWeight: 900,
-            background: 'linear-gradient(135deg, var(--accent), var(--accent-dark))', color: '#000',
-            fontFamily: 'var(--font-mono)', marginBottom: 24, boxShadow: '0 0 30px var(--accent)33',
-            opacity: logging || setInProgress ? 0.6 : 1,
-          }}>LOG SET ✓</button>
+          </div>
 
           <div style={{ marginBottom: 24 }}>
             {renderSectionHeader('snapshot', 'MACHINE SNAPSHOT')}
