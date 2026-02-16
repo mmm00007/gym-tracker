@@ -154,8 +154,25 @@ select:focus-visible {
   min-width: 0;
 }
 
+
+.app-nav-slot {
+  min-width: 0;
+}
+
+.app-nav-slot--top {
+  margin-top: 12px;
+}
+
+.app-navigation__button:focus-visible,
+.app-navigation__menu-item:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  background: color-mix(in oklab, var(--accent) 20%, transparent);
+  color: var(--text);
+}
+
 .app-content-slot--bottom-nav {
-  padding-bottom: 84px;
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
 }
 
 @media (min-width: 768px) {
@@ -173,7 +190,7 @@ select:focus-visible {
   }
 }
 
-@media (min-width: 1200px) {
+@media (min-width: 1440px) {
   .app-layout--desktop.app-layout--with-nav {
     display: grid;
     grid-template-columns: minmax(0, 1fr);

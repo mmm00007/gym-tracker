@@ -92,7 +92,7 @@ const TARGET_TOP_SET_REP_RANGE = { min: 6, max: 8 }
 const DEFAULT_LOAD_INCREMENT_KG = 2.5
 const HISTORICAL_SAMPLE_DAYS = 90
 const BREAKPOINT_TABLET = 768
-const BREAKPOINT_DESKTOP = 1200
+const BREAKPOINT_DESKTOP = 1440
 
 const PRIMARY_DESTINATIONS = [
   { key: 'home', label: 'Home', icon: '🏠' },
@@ -107,39 +107,28 @@ const getPrimaryDestinations = (flags) => PRIMARY_DESTINATIONS.filter((destinati
   destination.isVisible ? destination.isVisible(flags) : true
 ))
 
-function useMediaQuery(query) {
-  const getMatches = useCallback(() => {
-    if (typeof window === 'undefined') return false
-    return window.matchMedia(query).matches
-  }, [query])
-
-  const [matches, setMatches] = useState(getMatches)
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return undefined
-    const mediaQueryList = window.matchMedia(query)
-    const onChange = (event) => setMatches(event.matches)
-    setMatches(mediaQueryList.matches)
-
-    if (typeof mediaQueryList.addEventListener === 'function') {
-      mediaQueryList.addEventListener('change', onChange)
-      return () => mediaQueryList.removeEventListener('change', onChange)
-    }
-
-    mediaQueryList.addListener(onChange)
-    return () => mediaQueryList.removeListener(onChange)
-  }, [query])
-
-  return matches
+const getNavigationModeFromWidth = (width) => {
+  if (width >= BREAKPOINT_DESKTOP) return 'desktop'
+  if (width >= BREAKPOINT_TABLET) return 'tablet'
+  return 'phone'
 }
 
 function useNavigationLayoutMode() {
-  const isDesktop = useMediaQuery(`(min-width: ${BREAKPOINT_DESKTOP}px)`)
-  const isTablet = useMediaQuery(`(min-width: ${BREAKPOINT_TABLET}px)`)
+  const [mode, setMode] = useState(() => {
+    if (typeof window === 'undefined') return 'phone'
+    return getNavigationModeFromWidth(window.innerWidth)
+  })
 
-  if (isDesktop) return 'desktop'
-  if (isTablet) return 'tablet'
-  return 'phone'
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+
+    const updateMode = () => setMode(getNavigationModeFromWidth(window.innerWidth))
+    window.addEventListener('resize', updateMode)
+    updateMode()
+    return () => window.removeEventListener('resize', updateMode)
+  }, [])
+
+  return mode
 }
 
 const HISTORICAL_SPLIT_TEMPLATES = {
@@ -3815,16 +3804,16 @@ function AppNavigation({
 
   const onNavKeyDown = (event, buttonIndex) => {
     const horizontal = layout !== 'rail'
-    const nextKey = horizontal ? 'ArrowRight' : 'ArrowDown'
-    const previousKey = horizontal ? 'ArrowLeft' : 'ArrowUp'
+    const nextKeys = horizontal ? ['ArrowRight'] : ['ArrowDown']
+    const previousKeys = horizontal ? ['ArrowLeft'] : ['ArrowUp']
 
-    if (event.key === nextKey) {
+    if (nextKeys.includes(event.key)) {
       event.preventDefault()
       focusNavButton(buttonIndex + 1)
       return
     }
 
-    if (event.key === previousKey) {
+    if (previousKeys.includes(event.key)) {
       event.preventDefault()
       focusNavButton(buttonIndex - 1)
       return
@@ -3861,12 +3850,13 @@ function AppNavigation({
       }
 
   return (
-    <nav aria-label="Primary" style={navStyle}>
+    <nav aria-label="Primary" className={`app-navigation app-navigation--${layout}`} style={navStyle}>
       <div style={{ display: 'flex', flexDirection: layout === 'rail' ? 'column' : 'row', gap: 8, alignItems: 'stretch' }}>
         {destinations.map((destination, index) => {
           const active = activeScreen === destination.key
           return (
             <button
+              className="app-navigation__button"
               key={destination.key}
               ref={(node) => { navButtonRefs.current[index] = node }}
               onKeyDown={(event) => onNavKeyDown(event, index)}
@@ -3898,6 +3888,7 @@ function AppNavigation({
         })}
         <div style={{ position: 'relative', flex: layout === 'bottom' || layout === 'top' ? 1 : 'none' }}>
           <button
+            className="app-navigation__button app-navigation__button--overflow"
             ref={(node) => { navButtonRefs.current[destinations.length] = node }}
             onKeyDown={(event) => onNavKeyDown(event, destinations.length)}
             onClick={() => setIsOverflowOpen((open) => !open)}
@@ -3935,6 +3926,7 @@ function AppNavigation({
               zIndex: 40,
             }}>
               <button
+                className="app-navigation__menu-item"
                 role="menuitem"
                 onClick={() => {
                   setIsOverflowOpen(false)
@@ -4217,7 +4209,12 @@ export default function App() {
   // ─── Screens ─────────────────────────────────────────────
   const showNavigation = screen !== 'diagnostics'
   const effectiveNavigationMode = responsiveUiV2Enabled ? navigationMode : 'phone'
-  const navigationLayout = effectiveNavigationMode === 'phone' ? 'bottom' : effectiveNavigationMode === 'tablet' ? 'rail' : 'top'
+  const navigationLayoutByMode = {
+    phone: 'bottom',
+    tablet: 'rail',
+    desktop: 'top',
+  }
+  const navigationLayout = navigationLayoutByMode[effectiveNavigationMode] || 'bottom'
 
   return (
     <div className="app-shell" data-responsive-ui={responsiveUiV2Enabled ? 'v2' : 'legacy'}>
