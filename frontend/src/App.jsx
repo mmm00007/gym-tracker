@@ -2099,7 +2099,7 @@ function LogSetScreen({
     const targetMachine = machines.find((m) => m.id === targetMachineId) || selectedMachine
     setLogging(true)
     const rest = restTimerEnabled && restTimerLastSetAtMs
-      ? Math.floor((Date.now() - restTimerLastSetAtMs) / 1000)
+      ? Math.max(0, Math.floor((Date.now() - restTimerLastSetAtMs) / 1000))
       : null
     try {
       await onLogSet(targetMachineId, reps, weight, durationSeconds, rest, setType)
