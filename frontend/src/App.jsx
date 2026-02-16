@@ -660,7 +660,7 @@ function AuthScreen({ onAuth }) {
   }
 
   return (
-    <div style={{ padding: '20px 16px', minHeight: '100dvh', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+    <div className="screen-frame" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
       <div style={{ textAlign: 'center', marginBottom: 48 }}>
         <div style={{ fontSize: 13, letterSpacing: 6, color: 'var(--text-dim)', textTransform: 'uppercase', marginBottom: 8, fontFamily: 'var(--font-code)' }}>iron</div>
         <h1 style={{ fontSize: 48, fontWeight: 900, margin: 0, background: 'linear-gradient(135deg, var(--accent), var(--blue))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontFamily: 'var(--font-mono)', letterSpacing: -2 }}>TRACKER</h1>
@@ -943,7 +943,7 @@ function HomeScreen({
   }, [homeDashboardEnabled, dayStartHour])
 
   return (
-    <div style={{ padding: '20px 16px', minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>
+    <div className="screen-frame" style={{ display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
         <div />
         <button onClick={onSignOut} style={{ color: 'var(--text-dim)', fontSize: 12, padding: 8 }}>Sign out</button>
@@ -986,7 +986,7 @@ function HomeScreen({
         </div>
         {sampleWarning && <div style={{ fontSize: 12, color: '#ffb347', marginBottom: 12 }}>⚠ {sampleWarning}</div>}
 
-        <div style={{ display: 'grid', gap: 10 }}>
+        <div className="page-grid" style={{ gap: 10 }}>
           <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 12, padding: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
               <div style={{ fontSize: 13, fontWeight: 700 }}>Muscle-group normalized workload</div>
@@ -1741,7 +1741,7 @@ function PlanScreen({ machines, sets, onBack }) {
   }
 
   return (
-    <div style={{ padding: '20px 16px', minHeight: '100dvh' }}>
+    <div className="screen-frame">
       <TopBar left={<BackBtn onClick={onBack} />} title="PLANS" right={null} />
       <div style={{ marginBottom: 12, border: '1px solid var(--border)', borderRadius: 12, padding: 12, background: 'var(--surface)' }}>
         <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 6, fontFamily: 'var(--font-code)', letterSpacing: 1 }}>PLAN PROGRESS</div>
@@ -1878,7 +1878,7 @@ function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
   }
 
   return (
-    <div style={{ padding: '20px 16px', minHeight: '100dvh' }}>
+    <div className="screen-frame">
       <TopBar left={<BackBtn onClick={onCancel} />} title="EDIT EXERCISE" />
 
       {fields.map(([key, label, type]) => (
@@ -2021,7 +2021,7 @@ function LibraryScreen({ machines, onSaveMachine, onDeleteMachine, onBack }) {
   }
 
   return (
-    <div style={{ padding: '20px 16px', minHeight: '100dvh' }}>
+    <div className="screen-frame">
       <TopBar left={<BackBtn onClick={onBack} />} title="LIBRARY" right={<button onClick={() => setEditingMachine({})} style={{ fontSize: 13, color: 'var(--accent)' }}>+ Add</button>} />
 
       <div style={{ marginBottom: 12 }}>
@@ -2456,7 +2456,7 @@ function LogSetScreen({
       return `${count} sets · ${favoritesWindow}`
     }
     return (
-      <div style={{ padding: '20px 16px', minHeight: '100dvh' }}>
+      <div className="screen-frame">
         <TopBar left={<BackBtn onClick={() => setView('log')} />} title="SELECT EXERCISE" />
         {libraryEnabled && (
           <button onClick={onOpenLibrary} style={{
@@ -2588,7 +2588,7 @@ function LogSetScreen({
   }
 
   return (
-    <div style={{ padding: '20px 16px', paddingBottom: 100, minHeight: '100dvh' }}>
+    <div className="screen-frame screen-frame--bottom-nav">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <BackBtn onClick={onBack} />
         <div style={{ textAlign: 'right' }}>
@@ -2991,7 +2991,7 @@ function LogSetScreen({
 
 function HistoryScreen({ trainingBuckets, machines, onBack }) {
   return (
-    <div style={{ padding: '20px 16px', minHeight: '100dvh' }}>
+    <div className="screen-frame">
       <TopBar left={<BackBtn onClick={onBack} />} title="HISTORY" />
       {trainingBuckets.length === 0 ? (
         <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-dim)' }}>
@@ -3313,7 +3313,7 @@ function AnalysisScreen({
   ]
 
   return (
-    <div style={{ padding: '20px 16px', minHeight: '100dvh' }}>
+    <div className="screen-frame">
       <TopBar left={<BackBtn onClick={onBack} />} title="ANALYZE" />
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
@@ -3814,7 +3814,7 @@ function DiagnosticsScreen({ user, machines, onBack, onDataRefresh }) {
   const expiresAt = session?.expires_at ? new Date(session.expires_at * 1000).toLocaleString() : 'n/a'
 
   return (
-    <div style={{ padding: '20px 16px', minHeight: '100dvh' }}>
+    <div className="screen-frame">
       <TopBar left={<BackBtn onClick={onBack} />} title="DIAGNOSTICS" />
 
       <div style={{ background: 'var(--surface)', borderRadius: 14, padding: 16, border: '1px solid var(--border)', marginBottom: 16 }}>
@@ -4169,18 +4169,29 @@ export default function App() {
   // ─── Loading / Auth ──────────────────────────────────────
   if (user === undefined) {
     return (
-      <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>Loading...</div>
+      <div className="app-shell">
+        <div className="page-container" style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>Loading...</div>
+        </div>
       </div>
     )
   }
-  if (!user) return <AuthScreen onAuth={loadData} />
+  if (!user) {
+    return (
+      <div className="app-shell">
+        <div className="page-container">
+          <AuthScreen onAuth={loadData} />
+        </div>
+      </div>
+    )
+  }
 
   // ─── Screens ─────────────────────────────────────────────
   return (
-    <>
-      {screen === 'home' && (
-        <HomeScreen
+    <div className="app-shell">
+      <div className="page-container">
+        {screen === 'home' && (
+          <HomeScreen
           pendingSoreness={pendingSoreness}
           sets={sets}
           machines={machines}
@@ -4212,10 +4223,10 @@ export default function App() {
           onSorenessSubmit={handleSorenessSubmit}
           onSorenessDismiss={handleSorenessDismiss}
           onSignOut={async () => { await signOut(); setUser(null); setScreen('home') }}
-        />
-      )}
-      {screen === 'log' && (
-        <LogSetScreen
+          />
+        )}
+        {screen === 'log' && (
+          <LogSetScreen
           sets={sets}
           machines={machines}
           machineHistory={machineHistory}
@@ -4238,25 +4249,25 @@ export default function App() {
           onSetRestTimerEnabled={setRestTimerEnabled}
           restTimerSeconds={restTimerSeconds}
           restTimerLastSetAtMs={restTimerLastSetAtMs}
-        />
-      )}
-      {libraryEnabled && screen === 'library' && (
-        <LibraryScreen
+          />
+        )}
+        {libraryEnabled && screen === 'library' && (
+          <LibraryScreen
           machines={machines}
           onSaveMachine={handleSaveMachine}
           onDeleteMachine={handleDeleteMachine}
           onBack={() => setScreen('home')}
-        />
-      )}
-      {screen === 'history' && (
-        <HistoryScreen
+          />
+        )}
+        {screen === 'history' && (
+          <HistoryScreen
           trainingBuckets={trainingBuckets}
           machines={machines}
           onBack={() => setScreen('home')}
-        />
-      )}
-      {screen === 'analysis' && (
-        <AnalysisScreen
+          />
+        )}
+        {screen === 'analysis' && (
+          <AnalysisScreen
           machines={machines}
           machineHistory={machineHistory}
           onLoadMachineHistory={loadMachineHistory}
@@ -4265,23 +4276,24 @@ export default function App() {
           analysisOnDemandOnly={analysisOnDemandOnly}
           trainingBuckets={trainingBuckets}
           sorenessHistory={sorenessHistory}
-        />
-      )}
-      {screen === 'diagnostics' && (
-        <DiagnosticsScreen
+          />
+        )}
+        {screen === 'diagnostics' && (
+          <DiagnosticsScreen
           user={user}
           machines={machines}
           onBack={() => setScreen('home')}
           onDataRefresh={loadData}
-        />
-      )}
-      {plansEnabled && screen === 'plans' && (
-        <PlanScreen
+          />
+        )}
+        {plansEnabled && screen === 'plans' && (
+          <PlanScreen
           machines={machines}
           sets={sets}
           onBack={() => setScreen('home')}
-        />
-      )}
-    </>
+          />
+        )}
+      </div>
+    </div>
   )
 }
