@@ -14,6 +14,14 @@
   --font-body: 'Outfit', -apple-system, sans-serif;
   --font-mono: 'Space Mono', monospace;
   --font-code: 'JetBrains Mono', monospace;
+  --bp-sm: 640px;
+  --bp-md: 900px;
+  --bp-lg: 1200px;
+  --content-max: 1120px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -34,9 +42,45 @@ body {
 }
 
 #root {
-  max-width: 480px;
-  margin: 0 auto;
   min-height: 100dvh;
+}
+
+.app-shell {
+  min-height: 100dvh;
+  width: 100%;
+  background: var(--bg);
+}
+
+.page-container {
+  width: 100%;
+  max-width: min(var(--content-max), calc(100vw - (var(--space-4) * 2)));
+  margin: 0 auto;
+}
+
+.screen-frame {
+  min-height: 100dvh;
+  padding: var(--space-5) var(--space-4) max(var(--space-5), env(safe-area-inset-bottom));
+}
+
+.screen-frame--bottom-nav {
+  padding-bottom: max(100px, env(safe-area-inset-bottom));
+}
+
+.page-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 700px) {
+  .page-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1080px) {
+  .page-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 input, textarea, button, select {
