@@ -191,6 +191,10 @@ def require_supabase_admin() -> tuple[str, str]:
     return SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 
 
+def is_supabase_admin_configured() -> bool:
+    return bool(SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY)
+
+
 async def supabase_admin_request(method: str, path: str, payload: Optional[Any] = None, params: Optional[dict] = None) -> Any:
     base_url, service_key = require_supabase_admin()
     url = f"{base_url}/rest/v1/{path.lstrip('/')}"
@@ -404,24 +408,31 @@ async def get_recommendations(req: RecommendationRequest, user_id: str = Depends
 
     validated_scope_id: Optional[str] = None
     if req.scope_id:
-        scope_rows = await supabase_admin_request(
-            "GET",
-            "recommendation_scopes",
-            params={
-                "id": f"eq.{req.scope_id}",
-                "user_id": f"eq.{user_id}",
-                "select": "id",
-                "limit": "1",
-            },
-        )
-        if not scope_rows:
+        if is_supabase_admin_configured():
+            scope_rows = await supabase_admin_request(
+                "GET",
+                "recommendation_scopes",
+                params={
+                    "id": f"eq.{req.scope_id}",
+                    "user_id": f"eq.{user_id}",
+                    "select": "id",
+                    "limit": "1",
+                },
+            )
+            if not scope_rows:
+                logger.warning(
+                    "Rejected recommendation request with invalid scope ownership: user_id=%s scope_id=%s",
+                    user_id,
+                    req.scope_id,
+                )
+                raise HTTPException(400, "Invalid scope_id")
+            validated_scope_id = req.scope_id
+        else:
             logger.warning(
-                "Rejected recommendation request with invalid scope ownership: user_id=%s scope_id=%s",
+                "Skipping scope validation because supabase admin credentials are not configured: user_id=%s scope_id=%s",
                 user_id,
                 req.scope_id,
             )
-            raise HTTPException(400, "Invalid scope_id")
-        validated_scope_id = req.scope_id
 
     scope, grouped_training, equipment = normalize_recommendation_request(req)
     trimmed_training = trim_history_to_token_budget(grouped_training, MAX_HISTORY_TOKENS)
