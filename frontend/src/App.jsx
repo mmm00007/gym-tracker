@@ -2166,15 +2166,17 @@ function LogSetScreen({
     return () => clearInterval(timer)
   }, [dayStartHour])
 
-  const handleLog = async (durationSeconds = null, machineIdOverride = null) => {
+  const handleLog = async (durationSeconds = null, machineIdOverride = null, restSecondsOverride = null) => {
     if (logging) return
     const targetMachineId = machineIdOverride || selectedMachine?.id
     if (!targetMachineId) return
     const targetMachine = machines.find((m) => m.id === targetMachineId) || selectedMachine
     setLogging(true)
-    const rest = restTimerEnabled && restTimerLastSetAtMs
-      ? Math.max(0, Math.floor((Date.now() - restTimerLastSetAtMs) / 1000))
-      : null
+    const rest = restSecondsOverride != null
+      ? restSecondsOverride
+      : restTimerEnabled && restTimerLastSetAtMs
+        ? Math.max(0, Math.floor((Date.now() - restTimerLastSetAtMs) / 1000))
+        : null
     try {
       await onLogSet(targetMachineId, reps, weight, durationSeconds, rest, setType)
       setSetTypeByMachine((prev) => ({ ...prev, [targetMachineId]: setType }))
@@ -2199,20 +2201,23 @@ function LogSetScreen({
 
   const handleStopSet = () => {
     if (!setInProgress || !setStartTime.current) return
+    const restSeconds = restTimerEnabled && restTimerLastSetAtMs
+      ? Math.max(0, Math.floor((Date.now() - restTimerLastSetAtMs) / 1000))
+      : null
     const durationSeconds = Math.max(1, Math.floor((Date.now() - setStartTime.current) / 1000))
     const machineId = setMachineIdRef.current || selectedMachine.id
     setSetInProgress(false)
     setStartTime.current = null
     setMachineIdRef.current = null
     setActiveSetSeconds(0)
-    setPendingTimedLog({ durationSeconds, machineId })
+    setPendingTimedLog({ durationSeconds, machineId, restSeconds })
   }
 
   const handleConfirmTimedLog = async () => {
     if (!pendingTimedLog) return
     const payload = pendingTimedLog
     setPendingTimedLog(null)
-    await handleLog(payload.durationSeconds, payload.machineId)
+    await handleLog(payload.durationSeconds, payload.machineId, payload.restSeconds)
   }
 
   const handleCancelTimedLog = () => {
