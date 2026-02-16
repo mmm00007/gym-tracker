@@ -15,6 +15,13 @@ import { API_BASE_URL, pingHealth, getRecommendations } from './lib/api'
 import { getFeatureFlags, DEFAULT_FLAGS } from './lib/featureFlags'
 import { addLog, subscribeLogs } from './lib/logs'
 import {
+  TopAppBar,
+  IconButton,
+  Chip,
+  SegmentedButtons,
+} from './components/uiPrimitives'
+import HistoryScreen from './screens/HistoryScreen'
+import {
   computeWorkloadByMuscleGroup,
   computeWeeklyConsistency,
   computeCurrentWeekConsistency,
@@ -404,26 +411,15 @@ const SORENESS_EMOJI = ['😊', '🙂', '😐', '😣', '🤕']
 // ─── Shared Components ─────────────────────────────────────
 
 function TopBar({ left, title, right }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, padding: '12px 0' }}>
-      <div style={{ width: 70, textAlign: 'left' }}>{left}</div>
-      <span style={{ fontSize: 13, color: 'var(--text-dim)', fontFamily: 'var(--font-code)', letterSpacing: 1 }}>{title}</span>
-      <div style={{ width: 70, textAlign: 'right' }}>{right}</div>
-    </div>
-  )
+  return <TopAppBar left={left} title={title} right={right} />
 }
 
 function BackBtn({ onClick }) {
-  return <button onClick={onClick} style={{ color: 'var(--text-muted)', fontSize: 15, padding: 4 }}>← Back</button>
+  return <IconButton onClick={onClick}>← Back</IconButton>
 }
 
 function Pill({ text, color }) {
-  return (
-    <span style={{
-      fontSize: 11, padding: '2px 8px', borderRadius: 20, fontWeight: 600,
-      background: (color || '#888') + '22', color: color || '#888', border: `1px solid ${(color || '#888')}33`,
-    }}>{text}</span>
-  )
+  return <Chip text={text} color={color} />
 }
 
 function SliderInput({ label, value, onChange, min, max, step, unit, color }) {
@@ -472,36 +468,7 @@ function QuickAdjust({ value, onChange, step, color, min = 0 }) {
 }
 
 function SegmentedControl({ label, options, value, onChange }) {
-  return (
-    <div>
-      <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, marginBottom: 8, fontFamily: 'var(--font-code)' }}>{label}</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(92px, 1fr))', gap: 8 }}>
-        {options.map((option) => {
-          const active = value === option.value
-          return (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => onChange(option.value)}
-              style={{
-                textTransform: 'capitalize',
-                minHeight: 44,
-                padding: '8px 10px',
-                borderRadius: 10,
-                border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
-                background: active ? 'var(--accent)22' : 'var(--surface2)',
-                color: active ? 'var(--accent)' : 'var(--text-muted)',
-                fontSize: 12,
-                fontWeight: 700,
-              }}
-            >
-              {option.label}
-            </button>
-          )
-        })}
-      </div>
-    </div>
-  )
+  return <SegmentedButtons label={label} options={options} value={value} onChange={onChange} />
 }
 
 function CompactNumberControl({ label, value, onChange, min, max, step, unit, color }) {
@@ -3039,47 +3006,6 @@ function LogSetScreen({
 
 // ─── History Screen ────────────────────────────────────────
 
-function HistoryScreen({ trainingBuckets, machines, onBack }) {
-  return (
-    <div className="screen-frame">
-      <TopBar left={<BackBtn onClick={onBack} />} title="HISTORY" />
-      {trainingBuckets.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-dim)' }}>
-          <div style={{ fontSize: 48, marginBottom: 12 }}>📋</div>
-          <div style={{ fontSize: 16 }}>No sets logged yet</div>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {trainingBuckets.slice().reverse().map((bucket) => {
-            const durationMs = new Date(bucket.ended_at) - new Date(bucket.started_at)
-            const setCount = bucket.sets.length
-            const uniqueMovements = [...new Set(bucket.sets.map((set) => set.machine_name))]
-            return (
-              <div key={bucket.training_bucket_id} style={{
-                background: 'var(--surface)', borderRadius: 14, padding: 16, border: '1px solid var(--border)',
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{fmtFull(bucket.started_at)}</div>
-                  <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{fmtDur(durationMs)}</div>
-                </div>
-                <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>
-                  {setCount} sets · {uniqueMovements.length} exercises
-                </div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {uniqueMovements.map((movement) => {
-                    const machine = machines.find((m) => m.movement === movement)
-                    return <Pill key={movement} text={movement} color={mc(machine?.muscle_groups?.[0])} />
-                  })}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ─── Analysis Screen ───────────────────────────────────────
 
 function AnalysisScreen({
@@ -4437,6 +4363,7 @@ export default function App() {
               trainingBuckets={trainingBuckets}
               machines={machines}
               onBack={() => setScreen('home')}
+              getMuscleColor={mc}
             />
           )}
           {screen === 'analysis' && (
