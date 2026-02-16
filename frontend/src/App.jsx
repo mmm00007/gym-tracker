@@ -1941,12 +1941,21 @@ function LogSetScreen({
   const [favoritesWindow, setFavoritesWindow] = useState('30d')
   const [favoriteCountsByMachine, setFavoriteCountsByMachine] = useState({})
   const [favoriteLoadFailed, setFavoriteLoadFailed] = useState(false)
+  const [expandedSections, setExpandedSections] = useState({
+    snapshot: true,
+    machineSets: true,
+    allSets: false,
+  })
+  const [sectionHeights, setSectionHeights] = useState({ snapshot: 0, machineSets: 0, allSets: 0 })
   const restRef = useRef(null)
   const activeSetRef = useRef(null)
   const setStartTime = useRef(null)
   const setMachineIdRef = useRef(null)
   const lastSetTime = useRef(null)
   const feedbackTimeoutRef = useRef(null)
+  const snapshotSectionRef = useRef(null)
+  const machineSetsSectionRef = useRef(null)
+  const allSetsSectionRef = useRef(null)
 
   useEffect(() => {
     if (setCentricLoggingEnabled) return
@@ -1957,6 +1966,24 @@ function LogSetScreen({
     setFeedback({ message, tone })
     if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current)
     feedbackTimeoutRef.current = setTimeout(() => setFeedback(null), 1600)
+  }, [])
+
+  const measureSectionHeights = useCallback(() => {
+    setSectionHeights({
+      snapshot: snapshotSectionRef.current?.scrollHeight || 0,
+      machineSets: machineSetsSectionRef.current?.scrollHeight || 0,
+      allSets: allSetsSectionRef.current?.scrollHeight || 0,
+    })
+  }, [])
+
+  const toggleSection = useCallback((key) => {
+    const scrollY = typeof window !== 'undefined' ? window.scrollY : 0
+    setExpandedSections((prev) => ({ ...prev, [key]: !prev[key] }))
+    if (typeof window !== 'undefined') {
+      window.requestAnimationFrame(() => {
+        window.scrollTo({ top: scrollY })
+      })
+    }
   }, [])
 
   useEffect(() => () => {
@@ -2294,6 +2321,69 @@ function LogSetScreen({
   ]
   const nextTarget = recommendNextTarget(latestTrendSignals, selectedMachine)
 
+  useEffect(() => {
+    measureSectionHeights()
+  }, [
+    measureSectionHeights,
+    selectedMachine?.id,
+    setsForMachine.length,
+    sets.length,
+    trendTimeframe,
+    historyForMachine.length,
+    progressionSeries.length,
+  ])
+
+  const sectionToggleButtonStyle = {
+    width: '100%',
+    minHeight: 44,
+    padding: '10px 12px',
+    borderRadius: 12,
+    border: '1px solid var(--border)',
+    background: 'var(--surface)',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 10,
+    textAlign: 'left',
+    marginBottom: 8,
+  }
+
+  const renderSectionHeader = (key, label) => {
+    const isExpanded = expandedSections[key]
+    return (
+      <button
+        type="button"
+        aria-expanded={isExpanded}
+        aria-controls={`section-${key}`}
+        onClick={() => toggleSection(key)}
+        style={sectionToggleButtonStyle}
+      >
+        <span style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 2, fontFamily: 'var(--font-code)' }}>{label}</span>
+        <span
+          aria-hidden="true"
+          style={{
+            fontSize: 14,
+            color: 'var(--text-muted)',
+            transform: `rotate(${isExpanded ? 0 : -90}deg)`,
+            transition: 'transform 200ms ease',
+            lineHeight: 1,
+          }}
+        >
+          ▾
+        </span>
+      </button>
+    )
+  }
+
+  const getSectionBodyStyle = (key) => ({
+    overflow: 'hidden',
+    maxHeight: expandedSections[key] ? `${sectionHeights[key]}px` : '0px',
+    opacity: expandedSections[key] ? 1 : 0,
+    transform: `translateY(${expandedSections[key] ? 0 : -4}px)`,
+    transition: 'max-height 260ms ease, opacity 220ms ease, transform 220ms ease',
+    willChange: 'max-height, opacity, transform',
+  })
+
   return (
     <div style={{ padding: '20px 16px', paddingBottom: 100, minHeight: '100dvh' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -2473,9 +2563,9 @@ function LogSetScreen({
           }}>LOG SET ✓</button>
 
           <div style={{ marginBottom: 24 }}>
-            <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 2, marginBottom: 10, fontFamily: 'var(--font-code)' }}>
-              MACHINE SNAPSHOT
-            </div>
+            {renderSectionHeader('snapshot', 'MACHINE SNAPSHOT')}
+            <div id="section-snapshot" style={getSectionBodyStyle('snapshot')}>
+              <div ref={snapshotSectionRef}>
             {setsForMachine.length === 0 ? (
               <div style={{ fontSize: 13, color: 'var(--text-dim)', background: 'var(--surface)', borderRadius: 12, padding: 12, border: '1px solid var(--border)' }}>
                 Log your first set to see live metrics for this machine.
@@ -2558,13 +2648,15 @@ function LogSetScreen({
                 </div>
               </div>
             )}
+                        </div>
+            </div>
           </div>
 
           {setsForMachine.length > 0 && (
             <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 2, marginBottom: 10, fontFamily: 'var(--font-code)' }}>
-                SETS ON THIS MACHINE ({setsForMachine.length})
-              </div>
+              {renderSectionHeader('machineSets', `SETS ON THIS MACHINE (${setsForMachine.length})`)}
+              <div id="section-machineSets" style={getSectionBodyStyle('machineSets')}>
+                <div ref={machineSetsSectionRef}>
               {setsForMachine.map((s, i) => (
                 <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                   <div style={{
@@ -2585,17 +2677,20 @@ function LogSetScreen({
                   <button onClick={() => onDeleteSet(s.id)} style={{ color: 'var(--red)44', fontSize: 16, padding: 4 }}>×</button>
                 </div>
               ))}
+                </div>
+              </div>
             </div>
           )}
+
         </>
       )}
 
       {/* Full session log */}
       {sets.length > 0 && (
         <div>
-          <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 2, marginBottom: 10, fontFamily: 'var(--font-code)' }}>
-            ALL SETS ({sets.length})
-          </div>
+          {renderSectionHeader('allSets', `ALL SETS (${sets.length})`)}
+          <div id="section-allSets" style={getSectionBodyStyle('allSets')}>
+            <div ref={allSetsSectionRef}>
           {[...sets].reverse().map(s => {
             const m = machines.find(ma => ma.id === s.machine_id)
             return (
@@ -2617,6 +2712,8 @@ function LogSetScreen({
               </div>
             )
           })}
+            </div>
+          </div>
         </div>
       )}
 
