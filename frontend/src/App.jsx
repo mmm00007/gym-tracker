@@ -17,6 +17,7 @@ import { addLog, subscribeLogs } from './lib/logs'
 import {
   computeWorkloadByMuscleGroup,
   computeWeeklyConsistency,
+  computeCurrentWeekConsistency,
   computeWorkloadBalanceIndex,
   buildSampleWarning,
 } from './lib/dashboardMetrics'
@@ -568,6 +569,22 @@ function HomeScreen({
       : { completed: 0, planned: 0, ratio: 0, missing: [] }),
     [homeDashboardEnabled, todayPlanItems, sets, dayStartHour],
   )
+  const currentWeekConsistency = useMemo(() => {
+    if (!homeDashboardEnabled) {
+      return { weekStart: null, completedDays: 0, possibleDays: 7, ratio: 0 }
+    }
+    try {
+      return computeCurrentWeekConsistency(sets)
+    } catch (error) {
+      addLog({
+        level: 'error',
+        event: 'dashboard.metrics.current_week_consistency_failed',
+        message: error?.message || 'Failed to compute current week consistency metric.',
+        meta: { metric: 'current_week_consistency', setsCount: sets.length },
+      })
+      return { weekStart: null, completedDays: 0, possibleDays: 7, ratio: 0 }
+    }
+  }, [homeDashboardEnabled, sets])
   const balance = useMemo(() => {
     if (!homeDashboardEnabled) {
       return { index: 0, activeGroups: 0, totalWorkload: 0 }
@@ -604,6 +621,9 @@ function HomeScreen({
   const consistencyPoints = homeDashboardEnabled
     ? weeklyConsistency.weeks.map((week) => Number((week.ratio * 100).toFixed(1)))
     : []
+  const lowSampleConsistency = currentWeekConsistency.completedDays < 2
+  const lowSampleBalance = balance.activeGroups < 2 || workloadByMuscle.contributingSetCount < 8
+  const topWorkloadGroup = workloadByMuscle.groups[0] || null
 
   useEffect(() => {
     if (!homeDashboardEnabled) {
@@ -675,6 +695,18 @@ function HomeScreen({
               <div style={{ fontSize: 13, fontWeight: 700 }}>Muscle-group workload</div>
               <span title="Formula: set volume = reps × weight. Each set volume is split equally across that machine's listed muscle groups (denominator = number of listed groups for that machine). Duration is never inferred or used." style={{ fontSize: 12, color: 'var(--text-dim)' }}>ⓘ</span>
             </div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Training load by muscle group</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
+              <div style={{ fontSize: 20, fontFamily: 'var(--font-mono)', fontWeight: 800 }}>
+                {topWorkloadGroup ? topWorkloadGroup.muscleGroup : 'No data'}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                {workloadByMuscle.contributingSetCount} contributing sets
+              </div>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 8 }}>
+              Good signal: at least 8 logged sets spread across 3+ muscle groups this week.
+            </div>
             {!workloadByMuscle.groups.length && <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>No workload yet. Log sets to populate this widget.</div>}
             {!!workloadByMuscle.groups.length && (
               <div style={{ display: 'grid', gap: 6 }}>
@@ -691,10 +723,21 @@ function HomeScreen({
           <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 12, padding: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
               <div style={{ fontSize: 13, fontWeight: 700 }}>Weekly consistency</div>
-              <span title="Formula over rolling 6 weeks: consistency = completed training days / (6 × 7). A completed day is any local calendar day with ≥1 logged set. Denominator assumes 7 possible days per week." style={{ fontSize: 12, color: 'var(--text-dim)' }}>ⓘ</span>
+              <span title="Primary value uses the current week: completed training days / 7. Trend line shows the same ratio for each week over a rolling 6-week window. A completed day is any local calendar day with ≥1 logged set." style={{ fontSize: 12, color: 'var(--text-dim)' }}>ⓘ</span>
             </div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Training days this week</div>
             {!weeklyConsistency.completedDays && <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 6 }}>No completed training days in the current 6-week window.</div>}
-            <div style={{ fontSize: 20, fontFamily: 'var(--font-mono)', fontWeight: 800, marginBottom: 6 }}>{fmtNumber(weeklyConsistency.ratio * 100, 1)}%</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
+              <div style={{ fontSize: 20, fontFamily: 'var(--font-mono)', fontWeight: 800 }}>
+                {lowSampleConsistency ? 'Building baseline' : `${fmtNumber(currentWeekConsistency.ratio * 100, 1)}%`}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                {currentWeekConsistency.completedDays} / {currentWeekConsistency.possibleDays} days
+              </div>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 6 }}>
+              Good signal: 3–5+ training days each week sustained over the last 6 weeks.
+            </div>
             {!!consistencyPoints.length && <MiniLineChart points={consistencyPoints} color="var(--blue)" height={52} />}
           </div>
 
@@ -703,9 +746,17 @@ function HomeScreen({
               <div style={{ fontSize: 13, fontWeight: 700 }}>Workload distribution balance</div>
               <span title="Balance index (Shannon evenness): H = -Σ pᵢ ln(pᵢ), where pᵢ = muscle-group workload share. Index = H / ln(k), with k = number of active muscle groups. Range 0-1 (1 = perfectly even)." style={{ fontSize: 12, color: 'var(--text-dim)' }}>ⓘ</span>
             </div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Balanced across active groups</div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
-              <div style={{ fontSize: 20, fontFamily: 'var(--font-mono)', fontWeight: 800 }}>{fmtNumber(balance.index * 100, 1)}%</div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{balance.activeGroups} active groups</div>
+              <div style={{ fontSize: 20, fontFamily: 'var(--font-mono)', fontWeight: 800 }}>
+                {lowSampleBalance ? 'Collecting data' : `${fmtNumber(balance.index * 100, 1)}%`}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                {balance.activeGroups} active groups from {workloadByMuscle.contributingSetCount} sets
+              </div>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>
+              Good signal: keep 3+ muscle groups active with no single group dominating your weekly load.
             </div>
             {balance.activeGroups < 2 && <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>Need at least two active muscle groups for a meaningful balance score.</div>}
           </div>

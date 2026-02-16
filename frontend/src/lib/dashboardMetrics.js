@@ -132,6 +132,33 @@ export function computeWeeklyConsistency(sets = [], { rollingWeeks = 6 } = {}) {
   }
 }
 
+export function computeCurrentWeekConsistency(sets = []) {
+  const today = startOfLocalDay(new Date())
+  const weekStart = startOfLocalWeek(today)
+  const trainingDays = new Set()
+
+  sets.forEach((set) => {
+    const day = set?.training_date
+      ? parseLocalCalendarDate(set.training_date)
+      : startOfLocalDay(set?.logged_at)
+    if (!day) return
+    trainingDays.add(formatLocalDateKey(day))
+  })
+
+  const completedDays = Array.from({ length: 7 }, (_, offset) => {
+    const day = new Date(weekStart)
+    day.setDate(day.getDate() + offset)
+    return formatLocalDateKey(day)
+  }).filter((dayKey) => trainingDays.has(dayKey)).length
+
+  return {
+    weekStart: formatLocalDateKey(weekStart),
+    completedDays,
+    possibleDays: 7,
+    ratio: completedDays / 7,
+  }
+}
+
 export function computeWorkloadBalanceIndex(workloadByGroup = []) {
   const positive = workloadByGroup
     .map((entry) => Number(entry?.workload) || 0)
