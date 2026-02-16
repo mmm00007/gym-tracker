@@ -56,17 +56,23 @@ const coerceDayStartHour = (value, fallback = 4) => {
   return Math.min(23, Math.max(0, Math.floor(hour)))
 }
 
+const shiftByEffectiveDayBoundary = (value, { dayStartHour = 4 } = {}) => {
+  const date = toDate(value)
+  if (!date) return null
+
+  if (date.getHours() < coerceDayStartHour(dayStartHour)) {
+    date.setDate(date.getDate() - 1)
+  }
+
+  return date
+}
+
 export const getSetLocalDayKey = (set, { dayStartHour = 4 } = {}) => {
   const trainingDate = parseLocalCalendarDate(set?.training_date)
   if (trainingDate) return formatLocalDateKey(trainingDate)
 
-  const loggedAt = toDate(set?.logged_at)
-  if (!loggedAt) return null
-
-  const effective = new Date(loggedAt)
-  if (effective.getHours() < coerceDayStartHour(dayStartHour)) {
-    effective.setDate(effective.getDate() - 1)
-  }
+  const effective = shiftByEffectiveDayBoundary(set?.logged_at, { dayStartHour })
+  if (!effective) return null
 
   return formatLocalDateKey(effective)
 }
@@ -217,7 +223,7 @@ export function computeWorkloadByMuscleGroup(sets = [], machines = []) {
 
 export function computeWeeklyConsistency(sets = [], { rollingWeeks = 6, dayStartHour = 4 } = {}) {
   const safeWeeks = Math.max(1, Math.floor(rollingWeeks))
-  const today = startOfLocalDay(new Date())
+  const today = startOfLocalDay(shiftByEffectiveDayBoundary(new Date(), { dayStartHour }))
   const startWeek = startOfLocalWeek(today)
   const weekStarts = Array.from({ length: safeWeeks }, (_, index) => {
     const weekStart = new Date(startWeek)
@@ -259,7 +265,7 @@ export function computeWeeklyConsistency(sets = [], { rollingWeeks = 6, dayStart
 }
 
 export function computeCurrentWeekConsistency(sets = [], { dayStartHour = 4 } = {}) {
-  const today = startOfLocalDay(new Date())
+  const today = startOfLocalDay(shiftByEffectiveDayBoundary(new Date(), { dayStartHour }))
   const weekStart = startOfLocalWeek(today)
   const trainingDays = new Set()
 
