@@ -2376,6 +2376,7 @@ function LogSetScreen({
   }
 
   const getSectionBodyStyle = (key) => ({
+    pointerEvents: expandedSections[key] ? 'auto' : 'none',
     overflow: 'hidden',
     maxHeight: expandedSections[key] ? `${sectionHeights[key]}px` : '0px',
     opacity: expandedSections[key] ? 1 : 0,
@@ -2383,6 +2384,14 @@ function LogSetScreen({
     transition: 'max-height 260ms ease, opacity 220ms ease, transform 220ms ease',
     willChange: 'max-height, opacity, transform',
   })
+
+  const getSectionBodyA11yProps = (key) => {
+    const isExpanded = expandedSections[key]
+    return {
+      'aria-hidden': !isExpanded,
+      inert: isExpanded ? undefined : '',
+    }
+  }
 
   return (
     <div style={{ padding: '20px 16px', paddingBottom: 100, minHeight: '100dvh' }}>
@@ -2564,7 +2573,7 @@ function LogSetScreen({
 
           <div style={{ marginBottom: 24 }}>
             {renderSectionHeader('snapshot', 'MACHINE SNAPSHOT')}
-            <div id="section-snapshot" style={getSectionBodyStyle('snapshot')}>
+            <div id="section-snapshot" style={getSectionBodyStyle('snapshot')} {...getSectionBodyA11yProps('snapshot')}>
               <div ref={snapshotSectionRef}>
             {setsForMachine.length === 0 ? (
               <div style={{ fontSize: 13, color: 'var(--text-dim)', background: 'var(--surface)', borderRadius: 12, padding: 12, border: '1px solid var(--border)' }}>
@@ -2655,7 +2664,7 @@ function LogSetScreen({
           {setsForMachine.length > 0 && (
             <div style={{ marginBottom: 20 }}>
               {renderSectionHeader('machineSets', `SETS ON THIS MACHINE (${setsForMachine.length})`)}
-              <div id="section-machineSets" style={getSectionBodyStyle('machineSets')}>
+              <div id="section-machineSets" style={getSectionBodyStyle('machineSets')} {...getSectionBodyA11yProps('machineSets')}>
                 <div ref={machineSetsSectionRef}>
               {setsForMachine.map((s, i) => (
                 <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
@@ -2689,7 +2698,7 @@ function LogSetScreen({
       {sets.length > 0 && (
         <div>
           {renderSectionHeader('allSets', `ALL SETS (${sets.length})`)}
-          <div id="section-allSets" style={getSectionBodyStyle('allSets')}>
+          <div id="section-allSets" style={getSectionBodyStyle('allSets')} {...getSectionBodyA11yProps('allSets')}>
             <div ref={allSetsSectionRef}>
           {[...sets].reverse().map(s => {
             const m = machines.find(ma => ma.id === s.machine_id)
