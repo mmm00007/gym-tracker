@@ -111,8 +111,14 @@ function useMediaQuery(query) {
     const mediaQueryList = window.matchMedia(query)
     const onChange = (event) => setMatches(event.matches)
     setMatches(mediaQueryList.matches)
-    mediaQueryList.addEventListener('change', onChange)
-    return () => mediaQueryList.removeEventListener('change', onChange)
+
+    if (typeof mediaQueryList.addEventListener === 'function') {
+      mediaQueryList.addEventListener('change', onChange)
+      return () => mediaQueryList.removeEventListener('change', onChange)
+    }
+
+    mediaQueryList.addListener(onChange)
+    return () => mediaQueryList.removeListener(onChange)
   }, [query])
 
   return matches
