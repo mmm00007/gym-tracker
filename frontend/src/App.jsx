@@ -533,7 +533,7 @@ function HomeScreen({
   const [todayPlanItems, setTodayPlanItems] = useState([])
   const workloadByMuscle = useMemo(() => {
     if (!homeDashboardEnabled) {
-      return { groups: [], totalWorkload: 0, contributingSetCount: 0 }
+      return { groups: [], totalWorkload: 0, contributingSetCount: 0, normalization: null }
     }
     try {
       return computeWorkloadByMuscleGroup(sets, machines)
@@ -544,7 +544,7 @@ function HomeScreen({
         message: error?.message || 'Failed to compute workload metric.',
         meta: { metric: 'workload_by_muscle', setsCount: sets.length, machinesCount: machines.length },
       })
-      return { groups: [], totalWorkload: 0, contributingSetCount: 0 }
+      return { groups: [], totalWorkload: 0, contributingSetCount: 0, normalization: null }
     }
   }, [homeDashboardEnabled, sets, machines])
   const weeklyConsistency = useMemo(() => {
@@ -624,6 +624,9 @@ function HomeScreen({
   const lowSampleConsistency = currentWeekConsistency.completedDays < 2
   const lowSampleBalance = balance.activeGroups < 2 || workloadByMuscle.contributingSetCount < 8
   const topWorkloadGroup = workloadByMuscle.groups[0] || null
+  const normalizationLegend = workloadByMuscle.normalization
+    ? `Normalized against blended per-group session baseline. Stabilizes after ${workloadByMuscle.normalization.minStableSessionsPerGroup} sessions per group.`
+    : null
 
   useEffect(() => {
     if (!homeDashboardEnabled) {
@@ -692,18 +695,23 @@ function HomeScreen({
         <div style={{ display: 'grid', gap: 10 }}>
           <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 12, padding: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <div style={{ fontSize: 13, fontWeight: 700 }}>Muscle-group workload</div>
-              <span title="Formula: set volume = reps × weight. Each set volume is split equally across that machine's listed muscle groups (denominator = number of listed groups for that machine). Duration is never inferred or used." style={{ fontSize: 12, color: 'var(--text-dim)' }}>ⓘ</span>
+              <div style={{ fontSize: 13, fontWeight: 700 }}>Muscle-group normalized workload</div>
+              <span title="Raw volume formula: set volume = reps × weight, split equally across each machine's listed muscle groups. Normalized score = raw volume ÷ blended baseline (group median per-session volume + coefficient-weighted global median). Sparse groups (under 3 sessions) are shrunk toward 1.0 to avoid overreaction." style={{ fontSize: 12, color: 'var(--text-dim)' }}>ⓘ</span>
             </div>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Training load by muscle group</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Normalized training load by muscle group</div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
               <div style={{ fontSize: 20, fontFamily: 'var(--font-mono)', fontWeight: 800 }}>
-                {topWorkloadGroup ? topWorkloadGroup.muscleGroup : 'No data'}
+                {topWorkloadGroup ? `${topWorkloadGroup.muscleGroup} (${fmtNumber(topWorkloadGroup.normalizedScore, 2)}x)` : 'No data'}
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                 {workloadByMuscle.contributingSetCount} contributing sets
               </div>
             </div>
+            {!!normalizationLegend && (
+              <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 8 }}>
+                Legend: {normalizationLegend}
+              </div>
+            )}
             <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 8 }}>
               Good signal: at least 8 logged sets spread across 3+ muscle groups.
             </div>
@@ -713,7 +721,10 @@ function HomeScreen({
                 {workloadByMuscle.groups.slice(0, 4).map((entry) => (
                   <div key={entry.muscleGroup} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Pill text={entry.muscleGroup} color={mc(entry.muscleGroup)} />
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{fmtNumber(entry.workload, 0)}</span>
+                    <div title={`Raw volume ${fmtNumber(entry.rawVolume, 0)} | Baseline ${fmtNumber(entry.baselineVolume, 0)} | Sessions ${entry.observedSessions}`} style={{ textAlign: 'right' }}>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{fmtNumber(entry.normalizedScore, 2)}x</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>raw {fmtNumber(entry.rawVolume, 0)}</div>
+                    </div>
                   </div>
                 ))}
               </div>
