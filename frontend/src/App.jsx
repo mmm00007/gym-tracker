@@ -1878,6 +1878,19 @@ function LogSetScreen({
     await handleLog(durationSeconds, machineId)
   }
 
+  const adherenceToday = useMemo(
+    () => computeDayAdherence(planSuggestions, sets, { dayKey: effectiveDayKey, dayStartHour }),
+    [planSuggestions, sets, effectiveDayKey, dayStartHour],
+  )
+
+  const adherenceItemById = useMemo(
+    () => adherenceToday.items.reduce((acc, item) => {
+      acc[item.id] = item
+      return acc
+    }, {}),
+    [adherenceToday.items],
+  )
+
   // Select view
   if (view === 'select') {
     const compareBySecondaryOrder = (a, b) => {
@@ -1999,19 +2012,6 @@ function LogSetScreen({
     ...trendPoints.map((entry) => entry.metrics.totalVolume),
     ...(includeCurrentSession ? [sessionMetrics.totalVolume] : []),
   ]
-
-  const adherenceToday = useMemo(
-    () => computeDayAdherence(planSuggestions, sets, { dayKey: effectiveDayKey, dayStartHour }),
-    [planSuggestions, sets, effectiveDayKey],
-  )
-
-  const adherenceItemById = useMemo(
-    () => adherenceToday.items.reduce((acc, item) => {
-      acc[item.id] = item
-      return acc
-    }, {}),
-    [adherenceToday.items],
-  )
 
   return (
     <div style={{ padding: '20px 16px', paddingBottom: 100, minHeight: '100dvh' }}>
