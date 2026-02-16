@@ -2099,7 +2099,7 @@ function LogSetScreen({
     const targetMachine = machines.find((m) => m.id === targetMachineId) || selectedMachine
     setLogging(true)
     const rest = restTimerEnabled && restTimerLastSetAtMs
-      ? Math.floor((Date.now() - restTimerLastSetAtMs) / 1000)
+      ? Math.max(0, Math.floor((Date.now() - restTimerLastSetAtMs) / 1000))
       : null
     try {
       await onLogSet(targetMachineId, reps, weight, durationSeconds, rest, setType)
@@ -3659,7 +3659,8 @@ export default function App() {
   }, [restTimerEnabled])
 
   useEffect(() => {
-    if (!restTimerLastSetAtMs) {
+    const restTimerUiActive = restTimerEnabled && screen === 'log'
+    if (!restTimerLastSetAtMs || !restTimerUiActive) {
       setRestTimerSeconds(0)
       return undefined
     }
@@ -3669,7 +3670,7 @@ export default function App() {
     tick()
     const timer = setInterval(tick, 1000)
     return () => clearInterval(timer)
-  }, [restTimerLastSetAtMs])
+  }, [restTimerEnabled, restTimerLastSetAtMs, screen])
 
   // Auth listener
   useEffect(() => {
