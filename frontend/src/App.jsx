@@ -4216,11 +4216,12 @@ export default function App() {
 
   // ─── Screens ─────────────────────────────────────────────
   const showNavigation = screen !== 'diagnostics'
-  const navigationLayout = navigationMode === 'phone' ? 'bottom' : navigationMode === 'tablet' ? 'rail' : 'top'
+  const effectiveNavigationMode = responsiveUiV2Enabled ? navigationMode : 'phone'
+  const navigationLayout = effectiveNavigationMode === 'phone' ? 'bottom' : effectiveNavigationMode === 'tablet' ? 'rail' : 'top'
 
   return (
     <div className="app-shell" data-responsive-ui={responsiveUiV2Enabled ? 'v2' : 'legacy'}>
-      <div className={`page-container app-layout app-layout--${navigationMode} ${showNavigation ? 'app-layout--with-nav' : ''}`}>
+      <div className={`page-container app-layout app-layout--${effectiveNavigationMode} ${showNavigation ? 'app-layout--with-nav' : ''}`}>
         {showNavigation && (
           <div className={`app-nav-slot app-nav-slot--${navigationLayout}`}>
             <AppNavigation
