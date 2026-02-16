@@ -705,7 +705,7 @@ function HomeScreen({
               </div>
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 8 }}>
-              Good signal: at least 8 logged sets spread across 3+ muscle groups this week.
+              Good signal: at least 8 logged sets spread across 3+ muscle groups.
             </div>
             {!workloadByMuscle.groups.length && <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>No workload yet. Log sets to populate this widget.</div>}
             {!!workloadByMuscle.groups.length && (
@@ -756,7 +756,7 @@ function HomeScreen({
               </div>
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>
-              Good signal: keep 3+ muscle groups active with no single group dominating your weekly load.
+              Good signal: keep 3+ muscle groups active with no single group dominating your logged workload.
             </div>
             {balance.activeGroups < 2 && <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>Need at least two active muscle groups for a meaningful balance score.</div>}
           </div>
