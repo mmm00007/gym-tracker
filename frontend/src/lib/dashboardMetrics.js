@@ -50,6 +50,55 @@ const startOfLocalWeek = (value) => {
   return day
 }
 
+const coerceDayStartHour = (value, fallback = 4) => {
+  const hour = Number(value)
+  if (!Number.isFinite(hour)) return fallback
+  return Math.min(23, Math.max(0, Math.floor(hour)))
+}
+
+export const getSetLocalDayKey = (set, { dayStartHour = 4 } = {}) => {
+  const trainingDate = parseLocalCalendarDate(set?.training_date)
+  if (trainingDate) return formatLocalDateKey(trainingDate)
+
+  const loggedAt = toDate(set?.logged_at)
+  if (!loggedAt) return null
+
+  const effective = new Date(loggedAt)
+  if (effective.getHours() < coerceDayStartHour(dayStartHour)) {
+    effective.setDate(effective.getDate() - 1)
+  }
+
+  return formatLocalDateKey(effective)
+}
+
+export function aggregateSetsByLocalDay(sets = [], { dayStartHour = 4 } = {}) {
+  const byDay = new Map()
+
+  sets.forEach((set) => {
+    const dayKey = getSetLocalDayKey(set, { dayStartHour })
+    if (!dayKey) return
+
+    const reps = Number(set?.reps)
+    const weight = Number(set?.weight)
+    const safeReps = Number.isFinite(reps) && reps > 0 ? reps : 0
+    const safeWeight = Number.isFinite(weight) && weight > 0 ? weight : 0
+
+    const current = byDay.get(dayKey) || {
+      dayKey,
+      setCount: 0,
+      totalReps: 0,
+      totalVolume: 0,
+    }
+
+    current.setCount += 1
+    current.totalReps += safeReps
+    current.totalVolume += safeReps * safeWeight
+    byDay.set(dayKey, current)
+  })
+
+  return Array.from(byDay.values()).sort((a, b) => a.dayKey.localeCompare(b.dayKey))
+}
+
 const MUSCLE_BASELINE_COEFFICIENT = {
   Chest: 1,
   Back: 1.1,
@@ -166,7 +215,7 @@ export function computeWorkloadByMuscleGroup(sets = [], machines = []) {
   }
 }
 
-export function computeWeeklyConsistency(sets = [], { rollingWeeks = 6 } = {}) {
+export function computeWeeklyConsistency(sets = [], { rollingWeeks = 6, dayStartHour = 4 } = {}) {
   const safeWeeks = Math.max(1, Math.floor(rollingWeeks))
   const today = startOfLocalDay(new Date())
   const startWeek = startOfLocalWeek(today)
@@ -178,11 +227,9 @@ export function computeWeeklyConsistency(sets = [], { rollingWeeks = 6 } = {}) {
 
   const trainingDays = new Set()
   sets.forEach((set) => {
-    const day = set?.training_date
-      ? parseLocalCalendarDate(set.training_date)
-      : startOfLocalDay(set?.logged_at)
-    if (!day) return
-    trainingDays.add(formatLocalDateKey(day))
+    const dayKey = getSetLocalDayKey(set, { dayStartHour })
+    if (!dayKey) return
+    trainingDays.add(dayKey)
   })
 
   const weeks = weekStarts.map((weekStart) => {
@@ -211,17 +258,15 @@ export function computeWeeklyConsistency(sets = [], { rollingWeeks = 6 } = {}) {
   }
 }
 
-export function computeCurrentWeekConsistency(sets = []) {
+export function computeCurrentWeekConsistency(sets = [], { dayStartHour = 4 } = {}) {
   const today = startOfLocalDay(new Date())
   const weekStart = startOfLocalWeek(today)
   const trainingDays = new Set()
 
   sets.forEach((set) => {
-    const day = set?.training_date
-      ? parseLocalCalendarDate(set.training_date)
-      : startOfLocalDay(set?.logged_at)
-    if (!day) return
-    trainingDays.add(formatLocalDateKey(day))
+    const dayKey = getSetLocalDayKey(set, { dayStartHour })
+    if (!dayKey) return
+    trainingDays.add(dayKey)
   })
 
   const completedDays = Array.from({ length: 7 }, (_, offset) => {

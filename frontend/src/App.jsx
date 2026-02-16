@@ -19,6 +19,7 @@ import {
   computeWeeklyConsistency,
   computeCurrentWeekConsistency,
   computeWorkloadBalanceIndex,
+  aggregateSetsByLocalDay,
   buildSampleWarning,
 } from './lib/dashboardMetrics'
 import {
@@ -50,6 +51,19 @@ const getEffectiveDayKey = (dateValue = new Date(), dayStartHour = PLAN_DAY_STAR
   }
   return getLocalDateKey(effective)
 }
+
+const getMonthStart = (dateValue = new Date()) => {
+  const date = dateValue instanceof Date ? new Date(dateValue) : new Date(dateValue)
+  if (Number.isNaN(date.getTime())) return new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+  return new Date(date.getFullYear(), date.getMonth(), 1)
+}
+
+const shiftMonth = (dateValue, offset) => {
+  const start = getMonthStart(dateValue)
+  return new Date(start.getFullYear(), start.getMonth() + offset, 1)
+}
+
+const monthLabel = (dateValue) => getMonthStart(dateValue).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
 
 const fmtNumber = (value, digits = 1) => {
   if (!Number.isFinite(value)) return '0'
@@ -531,6 +545,8 @@ function HomeScreen({
   onSignOut,
 }) {
   const [todayPlanItems, setTodayPlanItems] = useState([])
+  const [heatmapMonth, setHeatmapMonth] = useState(() => getMonthStart(new Date()))
+  const [selectedDayKey, setSelectedDayKey] = useState(null)
   const workloadByMuscle = useMemo(() => {
     if (!homeDashboardEnabled) {
       return { groups: [], totalWorkload: 0, contributingSetCount: 0, normalization: null }
@@ -552,7 +568,7 @@ function HomeScreen({
       return { weeks: [], completedDays: 0, possibleDays: 0, ratio: 0 }
     }
     try {
-      return computeWeeklyConsistency(sets, { rollingWeeks: 6 })
+      return computeWeeklyConsistency(sets, { rollingWeeks: 6, dayStartHour })
     } catch (error) {
       addLog({
         level: 'error',
@@ -562,7 +578,7 @@ function HomeScreen({
       })
       return { weeks: [], completedDays: 0, possibleDays: 0, ratio: 0 }
     }
-  }, [homeDashboardEnabled, sets])
+  }, [homeDashboardEnabled, sets, dayStartHour])
   const adherenceToday = useMemo(
     () => (homeDashboardEnabled
       ? computeDayAdherence(todayPlanItems, sets, { dayStartHour })
@@ -574,7 +590,7 @@ function HomeScreen({
       return { weekStart: null, completedDays: 0, possibleDays: 7, ratio: 0 }
     }
     try {
-      return computeCurrentWeekConsistency(sets)
+      return computeCurrentWeekConsistency(sets, { dayStartHour })
     } catch (error) {
       addLog({
         level: 'error',
@@ -584,7 +600,7 @@ function HomeScreen({
       })
       return { weekStart: null, completedDays: 0, possibleDays: 7, ratio: 0 }
     }
-  }, [homeDashboardEnabled, sets])
+  }, [homeDashboardEnabled, sets, dayStartHour])
   const balance = useMemo(() => {
     if (!homeDashboardEnabled) {
       return { index: 0, activeGroups: 0, totalWorkload: 0 }
@@ -627,6 +643,58 @@ function HomeScreen({
   const normalizationLegend = workloadByMuscle.normalization
     ? `Normalized against blended per-group session baseline. Stabilizes after ${workloadByMuscle.normalization.minStableSessionsPerGroup} sessions per group.`
     : null
+
+  const dailyAggregates = useMemo(
+    () => (homeDashboardEnabled ? aggregateSetsByLocalDay(sets, { dayStartHour }) : []),
+    [homeDashboardEnabled, sets, dayStartHour],
+  )
+  const dailyAggregateByKey = useMemo(
+    () => new Map(dailyAggregates.map((entry) => [entry.dayKey, entry])),
+    [dailyAggregates],
+  )
+  const monthHeatmap = useMemo(() => {
+    const monthStart = getMonthStart(heatmapMonth)
+    const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0)
+    const firstGridDay = new Date(monthStart)
+    firstGridDay.setDate(firstGridDay.getDate() - firstGridDay.getDay())
+    const lastGridDay = new Date(monthEnd)
+    lastGridDay.setDate(lastGridDay.getDate() + (6 - lastGridDay.getDay()))
+
+    const days = []
+    const cursor = new Date(firstGridDay)
+    while (cursor <= lastGridDay) {
+      const key = getLocalDateKey(cursor)
+      const aggregate = dailyAggregateByKey.get(key) || null
+      days.push({
+        date: new Date(cursor),
+        dayKey: key,
+        aggregate,
+        inMonth: cursor.getMonth() === monthStart.getMonth(),
+      })
+      cursor.setDate(cursor.getDate() + 1)
+    }
+
+    const monthDays = days.filter((day) => day.inMonth)
+    const monthVolumeMax = monthDays.reduce((max, day) => Math.max(max, day.aggregate?.totalVolume || 0), 0)
+
+    return {
+      monthStart,
+      days,
+      monthDays,
+      monthVolumeMax,
+      hasData: monthDays.some((day) => day.aggregate?.setCount),
+    }
+  }, [heatmapMonth, dailyAggregateByKey])
+  const todayKey = useMemo(() => getEffectiveDayKey(new Date(), dayStartHour), [dayStartHour])
+  const selectedDay = selectedDayKey ? monthHeatmap.days.find((day) => day.dayKey === selectedDayKey) || null : null
+  const selectedDayDetails = selectedDayKey ? dailyAggregateByKey.get(selectedDayKey) || null : null
+
+  const getHeatColor = (volume, maxVolume) => {
+    if (!volume || !maxVolume) return 'var(--surface)'
+    const ratio = Math.min(1, volume / maxVolume)
+    const alpha = 0.18 + (ratio * 0.72)
+    return `rgba(94, 234, 212, ${alpha.toFixed(3)})`
+  }
 
   useEffect(() => {
     if (!homeDashboardEnabled) {
@@ -750,6 +818,76 @@ function HomeScreen({
               Good signal: 3–5+ training days each week sustained over the last 6 weeks.
             </div>
             {!!consistencyPoints.length && <MiniLineChart points={consistencyPoints} color="var(--blue)" height={52} />}
+          </div>
+
+          <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 12, padding: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8 }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700 }}>Monthly training volume</div>
+                <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>Heat intensity by total daily volume</div>
+              </div>
+              <button onClick={() => { setHeatmapMonth(getMonthStart(new Date())); setSelectedDayKey(todayKey) }} style={{ fontSize: 11, border: '1px solid var(--border)', borderRadius: 8, padding: '6px 8px', color: 'var(--text-muted)' }}>Today</button>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 8 }}>
+              <button onClick={() => setHeatmapMonth((month) => shiftMonth(month, -1))} style={{ fontSize: 14, color: 'var(--text-muted)', padding: '4px 8px' }}>←</button>
+              <div style={{ fontSize: 13, fontFamily: 'var(--font-mono)' }}>{monthLabel(monthHeatmap.monthStart)}</div>
+              <button onClick={() => setHeatmapMonth((month) => shiftMonth(month, 1))} style={{ fontSize: 14, color: 'var(--text-muted)', padding: '4px 8px' }}>→</button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 6 }}>
+              {monthHeatmap.days.map((day) => {
+                const isSelected = selectedDayKey === day.dayKey
+                const isToday = day.dayKey === todayKey
+                const volume = day.aggregate?.totalVolume || 0
+                return (
+                  <button
+                    key={day.dayKey}
+                    title={`${fmtFull(day.date)}${day.aggregate ? ` | ${day.aggregate.setCount} sets | ${fmtNumber(day.aggregate.totalReps, 0)} reps | ${fmtNumber(day.aggregate.totalVolume, 0)} volume` : ' | No training'}`}
+                    onClick={() => setSelectedDayKey(day.dayKey)}
+                    style={{
+                      aspectRatio: '1 / 1',
+                      borderRadius: 8,
+                      border: isSelected ? '1px solid var(--accent)' : isToday ? '1px solid var(--blue)' : '1px solid var(--border)',
+                      background: day.inMonth ? getHeatColor(volume, monthHeatmap.monthVolumeMax) : 'transparent',
+                      color: day.inMonth ? 'var(--text)' : 'var(--text-dim)',
+                      fontSize: 11,
+                      padding: 0,
+                      opacity: day.inMonth ? 1 : 0.45,
+                    }}
+                  >
+                    {day.date.getDate()}
+                  </button>
+                )
+              })}
+            </div>
+
+            {!monthHeatmap.hasData && (
+              <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 10 }}>
+                No logged sets in {monthLabel(monthHeatmap.monthStart)} yet.
+              </div>
+            )}
+
+            {!!monthHeatmap.hasData && (
+              <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 10 }}>
+                Tap a day for details. Darker cells indicate higher volume.
+              </div>
+            )}
+
+            {selectedDayKey && (
+              <div style={{ marginTop: 10, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>{selectedDay ? fmtFull(selectedDay.date) : selectedDayKey}</div>
+                {selectedDayDetails ? (
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    <Pill text={`${selectedDayDetails.setCount} sets`} color="var(--accent)" />
+                    <Pill text={`${fmtNumber(selectedDayDetails.totalReps, 0)} reps`} color="var(--blue)" />
+                    <Pill text={`${fmtNumber(selectedDayDetails.totalVolume, 0)} vol`} color="var(--green)" />
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>No training data for this day.</div>
+                )}
+              </div>
+            )}
           </div>
 
           <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 12, padding: 12 }}>
