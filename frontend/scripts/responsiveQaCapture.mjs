@@ -37,7 +37,8 @@ async function pathExists(targetPath) {
 
 async function ensureAuthenticated(page) {
   const signInButton = page.getByRole('button', { name: 'Sign In' })
-  const authVisible = await signInButton.isVisible().catch(() => false)
+  const navLocator = page.locator('nav[aria-label="Primary"]')
+  const authVisible = await waitForAuthPrompt(page, signInButton, navLocator)
 
   if (!authVisible) return
 
@@ -54,7 +55,7 @@ async function ensureAuthenticated(page) {
 
   await sleep(600)
 
-  const navVisibleAfterSignIn = await page.locator('nav[aria-label="Primary"]').isVisible().catch(() => false)
+  const navVisibleAfterSignIn = await navLocator.isVisible().catch(() => false)
   if (navVisibleAfterSignIn) return
 
   const usernameTakenMessage = page.getByText('Wrong username or password')
@@ -67,7 +68,41 @@ async function ensureAuthenticated(page) {
     await page.getByRole('button', { name: 'Create Account' }).click()
   }
 
-  await page.locator('nav[aria-label="Primary"]').waitFor({ timeout: 15_000 })
+  await navLocator.waitFor({ timeout: 15_000 })
+}
+
+async function waitForAuthPrompt(page, signInButton, navLocator) {
+  const timeoutMs = 15_000
+  const pollMs = 200
+  const maxAttempts = Math.ceil(timeoutMs / pollMs)
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const [navVisible, signInVisible] = await Promise.all([
+      navLocator.isVisible().catch(() => false),
+      signInButton.isVisible().catch(() => false),
+    ])
+
+    if (navVisible) return false
+    if (signInVisible) return true
+
+    if (attempt < maxAttempts - 1) {
+      await sleep(pollMs)
+    }
+  }
+
+  await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => {})
+
+  const [navVisible, signInVisible] = await Promise.all([
+    navLocator.isVisible().catch(() => false),
+    signInButton.isVisible().catch(() => false),
+  ])
+
+  if (navVisible) return false
+  if (signInVisible) return true
+
+  throw new Error(
+    'Unable to determine authentication state. Neither the Sign In button nor primary navigation became visible within the expected timeout.',
+  )
 }
 
 async function navigateToScreen(page, screen) {
