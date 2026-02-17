@@ -91,7 +91,10 @@ const normalizeEquipment = (row = null) => {
   const muscleProfile = normalizedMuscleProfile.length > 0
     ? normalizedMuscleProfile
     : muscleGroups.map((group) => ({ group, role: 'primary', percent: 100 }))
-  const rating = Number.isInteger(Number(row.rating)) ? Number(row.rating) : null
+  const parsedRating = row.rating === null || row.rating === undefined
+    ? null
+    : Number(row.rating)
+  const rating = parsedRating !== null && Number.isInteger(parsedRating) ? parsedRating : null
   const variations = Array.isArray(row.variations) ? row.variations : []
   const movementVariation = Array.isArray(row.movement_variation) ? row.movement_variation : []
   const thumbnails = Array.isArray(row.thumbnails)
