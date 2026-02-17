@@ -30,6 +30,7 @@ import {
   computeWorkloadBalanceIndex,
   aggregateSetsByLocalDay,
   buildSampleWarning,
+  computeWindowedSets,
 } from './lib/dashboardMetrics'
 import {
   computeDayAdherence,
@@ -733,22 +734,32 @@ function HomeScreen({
   const [todayPlanItems, setTodayPlanItems] = useState([])
   const [heatmapMonth, setHeatmapMonth] = useState(() => getMonthStart(new Date()))
   const [selectedDayKey, setSelectedDayKey] = useState(null)
+  const [workloadScope, setWorkloadScope] = useState('week')
+  const scopedWorkload = useMemo(
+    () => (homeDashboardEnabled ? computeWindowedSets(sets, { scope: workloadScope, dayStartHour }) : { sets: [], scope: workloadScope }),
+    [homeDashboardEnabled, sets, workloadScope, dayStartHour],
+  )
   const workloadByMuscle = useMemo(() => {
     if (!homeDashboardEnabled) {
       return { groups: [], totalWorkload: 0, contributingSetCount: 0, normalization: null }
     }
     try {
-      return computeWorkloadByMuscleGroup(sets, machines)
+      return computeWorkloadByMuscleGroup(scopedWorkload.sets, machines, { scope: scopedWorkload.scope })
     } catch (error) {
       addLog({
         level: 'error',
         event: 'dashboard.metrics.workload_failed',
         message: error?.message || 'Failed to compute workload metric.',
-        meta: { metric: 'workload_by_muscle', setsCount: sets.length, machinesCount: machines.length },
+        meta: {
+          metric: 'workload_by_muscle',
+          setsCount: scopedWorkload.sets.length,
+          machinesCount: machines.length,
+          scope: scopedWorkload.scope,
+        },
       })
       return { groups: [], totalWorkload: 0, contributingSetCount: 0, normalization: null }
     }
-  }, [homeDashboardEnabled, sets, machines])
+  }, [homeDashboardEnabled, scopedWorkload, machines])
   const weeklyConsistency = useMemo(() => {
     if (!homeDashboardEnabled) {
       return { weeks: [], completedDays: 0, possibleDays: 0, ratio: 0 }
@@ -808,26 +819,30 @@ function HomeScreen({
       ? buildSampleWarning({
           contributingSetCount: workloadByMuscle.contributingSetCount,
           activeGroups: balance.activeGroups,
-          trainingDays: weeklyConsistency.completedDays,
+          trainingDays: scopedWorkload.trainingDayCount,
           rollingWeeks: weeklyConsistency.weeks.length,
+          scope: scopedWorkload.scope,
         })
       : null),
     [
       homeDashboardEnabled,
       workloadByMuscle.contributingSetCount,
       balance.activeGroups,
-      weeklyConsistency.completedDays,
+      scopedWorkload.trainingDayCount,
       weeklyConsistency.weeks.length,
+      scopedWorkload.scope,
     ],
   )
   const consistencyPoints = homeDashboardEnabled
     ? weeklyConsistency.weeks.map((week) => Number((week.ratio * 100).toFixed(1)))
     : []
   const lowSampleConsistency = currentWeekConsistency.completedDays < 2
-  const lowSampleBalance = balance.activeGroups < 2 || workloadByMuscle.contributingSetCount < 8
+  const minSetSignalByScope = { week: 4, month: 10, all: 8 }
+  const lowSampleBalance = balance.activeGroups < 2
+    || workloadByMuscle.contributingSetCount < (minSetSignalByScope[scopedWorkload.scope] || 8)
   const topWorkloadGroup = workloadByMuscle.groups[0] || null
   const normalizationLegend = workloadByMuscle.normalization
-    ? `Normalized against blended per-group session baseline. Stabilizes after ${workloadByMuscle.normalization.minStableSessionsPerGroup} sessions per group.`
+    ? `Scope: ${scopedWorkload.scope}. Weighted via machine profile (primary 100%, secondary %), then normalized against blended per-group session baseline. Stabilizes after ${workloadByMuscle.normalization.minStableSessionsPerGroup} sessions per group.${workloadByMuscle.normalization.hasFallbackInference ? ' Some machines used inferred even split from muscle_groups (lower confidence).' : ''}`
     : null
 
   const dailyAggregates = useMemo(
@@ -962,9 +977,34 @@ function HomeScreen({
           <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 12, padding: 12, minWidth: 0, overflow: 'hidden' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
               <div style={{ fontSize: 13, fontWeight: 700, minWidth: 0, overflowWrap: 'anywhere' }}>Muscle-group normalized workload</div>
-              <span title="Raw volume formula: set volume = reps × weight, split equally across each machine's listed muscle groups. Normalized score = raw volume ÷ blended baseline (group median per-session volume + coefficient-weighted global median). Sparse groups (under 3 sessions) are shrunk toward 1.0 to avoid overreaction." style={{ fontSize: 12, color: 'var(--text-dim)' }}>ⓘ</span>
+              <span title="Set volume = reps × weight. Contribution uses machine muscle profile: each primary group counts as 100 weight units, each secondary group counts as its configured percent. If profile is missing, workload is inferred from muscle_groups with equal split (lower confidence). Scores are normalized by blended per-group baseline, with sparse-data shrinkage based on active scope." style={{ fontSize: 12, color: 'var(--text-dim)' }}>ⓘ</span>
             </div>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Normalized training load by muscle group</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Normalized training load by muscle group</div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {['week', 'month'].map((scopeOption) => {
+                  const active = workloadScope === scopeOption
+                  return (
+                    <button
+                      key={scopeOption}
+                      onClick={() => setWorkloadScope(scopeOption)}
+                      style={{
+                        borderRadius: 8,
+                        border: active ? '1px solid var(--accent)' : '1px solid var(--border)',
+                        color: active ? 'var(--accent)' : 'var(--text-dim)',
+                        background: active ? 'var(--accent)22' : 'var(--surface)',
+                        padding: '4px 8px',
+                        fontSize: 11,
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      {scopeOption}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
               <div style={{ fontSize: 20, fontFamily: 'var(--font-mono)', fontWeight: 800, minWidth: 0, overflowWrap: 'anywhere' }}>
                 {topWorkloadGroup ? `${topWorkloadGroup.muscleGroup} (${fmtNumber(topWorkloadGroup.normalizedScore, 2)}x)` : 'No data'}
@@ -979,7 +1019,7 @@ function HomeScreen({
               </div>
             )}
             <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 8 }}>
-              Good signal: at least 8 logged sets spread across 3+ muscle groups.
+              Good signal: {scopedWorkload.scope === 'week' ? '4+' : '10+'} logged sets spread across 2+ muscle groups in this {scopedWorkload.scope} window.
             </div>
             {!workloadByMuscle.groups.length && <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>No workload yet. Log sets to populate this widget.</div>}
             {!!workloadByMuscle.groups.length && (
@@ -989,7 +1029,10 @@ function HomeScreen({
                     <Pill text={entry.muscleGroup} color={mc(entry.muscleGroup)} />
                     <div title={`Raw volume ${fmtNumber(entry.rawVolume, 0)} | Baseline ${fmtNumber(entry.baselineVolume, 0)} | Sessions ${entry.observedSessions}`} style={{ textAlign: 'right', minWidth: 0, marginLeft: 'auto' }}>
                       <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{fmtNumber(entry.normalizedScore, 2)}x</div>
-                      <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>raw {fmtNumber(entry.rawVolume, 0)}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>
+                        raw {fmtNumber(entry.rawVolume, 0)}
+                        {entry.confidence !== 'high' ? ' · inferred' : ''}
+                      </div>
                     </div>
                   </div>
                 ))}
