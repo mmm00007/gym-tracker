@@ -4189,7 +4189,6 @@ export default function App() {
   const plansEnabled = resolvedFlags.plansEnabled
   const favoritesOrderingEnabled = resolvedFlags.favoritesOrderingEnabled
   const homeDashboardEnabled = resolvedFlags.homeDashboardEnabled
-  const responsiveUiV2Enabled = resolvedFlags.responsiveUiV2
   const navigationMode = useNavigationLayoutMode()
   const primaryDestinations = useMemo(() => getPrimaryDestinations(resolvedFlags), [resolvedFlags])
 
@@ -4240,17 +4239,16 @@ export default function App() {
 
   // ─── Screens ─────────────────────────────────────────────
   const showNavigation = screen !== 'diagnostics'
-  const effectiveNavigationMode = responsiveUiV2Enabled ? navigationMode : 'phone'
   const navigationLayoutByMode = {
     phone: 'bottom',
     tablet: 'rail',
     desktop: 'top',
   }
-  const navigationLayout = navigationLayoutByMode[effectiveNavigationMode] || 'bottom'
+  const navigationLayout = navigationLayoutByMode[navigationMode] || 'bottom'
 
   return (
-    <div className="app-shell" data-responsive-ui={responsiveUiV2Enabled ? 'v2' : 'legacy'}>
-      <div className={`page-container app-layout app-layout--${effectiveNavigationMode} ${showNavigation ? 'app-layout--with-nav' : ''}`}>
+    <div className="app-shell">
+      <div className={`page-container app-layout app-layout--${navigationMode} ${showNavigation ? 'app-layout--with-nav' : ''}`}>
         {showNavigation && (
           <div className={`app-nav-slot app-nav-slot--${navigationLayout}`}>
             <AppNavigation
