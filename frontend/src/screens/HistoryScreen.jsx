@@ -14,21 +14,21 @@ export default function HistoryScreen({ trainingBuckets, machines, onBack, getMu
           <div style={{ fontSize: 16 }}>No sets logged yet</div>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div className="history-screen__list">
           {trainingBuckets.slice().reverse().map((bucket) => {
             const durationMs = new Date(bucket.ended_at) - new Date(bucket.started_at)
             const setCount = bucket.sets.length
             const uniqueMovements = [...new Set(bucket.sets.map((set) => set.machine_name))]
             return (
               <SectionCard key={bucket.training_bucket_id}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{fmtFull(bucket.started_at)}</div>
-                  <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{fmtDur(durationMs)}</div>
+                <div className="history-screen__header-row">
+                  <div className="history-screen__date">{fmtFull(bucket.started_at)}</div>
+                  <div className="history-screen__duration">{fmtDur(durationMs)}</div>
                 </div>
-                <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>
+                <div className="history-screen__summary">
                   {setCount} sets · {uniqueMovements.length} exercises
                 </div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <div className="history-screen__chips">
                   {uniqueMovements.map((movement) => {
                     const machine = machines.find((m) => m.movement === movement)
                     return <Chip key={movement} text={movement} color={getMuscleColor(machine?.muscle_groups?.[0])} />
