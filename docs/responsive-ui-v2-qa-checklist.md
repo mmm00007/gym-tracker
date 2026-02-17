@@ -52,6 +52,16 @@ Representative viewport matrix used for visual QA:
 - [ ] **Safe-area handling:** iOS/Android safe-area insets are respected at top/bottom, especially around bottom nav and edge controls.
 - [ ] **Legacy branch removal:** confirm old layout-specific branches are removed only after parity is validated.
 
+## Current run status (2026-02-17)
+
+- Outcome: **Blocked / Invalid QA run** (environment auth dependency unavailable).
+- Blocking symptom: sign-in returned `Failed to fetch`, so authenticated screens could not be reached.
+- Evidence captures from blocked run:
+  - Phone: [home/auth screen](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/home/phone.png)
+  - Tablet: [home/auth screen](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/home/tablet.png)
+  - Desktop: [home/auth screen](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/home/desktop.png)
+- Reviewer note addressed: this checklist is intentionally left un-checked until a valid authenticated QA run can be executed.
+
 ## Automated screenshot harness (rerunnable)
 
 Use the automation harness to capture baseline screenshots for the five primary screens in all required viewports.
