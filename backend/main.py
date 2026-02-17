@@ -66,6 +66,11 @@ ROLLOUT_FLAGS = {
     "plansEnabled": read_bool_env("PLANS_ENABLED", True),
     "favoritesOrderingEnabled": read_bool_env("FAVORITES_ORDERING_ENABLED", True),
     "homeDashboardEnabled": read_bool_env("HOME_DASHBOARD_ENABLED", True),
+    "machineRatingEnabled": read_bool_env("MACHINE_RATING_ENABLED", True),
+    "pinnedFavoritesEnabled": read_bool_env("PINNED_FAVORITES_ENABLED", True),
+    "machineAutofillEnabled": read_bool_env("MACHINE_AUTOFILL_ENABLED", True),
+    "weightedMuscleProfileWorkloadEnabled": read_bool_env("WEIGHTED_MUSCLE_PROFILE_WORKLOAD_ENABLED", True),
+    "fixedOptionMachineTaxonomyEnabled": read_bool_env("FIXED_OPTION_MACHINE_TAXONOMY_ENABLED", True),
 }
 
 app.add_middleware(

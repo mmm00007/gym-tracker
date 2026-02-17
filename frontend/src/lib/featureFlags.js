@@ -8,6 +8,11 @@ const DEFAULT_FLAGS = Object.freeze({
   favoritesOrderingEnabled: true,
   homeDashboardEnabled: true,
   responsiveUiV2: true,
+  machineRatingEnabled: true,
+  pinnedFavoritesEnabled: true,
+  machineAutofillEnabled: true,
+  weightedMuscleProfileWorkloadEnabled: true,
+  fixedOptionMachineTaxonomyEnabled: true,
 })
 
 const ENV_FLAG_MAP = Object.freeze({
@@ -18,6 +23,11 @@ const ENV_FLAG_MAP = Object.freeze({
   favoritesOrderingEnabled: import.meta.env.VITE_FAVORITES_ORDERING_ENABLED,
   homeDashboardEnabled: import.meta.env.VITE_HOME_DASHBOARD_ENABLED,
   responsiveUiV2: import.meta.env.VITE_RESPONSIVE_UI_V2,
+  machineRatingEnabled: import.meta.env.VITE_MACHINE_RATING_ENABLED,
+  pinnedFavoritesEnabled: import.meta.env.VITE_PINNED_FAVORITES_ENABLED,
+  machineAutofillEnabled: import.meta.env.VITE_MACHINE_AUTOFILL_ENABLED,
+  weightedMuscleProfileWorkloadEnabled: import.meta.env.VITE_WEIGHTED_MUSCLE_PROFILE_WORKLOAD_ENABLED,
+  fixedOptionMachineTaxonomyEnabled: import.meta.env.VITE_FIXED_OPTION_MACHINE_TAXONOMY_ENABLED,
 })
 
 function parseBooleanFlag(value, fallback) {
@@ -39,6 +49,11 @@ function withEnvDefaults(baseFlags = DEFAULT_FLAGS) {
     favoritesOrderingEnabled: parseBooleanFlag(ENV_FLAG_MAP.favoritesOrderingEnabled, baseFlags.favoritesOrderingEnabled),
     homeDashboardEnabled: parseBooleanFlag(ENV_FLAG_MAP.homeDashboardEnabled, baseFlags.homeDashboardEnabled),
     responsiveUiV2: parseBooleanFlag(ENV_FLAG_MAP.responsiveUiV2, baseFlags.responsiveUiV2),
+    machineRatingEnabled: parseBooleanFlag(ENV_FLAG_MAP.machineRatingEnabled, baseFlags.machineRatingEnabled),
+    pinnedFavoritesEnabled: parseBooleanFlag(ENV_FLAG_MAP.pinnedFavoritesEnabled, baseFlags.pinnedFavoritesEnabled),
+    machineAutofillEnabled: parseBooleanFlag(ENV_FLAG_MAP.machineAutofillEnabled, baseFlags.machineAutofillEnabled),
+    weightedMuscleProfileWorkloadEnabled: parseBooleanFlag(ENV_FLAG_MAP.weightedMuscleProfileWorkloadEnabled, baseFlags.weightedMuscleProfileWorkloadEnabled),
+    fixedOptionMachineTaxonomyEnabled: parseBooleanFlag(ENV_FLAG_MAP.fixedOptionMachineTaxonomyEnabled, baseFlags.fixedOptionMachineTaxonomyEnabled),
   }
 }
 
@@ -65,6 +80,11 @@ export async function getFeatureFlags() {
       favoritesOrderingEnabled: parseBooleanFlag(remoteFlags?.favoritesOrderingEnabled, envDefaultFlags.favoritesOrderingEnabled),
       homeDashboardEnabled: parseBooleanFlag(remoteFlags?.homeDashboardEnabled, envDefaultFlags.homeDashboardEnabled),
       responsiveUiV2: parseBooleanFlag(remoteFlags?.responsiveUiV2, envDefaultFlags.responsiveUiV2),
+      machineRatingEnabled: parseBooleanFlag(remoteFlags?.machineRatingEnabled, envDefaultFlags.machineRatingEnabled),
+      pinnedFavoritesEnabled: parseBooleanFlag(remoteFlags?.pinnedFavoritesEnabled, envDefaultFlags.pinnedFavoritesEnabled),
+      machineAutofillEnabled: parseBooleanFlag(remoteFlags?.machineAutofillEnabled, envDefaultFlags.machineAutofillEnabled),
+      weightedMuscleProfileWorkloadEnabled: parseBooleanFlag(remoteFlags?.weightedMuscleProfileWorkloadEnabled, envDefaultFlags.weightedMuscleProfileWorkloadEnabled),
+      fixedOptionMachineTaxonomyEnabled: parseBooleanFlag(remoteFlags?.fixedOptionMachineTaxonomyEnabled, envDefaultFlags.fixedOptionMachineTaxonomyEnabled),
     }
   } catch {
     return withEnvDefaults(DEFAULT_FLAGS)
