@@ -32,8 +32,11 @@ export default function MachineCard({
   const primaryColor = getMuscleColor(machine.muscle_groups?.[0])
   const rating = Number.isInteger(Number(machine?.rating)) ? Number(machine.rating) : null
   const isFavorite = Boolean(machine?.is_favorite ?? machine?.isFavorite)
-  const thumbnails = Array.isArray(machine.thumbnails)
-    ? machine.thumbnails
+  const displayThumbnails = Array.isArray(machine.resolvedThumbnails)
+    ? machine.resolvedThumbnails
+    : machine.thumbnails
+  const thumbnails = Array.isArray(displayThumbnails)
+    ? displayThumbnails
       .map((thumb) => {
         if (typeof thumb === 'string') return { src: thumb, focalX: 50, focalY: 35 }
         if (!thumb || typeof thumb !== 'object' || typeof thumb.src !== 'string') return null

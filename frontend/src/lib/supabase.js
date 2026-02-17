@@ -118,12 +118,11 @@ const normalizeEquipment = (row = null) => {
       .filter(Boolean)
     : []
   const instructionImage = row.instruction_image || ''
-  const resolvedThumbnails = thumbnails.length > 0 && instructionImage
-    ? thumbnails
-    : instructionImage
-      ? [{ src: instructionImage, focalX: 50, focalY: 35 }]
-      : thumbnails
   const equipmentType = row.equipment_type || 'machine'
+  const shouldUseInstructionFallback = equipmentType === 'machine' && thumbnails.length === 0 && instructionImage
+  const resolvedThumbnails = shouldUseInstructionFallback
+    ? [{ src: instructionImage, focalX: 50, focalY: 35 }]
+    : thumbnails
   const movement = row.movement || ''
   return {
     ...row,
@@ -150,7 +149,8 @@ const normalizeEquipment = (row = null) => {
     image_url: row.image_url || '',
     instructionImage,
     instruction_image: instructionImage,
-    thumbnails: resolvedThumbnails,
+    thumbnails,
+    resolvedThumbnails,
     createdAt: row.created_at || null,
     created_at: row.created_at || null,
     updatedAt: row.updated_at || null,
@@ -199,10 +199,16 @@ function toEquipmentDbPayload(equipment = {}, userId) {
       .filter((thumb) => typeof thumb === 'string' && thumb.trim().length > 0)
   }
 
-  // Accept aliases from normalized objects/forms and map to DB columns.
-  if (source.equipmentType !== undefined && source.equipment_type === undefined) {
+  if (
+    source.equipmentType !== undefined && source.equipment_type === undefined
+  ) {
     source.equipment_type = source.equipmentType
   }
+  if (source.equipment_type !== 'machine' && Array.isArray(source.thumbnails)) {
+    source.thumbnails = []
+  }
+
+  // Accept aliases from normalized objects/forms and map to DB columns.
   if (source.muscleGroups !== undefined && source.muscle_groups === undefined) {
     source.muscle_groups = source.muscleGroups
   }
