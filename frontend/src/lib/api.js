@@ -1,5 +1,5 @@
 import { createRecommendationScope, supabase } from './supabase'
-import { addLog } from './logs'
+import { addLog, logIdentifyTelemetry } from './logs'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 export const API_BASE_URL = API_URL
@@ -12,43 +12,54 @@ async function authHeaders() {
   }
 }
 
-export async function identifyMachine(images) {
+export async function identifyMachine(images, { enrichWithWebSearch = false } = {}) {
   const requestId = `${Date.now()}-${Math.random().toString(16).slice(2)}`
   const startTime = Date.now()
   addLog({
     level: 'info',
     event: 'identify.start',
     message: 'Identify request started.',
-    meta: { requestId, imageCount: images?.length || 0, url: `${API_URL}/api/identify-machine` },
+    meta: {
+      requestId,
+      imageCount: images?.length || 0,
+      mode: enrichWithWebSearch ? 'web_search_enriched' : 'base',
+      url: `${API_URL}/api/identify-machine`,
+    },
   })
   const headers = await authHeaders()
+  const mode = enrichWithWebSearch ? 'web_search_enriched' : 'base'
+  logIdentifyTelemetry({ phase: 'start', mode, requestId })
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), 15000)
   try {
     const res = await fetch(`${API_URL}/api/identify-machine`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ images }),
+      body: JSON.stringify({ images, enrich_with_web_search: enrichWithWebSearch }),
       signal: controller.signal,
     })
     addLog({
       level: res.ok ? 'info' : 'error',
       event: 'identify.response',
       message: res.ok ? 'Identify response received.' : 'Identify response error.',
-      meta: { requestId, status: res.status, ok: res.ok, duration_ms: Date.now() - startTime },
+      meta: { requestId, status: res.status, ok: res.ok, mode, duration_ms: Date.now() - startTime },
     })
     if (!res.ok) {
+      logIdentifyTelemetry({ phase: 'failed', mode, requestId, success: false, durationMs: Date.now() - startTime, status: res.status })
       const errText = (await res.text()).trim()
       const detail = errText || `Server error (${res.status})`
       throw new Error(`Identify failed: ${detail}`)
     }
     try {
-      return await res.json()
+      const data = await res.json()
+      logIdentifyTelemetry({ phase: 'completed', mode, requestId, success: true, durationMs: Date.now() - startTime, status: res.status })
+      return data
     } catch {
       throw new Error('Identify failed: Invalid JSON response from server.')
     }
   } catch (err) {
     const message = err?.message || 'Unknown error'
+    logIdentifyTelemetry({ phase: 'failed', mode, requestId, success: false, durationMs: Date.now() - startTime, error: message })
     addLog({
       level: 'error',
       event: 'identify.error',

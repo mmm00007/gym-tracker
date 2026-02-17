@@ -11,7 +11,7 @@ import {
   getPendingSoreness, submitSoreness, getRecentSoreness,
   getAnalysisReports, getAnalysisReport,
 } from './lib/supabase'
-import { API_BASE_URL, pingHealth, getRecommendations } from './lib/api'
+import { API_BASE_URL, pingHealth, getRecommendations, identifyMachine } from './lib/api'
 import { getFeatureFlags, DEFAULT_FLAGS } from './lib/featureFlags'
 import { addLog, subscribeLogs } from './lib/logs'
 import {
@@ -1852,6 +1852,11 @@ function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
   const upd = (k, v) => setForm((prev) => ({ ...prev, [k]: v }))
   const thumbRef = useRef(null)
   const instructionRef = useRef(null)
+  const autoFillPhotoRef = useRef(null)
+  const [autoFillBusy, setAutoFillBusy] = useState(false)
+  const [autoFillError, setAutoFillError] = useState('')
+  const [useEnrichedLookup, setUseEnrichedLookup] = useState(false)
+  const [pendingAutoFill, setPendingAutoFill] = useState(null)
 
   const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -1909,6 +1914,141 @@ function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
       upd('instruction_image', dataUrl)
     } catch (err) {
       console.error(err)
+    }
+  }
+
+  const normalizeMuscleGroup = (raw) => {
+    const text = String(raw || '').trim().toLowerCase()
+    return MUSCLE_GROUP_OPTIONS.find((group) => group.toLowerCase() === text) || null
+  }
+
+  const inferMovementPattern = (movementText) => {
+    const normalized = String(movementText || '').toLowerCase()
+    if (!normalized) return ''
+    const directMatch = Object.entries(MOVEMENT_CATALOG)
+      .find(([, value]) => value.label.toLowerCase() === normalized)
+    if (directMatch) return directMatch[0]
+
+    if (normalized.includes('press') && (normalized.includes('incline') || normalized.includes('bench') || normalized.includes('chest'))) return 'horizontal_press'
+    if (normalized.includes('press') && (normalized.includes('overhead') || normalized.includes('shoulder'))) return 'vertical_press'
+    if (normalized.includes('pulldown') || (normalized.includes('pull') && normalized.includes('down'))) return 'vertical_pull'
+    if (normalized.includes('row') || normalized.includes('horizontal pull')) return 'horizontal_pull'
+    if (normalized.includes('leg extension')) return 'leg_extension'
+    if (normalized.includes('leg curl') || normalized.includes('hamstring curl')) return 'leg_curl'
+    if (normalized.includes('calf')) return 'calf_raise'
+    if (normalized.includes('squat') || normalized.includes('hack')) return 'squat'
+    if (normalized.includes('hinge') || normalized.includes('deadlift')) return 'hinge'
+    if (normalized.includes('lunge') || normalized.includes('split squat')) return 'lunge'
+    if (normalized.includes('triceps')) return 'triceps_extension'
+    if (normalized.includes('curl')) return 'curl'
+    if (normalized.includes('crunch') || normalized.includes('core')) return 'core_flexion'
+    return ''
+  }
+
+  const buildAutoFillSuggestion = (response) => {
+    if (!response || typeof response !== 'object') return null
+    const movementPattern = inferMovementPattern(response.movement)
+    const profile = response.muscleProfile || {}
+    const suggestedPrimary = (Array.isArray(profile.primary) ? profile.primary : response.muscleGroups || [])
+      .map(normalizeMuscleGroup)
+      .filter(Boolean)
+    const dedupPrimary = Array.from(new Set(suggestedPrimary))
+
+    const secondaryRaw = Array.isArray(profile.secondary) ? profile.secondary : []
+    const secondary = secondaryRaw
+      .map((group) => normalizeMuscleGroup(group))
+      .filter((group) => group && !dedupPrimary.includes(group))
+      .map((group) => ({ group, percent: 30 }))
+
+    const variations = Array.from(new Set((response.variations || []).map((value) => String(value || '').trim()).filter(Boolean)))
+    const aliases = Array.isArray(response.aliases) ? response.aliases.filter(Boolean) : []
+    const likelyModel = String(response.likelyModel || '').trim()
+    const sourceSuffix = useEnrichedLookup ? 'auto-identify:web-search-enriched' : 'auto-identify:base'
+
+    const notesSegments = [String(response.notes || '').trim()]
+    if (aliases.length) notesSegments.push(`Aliases: ${aliases.join(', ')}`)
+    if (likelyModel) notesSegments.push(`Likely model: ${likelyModel}`)
+
+    return {
+      name: String(response.name || '').trim(),
+      exercise_type: String(response.exerciseType || '').trim(),
+      movement_pattern: movementPattern,
+      movement: movementPattern ? MOVEMENT_CATALOG[movementPattern]?.label || response.movement : String(response.movement || '').trim(),
+      primary_muscles: dedupPrimary,
+      secondary_muscles: secondary,
+      movement_variation: variations,
+      variations,
+      notes: notesSegments.filter(Boolean).join('\n'),
+      source: sourceSuffix,
+    }
+  }
+
+  const applyAutoFillSuggestion = () => {
+    if (!pendingAutoFill?.suggestion) return
+    setForm((prev) => ({
+      ...prev,
+      ...pendingAutoFill.suggestion,
+    }))
+    addLog({
+      level: 'info',
+      event: 'identify.autofill_applied',
+      message: 'Auto-fill suggestion applied to edit form.',
+      meta: { mode: useEnrichedLookup ? 'web_search_enriched' : 'base' },
+    })
+    setPendingAutoFill(null)
+  }
+
+  const requestAutoFillFromPhotos = async (files) => {
+    const selected = Array.from(files || []).slice(0, 3)
+    if (!selected.length) return
+
+    setAutoFillError('')
+    setAutoFillBusy(true)
+
+    try {
+      const encoded = []
+      for (const file of selected) {
+        const dataUrl = await readFileAsDataUrl(file)
+        const [header, base64Payload] = dataUrl.split(',', 2)
+        const mediaTypeMatch = header?.match(/data:(.*?);base64/)
+        if (!base64Payload) continue
+        encoded.push({
+          media_type: mediaTypeMatch?.[1] || file.type || 'image/jpeg',
+          data: base64Payload,
+        })
+      }
+
+      if (!encoded.length) {
+        throw new Error('No valid image data could be processed.')
+      }
+
+      const identified = await identifyMachine(encoded, { enrichWithWebSearch: useEnrichedLookup })
+      const suggestion = buildAutoFillSuggestion(identified)
+      if (!suggestion) {
+        throw new Error('No structured suggestion returned.')
+      }
+
+      setPendingAutoFill({
+        raw: identified,
+        suggestion,
+      })
+      addLog({
+        level: 'info',
+        event: 'identify.autofill_ready',
+        message: 'Auto-fill suggestion is ready for confirmation.',
+        meta: { mode: useEnrichedLookup ? 'web_search_enriched' : 'base' },
+      })
+    } catch (error) {
+      console.error(error)
+      setAutoFillError(error?.message || 'Auto-fill failed. You can continue manually.')
+      addLog({
+        level: 'error',
+        event: 'identify.autofill_failed',
+        message: error?.message || 'Auto-fill failed.',
+        meta: { mode: useEnrichedLookup ? 'web_search_enriched' : 'base' },
+      })
+    } finally {
+      setAutoFillBusy(false)
     }
   }
 
@@ -2206,6 +2346,48 @@ function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
 
       {isMachineType ? (
         <>
+          <div style={{ marginBottom: 16, padding: 12, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: 12, fontFamily: 'var(--font-code)', letterSpacing: 1, color: 'var(--text-muted)' }}>AUTO-FILL FROM PHOTOS</div>
+                <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 4 }}>Suggests movement, muscles, variations, and notes. Manual edits still win.</div>
+              </div>
+              <input
+                ref={autoFillPhotoRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={async (e) => {
+                  await requestAutoFillFromPhotos(e.target.files)
+                  e.target.value = ''
+                }}
+                style={{ display: 'none' }}
+              />
+              <button
+                onClick={() => autoFillPhotoRef.current?.click()}
+                disabled={autoFillBusy}
+                style={{
+                  padding: '10px 14px', borderRadius: 10, fontSize: 14, fontWeight: 700,
+                  background: autoFillBusy ? 'var(--surface)' : 'var(--surface)',
+                  border: '1px solid var(--border)', color: 'var(--text)', opacity: autoFillBusy ? 0.7 : 1,
+                }}
+              >
+                {autoFillBusy ? 'Analyzing photos…' : 'Auto-fill from photos'}
+              </button>
+            </div>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10, fontSize: 12, color: 'var(--text)' }}>
+              <input
+                type="checkbox"
+                checked={useEnrichedLookup}
+                onChange={(e) => setUseEnrichedLookup(e.target.checked)}
+              />
+              Use web-search enriched lookup (slower, more context)
+            </label>
+            {autoFillError && (
+              <div style={{ marginTop: 10, fontSize: 12, color: 'var(--red)' }}>{autoFillError}</div>
+            )}
+          </div>
+
           <div style={{ marginBottom: 16 }}>
             <label style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6, fontFamily: 'var(--font-code)' }}>Machine Thumbnails</label>
             <input ref={thumbRef} type="file" accept="image/*" multiple
@@ -2289,6 +2471,20 @@ function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
       ) : (
         <div style={{ marginBottom: 16, padding: 12, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text-dim)', fontSize: 13 }}>
           Media is optional for {form.equipment_type}. Focus on clean naming and muscle-group tagging for consistent library curation.
+        </div>
+      )}
+
+      {pendingAutoFill && (
+        <div style={{ marginBottom: 16, padding: 12, borderRadius: 10, border: '1px solid var(--accent)', background: 'var(--accent)11' }}>
+          <div style={{ fontSize: 13, color: 'var(--text)', fontWeight: 700, marginBottom: 6 }}>Apply suggested fields?</div>
+          <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 10 }}>
+            Suggested: {pendingAutoFill.suggestion.name || 'Unknown machine'}
+            {pendingAutoFill.suggestion.movement ? ` • ${pendingAutoFill.suggestion.movement}` : ''}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={applyAutoFillSuggestion} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--accent)', background: 'var(--accent)', color: '#000', fontWeight: 700 }}>Apply suggested fields</button>
+            <button onClick={() => setPendingAutoFill(null)} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)' }}>Keep manual values</button>
+          </div>
         </div>
       )}
 
