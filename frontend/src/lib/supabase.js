@@ -326,13 +326,44 @@ export async function getSession() {
   return session
 }
 
+const DEFAULT_EQUIPMENT_SEED_ROWS = Object.freeze([
+  { name: 'Barbell Back Squat', movement: 'Squat', equipment_type: 'freeweight', muscle_groups: ['Quadriceps', 'Glutes', 'Core'], exercise_type: 'Legs', default_weight: 60, default_reps: 5, notes: 'Brace and keep bar path over mid-foot', instruction_image: '/exercise-illustrations/barbell-back-squat.svg', source: null },
+  { name: 'Romanian Deadlift', movement: 'Hip Hinge', equipment_type: 'freeweight', muscle_groups: ['Hamstrings', 'Glutes', 'Back'], exercise_type: 'Pull', default_weight: 50, default_reps: 8, notes: 'Push hips back and maintain neutral spine', instruction_image: '/exercise-illustrations/romanian-deadlift.svg', source: null },
+  { name: 'Barbell Bench Press', movement: 'Horizontal Press', equipment_type: 'freeweight', muscle_groups: ['Chest', 'Shoulders', 'Triceps'], exercise_type: 'Push', default_weight: 40, default_reps: 6, notes: 'Control descent and drive evenly', instruction_image: '/exercise-illustrations/barbell-bench-press.svg', source: null },
+  { name: 'Pull-Up', movement: 'Vertical Pull', equipment_type: 'bodyweight', muscle_groups: ['Back', 'Biceps'], exercise_type: 'Pull', default_weight: 0, default_reps: 6, notes: 'Full hang to chest-up as able', instruction_image: '/exercise-illustrations/pull-up.svg', source: null },
+  { name: 'Push-Up', movement: 'Horizontal Press', equipment_type: 'bodyweight', muscle_groups: ['Chest', 'Shoulders', 'Triceps', 'Core'], exercise_type: 'Push', default_weight: 0, default_reps: 12, notes: 'Maintain rigid plank line', instruction_image: '/exercise-illustrations/push-up.svg', source: null },
+  { name: 'Walking Lunge', movement: 'Lunge', equipment_type: 'bodyweight', muscle_groups: ['Quadriceps', 'Glutes', 'Hamstrings'], exercise_type: 'Legs', default_weight: 0, default_reps: 10, notes: 'Step long and control knee path', instruction_image: '/exercise-illustrations/walking-lunge.svg', source: null },
+  { name: 'Cable Row', movement: 'Horizontal Pull', equipment_type: 'cable', muscle_groups: ['Back', 'Biceps'], exercise_type: 'Pull', default_weight: 30, default_reps: 10, notes: 'Lead with elbows and avoid shrugging', instruction_image: '/exercise-illustrations/cable-row.svg', source: null },
+  { name: 'Lat Pulldown Machine', movement: 'Vertical Pull', equipment_type: 'machine', muscle_groups: ['Back', 'Biceps'], exercise_type: 'Pull', default_weight: 40, default_reps: 10, notes: 'Pull to upper chest with stable torso', instruction_image: '/exercise-illustrations/lat-pulldown-machine.svg', source: 'default_catalog' },
+  { name: 'Leg Press Machine', movement: 'Squat', equipment_type: 'machine', muscle_groups: ['Quadriceps', 'Glutes'], exercise_type: 'Legs', default_weight: 80, default_reps: 10, notes: 'Control depth and avoid locking knees', instruction_image: '/exercise-illustrations/leg-press-machine.svg', source: 'default_catalog' },
+  { name: 'Cable Lateral Raise', movement: 'Lateral Raise', equipment_type: 'cable', muscle_groups: ['Shoulders'], exercise_type: 'Push', default_weight: 8, default_reps: 12, notes: 'Slight forward lean and controlled tempo', instruction_image: '/exercise-illustrations/cable-lateral-raise.svg', source: null },
+  { name: 'Dumbbell Shoulder Press', movement: 'Vertical Press', equipment_type: 'freeweight', muscle_groups: ['Shoulders', 'Triceps', 'Upper Chest'], exercise_type: 'Push', default_weight: 16, default_reps: 10, notes: 'Press overhead without arching the lower back', instruction_image: '/exercise-illustrations/dumbbell-shoulder-press.svg', source: null },
+  { name: 'Dumbbell Incline Press', movement: 'Incline Press', equipment_type: 'freeweight', muscle_groups: ['Chest', 'Shoulders', 'Triceps'], exercise_type: 'Push', default_weight: 18, default_reps: 10, notes: 'Keep shoulder blades retracted and wrists stacked', instruction_image: '/exercise-illustrations/dumbbell-incline-press.svg', source: null },
+  { name: 'Dumbbell Bent-Over Row', movement: 'Horizontal Pull', equipment_type: 'freeweight', muscle_groups: ['Back', 'Lats', 'Biceps'], exercise_type: 'Pull', default_weight: 22, default_reps: 10, notes: 'Hinge at hips and pull elbow toward hip', instruction_image: '/exercise-illustrations/dumbbell-bent-over-row.svg', source: null },
+  { name: 'Dumbbell Biceps Curl', movement: 'Elbow Flexion', equipment_type: 'freeweight', muscle_groups: ['Biceps', 'Forearms'], exercise_type: 'Pull', default_weight: 10, default_reps: 12, notes: 'Control the eccentric and avoid torso sway', instruction_image: '/exercise-illustrations/dumbbell-biceps-curl.svg', source: null },
+  { name: 'Dumbbell Bulgarian Split Squat', movement: 'Single-Leg Squat', equipment_type: 'freeweight', muscle_groups: ['Quadriceps', 'Glutes', 'Hamstrings'], exercise_type: 'Legs', default_weight: 14, default_reps: 10, notes: 'Stay upright and drive through full front foot', instruction_image: '/exercise-illustrations/dumbbell-bulgarian-split-squat.svg', source: null },
+  { name: 'Dumbbell Romanian Deadlift', movement: 'Hip Hinge', equipment_type: 'freeweight', muscle_groups: ['Hamstrings', 'Glutes', 'Back'], exercise_type: 'Pull', default_weight: 20, default_reps: 10, notes: 'Keep dumbbells close and hinge without rounding', instruction_image: '/exercise-illustrations/dumbbell-romanian-deadlift.svg', source: null },
+])
+
 export async function bootstrapDefaultEquipmentCatalog() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user?.id) return
 
-  const bootstrapKey = `library-seeded:v1:${user.id}`
+  const bootstrapKey = `library-seeded:v3:${user.id}`
   const alreadyBootstrapped = typeof window !== 'undefined' && window.localStorage.getItem(bootstrapKey) === 'done'
-  if (alreadyBootstrapped) return
+
+  const hasAnyEquipment = async () => {
+    const { data, error } = await supabase
+      .from('machines')
+      .select('id')
+      .limit(1)
+    if (error) throw error
+    return Array.isArray(data) && data.length > 0
+  }
+
+  if (alreadyBootstrapped) {
+    if (await hasAnyEquipment()) return
+  }
 
   const markDone = () => {
     if (typeof window !== 'undefined') {
@@ -361,6 +392,29 @@ export async function bootstrapDefaultEquipmentCatalog() {
 
   // If both RPCs are missing, do not block app usage.
   if (seedError.code === '42883') {
+    const { data: existingRows, error: existingError } = await supabase
+      .from('machines')
+      .select('name,equipment_type')
+    if (existingError) throw existingError
+
+    const existingKeys = new Set((existingRows || []).map((row) => `${String(row.name || '').trim().toLowerCase()}::${String(row.equipment_type || '').trim().toLowerCase()}`))
+    const nowIso = new Date().toISOString()
+    const fallbackRows = DEFAULT_EQUIPMENT_SEED_ROWS
+      .filter((row) => !existingKeys.has(`${row.name.trim().toLowerCase()}::${row.equipment_type.trim().toLowerCase()}`))
+      .map((row) => ({
+        ...row,
+        user_id: user.id,
+        created_at: nowIso,
+        updated_at: nowIso,
+      }))
+
+    if (fallbackRows.length) {
+      const { error: insertError } = await supabase
+        .from('machines')
+        .insert(fallbackRows)
+      if (insertError) throw insertError
+    }
+
     markDone()
     return
   }

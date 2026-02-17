@@ -203,7 +203,6 @@ create table public.machines (
     equipment_type = 'machine'
     or (
       coalesce(array_length(thumbnails, 1), 0) = 0
-      and instruction_image is null
       and source is null
     )
   )
@@ -243,7 +242,7 @@ begin
 
   insert into public.machines (
     user_id, name, movement, equipment_type, muscle_groups, exercise_type,
-    default_weight, default_reps, notes, source
+    default_weight, default_reps, notes, instruction_image, source
   )
   select
     v_user_id,
@@ -255,23 +254,30 @@ begin
     seed.default_weight,
     seed.default_reps,
     seed.notes,
+    seed.instruction_image,
     case
       when seed.equipment_type = 'machine' then 'default_catalog'
       else null
     end
   from (
     values
-      ('Barbell Back Squat', 'Squat', 'freeweight', array['Quadriceps','Glutes','Core']::text[], 'Legs', 60::real, 5, 'Brace and keep bar path over mid-foot'),
-      ('Romanian Deadlift', 'Hip Hinge', 'freeweight', array['Hamstrings','Glutes','Back']::text[], 'Pull', 50::real, 8, 'Push hips back and maintain neutral spine'),
-      ('Barbell Bench Press', 'Horizontal Press', 'freeweight', array['Chest','Shoulders','Triceps']::text[], 'Push', 40::real, 6, 'Control descent and drive evenly'),
-      ('Pull-Up', 'Vertical Pull', 'bodyweight', array['Back','Biceps']::text[], 'Pull', 0::real, 6, 'Full hang to chest-up as able'),
-      ('Push-Up', 'Horizontal Press', 'bodyweight', array['Chest','Shoulders','Triceps','Core']::text[], 'Push', 0::real, 12, 'Maintain rigid plank line'),
-      ('Walking Lunge', 'Lunge', 'bodyweight', array['Quadriceps','Glutes','Hamstrings']::text[], 'Legs', 0::real, 10, 'Step long and control knee path'),
-      ('Cable Row', 'Horizontal Pull', 'cable', array['Back','Biceps']::text[], 'Pull', 30::real, 10, 'Lead with elbows and avoid shrugging'),
-      ('Lat Pulldown Machine', 'Vertical Pull', 'machine', array['Back','Biceps']::text[], 'Pull', 40::real, 10, 'Pull to upper chest with stable torso'),
-      ('Leg Press Machine', 'Squat', 'machine', array['Quadriceps','Glutes']::text[], 'Legs', 80::real, 10, 'Control depth and avoid locking knees'),
-      ('Cable Lateral Raise', 'Lateral Raise', 'cable', array['Shoulders']::text[], 'Push', 8::real, 12, 'Slight forward lean and controlled tempo')
-  ) as seed(name, movement, equipment_type, muscle_groups, exercise_type, default_weight, default_reps, notes)
+      ('Barbell Back Squat', 'Squat', 'freeweight', array['Quadriceps','Glutes','Core']::text[], 'Legs', 60::real, 5, 'Brace and keep bar path over mid-foot', '/exercise-illustrations/barbell-back-squat.svg'),
+      ('Romanian Deadlift', 'Hip Hinge', 'freeweight', array['Hamstrings','Glutes','Back']::text[], 'Pull', 50::real, 8, 'Push hips back and maintain neutral spine', '/exercise-illustrations/romanian-deadlift.svg'),
+      ('Barbell Bench Press', 'Horizontal Press', 'freeweight', array['Chest','Shoulders','Triceps']::text[], 'Push', 40::real, 6, 'Control descent and drive evenly', '/exercise-illustrations/barbell-bench-press.svg'),
+      ('Pull-Up', 'Vertical Pull', 'bodyweight', array['Back','Biceps']::text[], 'Pull', 0::real, 6, 'Full hang to chest-up as able', '/exercise-illustrations/pull-up.svg'),
+      ('Push-Up', 'Horizontal Press', 'bodyweight', array['Chest','Shoulders','Triceps','Core']::text[], 'Push', 0::real, 12, 'Maintain rigid plank line', '/exercise-illustrations/push-up.svg'),
+      ('Walking Lunge', 'Lunge', 'bodyweight', array['Quadriceps','Glutes','Hamstrings']::text[], 'Legs', 0::real, 10, 'Step long and control knee path', '/exercise-illustrations/walking-lunge.svg'),
+      ('Cable Row', 'Horizontal Pull', 'cable', array['Back','Biceps']::text[], 'Pull', 30::real, 10, 'Lead with elbows and avoid shrugging', '/exercise-illustrations/cable-row.svg'),
+      ('Lat Pulldown Machine', 'Vertical Pull', 'machine', array['Back','Biceps']::text[], 'Pull', 40::real, 10, 'Pull to upper chest with stable torso', '/exercise-illustrations/lat-pulldown-machine.svg'),
+      ('Leg Press Machine', 'Squat', 'machine', array['Quadriceps','Glutes']::text[], 'Legs', 80::real, 10, 'Control depth and avoid locking knees', '/exercise-illustrations/leg-press-machine.svg'),
+      ('Cable Lateral Raise', 'Lateral Raise', 'cable', array['Shoulders']::text[], 'Push', 8::real, 12, 'Slight forward lean and controlled tempo', '/exercise-illustrations/cable-lateral-raise.svg'),
+      ('Dumbbell Shoulder Press', 'Vertical Press', 'freeweight', array['Shoulders','Triceps','Upper Chest']::text[], 'Push', 16::real, 10, 'Press overhead without arching the lower back', '/exercise-illustrations/dumbbell-shoulder-press.svg'),
+      ('Dumbbell Incline Press', 'Incline Press', 'freeweight', array['Chest','Shoulders','Triceps']::text[], 'Push', 18::real, 10, 'Keep shoulder blades retracted and wrists stacked', '/exercise-illustrations/dumbbell-incline-press.svg'),
+      ('Dumbbell Bent-Over Row', 'Horizontal Pull', 'freeweight', array['Back','Lats','Biceps']::text[], 'Pull', 22::real, 10, 'Hinge at hips and pull elbow toward hip', '/exercise-illustrations/dumbbell-bent-over-row.svg'),
+      ('Dumbbell Biceps Curl', 'Elbow Flexion', 'freeweight', array['Biceps','Forearms']::text[], 'Pull', 10::real, 12, 'Control the eccentric and avoid torso sway', '/exercise-illustrations/dumbbell-biceps-curl.svg'),
+      ('Dumbbell Bulgarian Split Squat', 'Single-Leg Squat', 'freeweight', array['Quadriceps','Glutes','Hamstrings']::text[], 'Legs', 14::real, 10, 'Stay upright and drive through full front foot', '/exercise-illustrations/dumbbell-bulgarian-split-squat.svg'),
+      ('Dumbbell Romanian Deadlift', 'Hip Hinge', 'freeweight', array['Hamstrings','Glutes','Back']::text[], 'Pull', 20::real, 10, 'Keep dumbbells close and hinge without rounding', '/exercise-illustrations/dumbbell-romanian-deadlift.svg')
+  ) as seed(name, movement, equipment_type, muscle_groups, exercise_type, default_weight, default_reps, notes, instruction_image)
   where not exists (
     select 1
     from public.machines m
