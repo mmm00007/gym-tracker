@@ -2897,19 +2897,19 @@ function LogSetScreen({
       ? machines
       : machines.filter(m => m.muscle_groups?.includes(muscleFilter))
     const shouldApplyFavoritesOrdering = favoritesOrderingEnabled && !favoriteLoadFailed
-    const rankedMachines = [...filteredMachines].sort((a, b) => {
-      if (!shouldApplyFavoritesOrdering) return compareBySecondaryOrder(a, b)
+    const rankedMachines = shouldApplyFavoritesOrdering
+      ? [...filteredMachines].sort((a, b) => {
+        const aFavorite = Boolean(a?.is_favorite ?? a?.isFavorite)
+        const bFavorite = Boolean(b?.is_favorite ?? b?.isFavorite)
+        if (aFavorite !== bFavorite) return aFavorite ? -1 : 1
 
-      const aFavorite = Boolean(a?.is_favorite ?? a?.isFavorite)
-      const bFavorite = Boolean(b?.is_favorite ?? b?.isFavorite)
-      if (aFavorite !== bFavorite) return aFavorite ? -1 : 1
+        const aRating = Number.isInteger(Number(a?.rating)) ? Number(a.rating) : 0
+        const bRating = Number.isInteger(Number(b?.rating)) ? Number(b.rating) : 0
+        if (aRating !== bRating) return bRating - aRating
 
-      const aRating = Number.isInteger(Number(a?.rating)) ? Number(a.rating) : 0
-      const bRating = Number.isInteger(Number(b?.rating)) ? Number(b.rating) : 0
-      if (aRating !== bRating) return bRating - aRating
-
-      return compareBySecondaryOrder(a, b)
-    })
+        return compareBySecondaryOrder(a, b)
+      })
+      : filteredMachines
 
     const usageBadgeForMachine = (machineId) => {
       const count = favoriteCountsByMachine[machineId] || 0
