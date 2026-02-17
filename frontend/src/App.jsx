@@ -2177,7 +2177,6 @@ function EditMachineScreen({
 
     if (payload.equipment_type !== 'machine') {
       payload.thumbnails = []
-      payload.instruction_image = null
       payload.source = null
     }
 

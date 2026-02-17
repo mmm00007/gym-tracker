@@ -352,18 +352,7 @@ export async function bootstrapDefaultEquipmentCatalog() {
   const bootstrapKey = `library-seeded:v3:${user.id}`
   const alreadyBootstrapped = typeof window !== 'undefined' && window.localStorage.getItem(bootstrapKey) === 'done'
 
-  const hasAnyEquipment = async () => {
-    const { data, error } = await supabase
-      .from('machines')
-      .select('id')
-      .limit(1)
-    if (error) throw error
-    return Array.isArray(data) && data.length > 0
-  }
-
-  if (alreadyBootstrapped) {
-    if (await hasAnyEquipment()) return
-  }
+  if (alreadyBootstrapped) return
 
   const markDone = () => {
     if (typeof window !== 'undefined') {
