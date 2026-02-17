@@ -582,6 +582,13 @@ select:focus-visible {
   flex: 1;
 }
 
+.app-navigation__button--icon-only {
+  justify-content: center !important;
+  gap: 0 !important;
+  min-width: 44px;
+  padding: 10px !important;
+}
+
 .u-responsive-grid-140 {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));

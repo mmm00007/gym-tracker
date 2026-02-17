@@ -3839,6 +3839,7 @@ function AppNavigation({
 }) {
   const [isOverflowOpen, setIsOverflowOpen] = useState(false)
   const navButtonRefs = useRef([])
+  const iconOnly = layout === 'bottom'
 
   const focusNavButton = (index) => {
     if (!destinations.length) return
@@ -3888,7 +3889,7 @@ function AppNavigation({
           const active = activeScreen === destination.key
           return (
             <button
-              className="app-navigation__button"
+              className={`app-navigation__button ${iconOnly ? 'app-navigation__button--icon-only' : ''}`}
               key={destination.key}
               ref={(node) => { navButtonRefs.current[index] = node }}
               onKeyDown={(event) => onNavKeyDown(event, index)}
@@ -3901,6 +3902,7 @@ function AppNavigation({
               style={{
                 flex: layout === 'bottom' || layout === 'top' ? 1 : 'none',
                 minWidth: layout === 'rail' ? 94 : 0,
+                minHeight: 44,
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: layout === 'rail' ? 'flex-start' : 'center',
@@ -3914,13 +3916,13 @@ function AppNavigation({
               }}
             >
               <span aria-hidden="true" style={{ fontSize: 16 }}>{destination.icon}</span>
-              <span style={{ fontSize: 12, letterSpacing: 0.2 }}>{destination.label}</span>
+              {!iconOnly && <span style={{ fontSize: 12, letterSpacing: 0.2 }}>{destination.label}</span>}
             </button>
           )
         })}
         <div className={layout === 'bottom' || layout === 'top' ? 'u-nav-item-grow' : ''} style={{ position: 'relative' }}>
           <button
-            className="app-navigation__button app-navigation__button--overflow"
+            className={`app-navigation__button app-navigation__button--overflow ${iconOnly ? 'app-navigation__button--icon-only' : ''}`}
             ref={(node) => { navButtonRefs.current[destinations.length] = node }}
             onKeyDown={(event) => onNavKeyDown(event, destinations.length)}
             onClick={() => setIsOverflowOpen((open) => !open)}
@@ -3930,6 +3932,7 @@ function AppNavigation({
             aria-expanded={isOverflowOpen}
             style={{
               width: '100%',
+              minHeight: 44,
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: layout === 'rail' ? 'flex-start' : 'center',
@@ -3941,7 +3944,7 @@ function AppNavigation({
             }}
           >
             <span aria-hidden="true" style={{ fontSize: 16 }}>⋯</span>
-            <span style={{ fontSize: 12 }}>More</span>
+            {!iconOnly && <span style={{ fontSize: 12 }}>More</span>}
           </button>
           {isOverflowOpen && (
             <div id="secondary-menu" role="menu" style={{
