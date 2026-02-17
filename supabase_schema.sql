@@ -84,22 +84,36 @@ returns trigger
 language plpgsql
 set search_path = public
 as $$
+declare
+  has_profile_entries boolean;
+  has_group_entries boolean;
+  profile_changed boolean;
+  groups_changed boolean;
 begin
-  if (
-       case
-         when jsonb_typeof(new.muscle_profile) = 'array' then jsonb_array_length(new.muscle_profile)
-         else 0
-       end
-     ) = 0
-     and coalesce(array_length(new.muscle_groups, 1), 0) > 0 then
+  has_profile_entries := (
+    case
+      when jsonb_typeof(new.muscle_profile) = 'array' then jsonb_array_length(new.muscle_profile)
+      else 0
+    end
+  ) > 0;
+  has_group_entries := coalesce(array_length(new.muscle_groups, 1), 0) > 0;
+
+  if tg_op = 'UPDATE' then
+    profile_changed := new.muscle_profile is distinct from old.muscle_profile;
+    groups_changed := new.muscle_groups is distinct from old.muscle_groups;
+
+    if groups_changed and not profile_changed then
+      new.muscle_profile := public.muscle_groups_array_to_profile(new.muscle_groups);
+    elsif profile_changed then
+      new.muscle_groups := array(
+        select distinct trim(entry ->> 'group')
+        from jsonb_array_elements(new.muscle_profile) entry
+        where length(trim(entry ->> 'group')) > 0
+      );
+    end if;
+  elsif not has_profile_entries and has_group_entries then
     new.muscle_profile := public.muscle_groups_array_to_profile(new.muscle_groups);
-  elsif coalesce(array_length(new.muscle_groups, 1), 0) = 0
-        and (
-          case
-            when jsonb_typeof(new.muscle_profile) = 'array' then jsonb_array_length(new.muscle_profile)
-            else 0
-          end
-        ) > 0 then
+  elsif has_profile_entries then
     new.muscle_groups := array(
       select distinct trim(entry ->> 'group')
       from jsonb_array_elements(new.muscle_profile) entry
