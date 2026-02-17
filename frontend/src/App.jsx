@@ -2885,7 +2885,10 @@ function LogSetScreen({
     const filteredMachines = muscleFilter === 'All'
       ? machines
       : machines.filter(m => m.muscle_groups?.includes(muscleFilter))
+    const shouldApplyFavoritesOrdering = favoritesOrderingEnabled && !favoriteLoadFailed
     const rankedMachines = [...filteredMachines].sort((a, b) => {
+      if (!shouldApplyFavoritesOrdering) return compareBySecondaryOrder(a, b)
+
       const aFavorite = Boolean(a?.is_favorite ?? a?.isFavorite)
       const bFavorite = Boolean(b?.is_favorite ?? b?.isFavorite)
       if (aFavorite !== bFavorite) return aFavorite ? -1 : 1
