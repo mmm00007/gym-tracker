@@ -1985,6 +1985,10 @@ function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
     () => (form.movement_pattern ? (MOVEMENT_CATALOG[form.movement_pattern]?.variations || []) : []),
     [form.movement_pattern],
   )
+  const movementVariationChips = useMemo(
+    () => Array.from(new Set([...(form.movement_variation || []), ...movementVariationOptions])),
+    [form.movement_variation, movementVariationOptions],
+  )
 
   const togglePrimaryMuscle = (group) => {
     const current = new Set(form.primary_muscles || [])
@@ -2155,7 +2159,7 @@ function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
       <div style={{ marginBottom: 16 }}>
         <label style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6, fontFamily: 'var(--font-code)' }}>Variations</label>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-          {movementVariationOptions.map((variation) => {
+          {movementVariationChips.map((variation) => {
             const active = (form.movement_variation || []).includes(variation)
             return (
               <button key={variation} onClick={() => toggleVariation(variation)} style={{
