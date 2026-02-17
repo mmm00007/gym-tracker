@@ -1193,15 +1193,17 @@ function PlanListPanel({ plans, selectedPlanId, loading, error, onSelectPlan, on
           return (
             <div key={plan.id} style={{ border: `1px solid ${isSelected ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 10, padding: 10 }}>
               <button onClick={() => onSelectPlan(plan.id)} style={{ width: '100%', textAlign: 'left' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                  <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                  <div style={{ minWidth: 0, flex: '1 1 180px' }}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{plan.name || 'Untitled plan'}</div>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{plan.goal || 'No goal set'}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', overflowWrap: 'anywhere' }}>{plan.goal || 'No goal set'}</div>
                   </div>
-                  <Pill text={plan.isActive ? 'ACTIVE' : 'INACTIVE'} color={plan.isActive ? 'var(--green)' : 'var(--text-dim)'} />
+                  <div style={{ flex: '0 0 auto' }}>
+                    <Pill text={plan.isActive ? 'ACTIVE' : 'INACTIVE'} color={plan.isActive ? 'var(--green)' : 'var(--text-dim)'} />
+                  </div>
                 </div>
               </button>
-              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                 <button onClick={() => onUpdate(plan.id, { isActive: !plan.isActive })} style={{ fontSize: 12, color: 'var(--accent)' }}>
                   {plan.isActive ? 'Deactivate' : 'Activate'}
                 </button>
@@ -1341,14 +1343,18 @@ function PlanItemEditor({ day, items, machines, loading, error, onSaveItem, onDe
               <div key={item.id} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 10 }}>
                 <button onClick={() => applyExisting(item)} style={{ width: '100%', textAlign: 'left' }}>
                   <div style={{ fontSize: 14, color: 'var(--text)', fontWeight: 700 }}>{item.equipment?.name || item.exercise || 'Unlinked exercise'}</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{item.targetSetType} · sets {item.targetSets ?? '—'} · order {item.orderIndex}</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                    <Pill text={item.targetSetType} color="var(--text-muted)" />
+                    <Pill text={`Sets ${item.targetSets ?? '—'}`} color="var(--text-muted)" />
+                    <Pill text={`Order ${item.orderIndex}`} color="var(--text-muted)" />
+                  </div>
                 </button>
                 <button onClick={() => onDeleteItem(item.id)} style={{ marginTop: 8, fontSize: 12, color: 'var(--red)' }}>Delete item</button>
               </div>
             ))}
           </div>
 
-          <div style={{ display: 'grid', gap: 8 }}>
+          <div style={{ display: 'grid', gap: 8, paddingBottom: 'calc(72px + env(safe-area-inset-bottom))' }}>
             <button onClick={() => setShowMachinePicker((prev) => !prev)} style={{ textAlign: 'left', padding: 10, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)' }}>
               {selectedMachine ? `Exercise: ${selectedMachine.name}` : 'Select exercise/equipment'}
             </button>
@@ -1372,19 +1378,19 @@ function PlanItemEditor({ day, items, machines, loading, error, onSaveItem, onDe
               style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: 10, color: 'var(--text)' }}>
               {SET_TYPE_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
             </select>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
               <input type="number" min="0" value={form.targetSets} onChange={(e) => setForm((prev) => ({ ...prev, targetSets: e.target.value }))} placeholder="Target sets"
                 style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: 10, color: 'var(--text)' }} />
               <input type="number" min="0" value={form.orderIndex} onChange={(e) => setForm((prev) => ({ ...prev, orderIndex: e.target.value }))} placeholder="Order"
                 style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: 10, color: 'var(--text)' }} />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
               <input type="number" min="0" value={form.repMin} onChange={(e) => setForm((prev) => ({ ...prev, repMin: e.target.value }))} placeholder="Rep min"
                 style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: 10, color: 'var(--text)' }} />
               <input type="number" min="0" value={form.repMax} onChange={(e) => setForm((prev) => ({ ...prev, repMax: e.target.value }))} placeholder="Rep max"
                 style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: 10, color: 'var(--text)' }} />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
               <input type="number" min="0" value={form.weightMin} onChange={(e) => setForm((prev) => ({ ...prev, weightMin: e.target.value }))} placeholder="Weight min"
                 style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: 10, color: 'var(--text)' }} />
               <input type="number" min="0" value={form.weightMax} onChange={(e) => setForm((prev) => ({ ...prev, weightMax: e.target.value }))} placeholder="Weight max"
@@ -1417,6 +1423,7 @@ function PlanScreen({ machines, sets, onBack }) {
   const [items, setItems] = useState([])
   const [allDayItems, setAllDayItems] = useState([])
   const [itemStatus, setItemStatus] = useState({ loading: false, error: null })
+  const navLayoutMode = useNavigationLayoutMode()
 
   const selectedPlan = plans.find((plan) => plan.id === selectedPlanId) || null
   const selectedDay = days.find((day) => day.id === selectedDayId) || null
@@ -1715,7 +1722,13 @@ function PlanScreen({ machines, sets, onBack }) {
           </div>
         )}
       </div>
-      <div style={{ display: 'grid', gap: 12 }}>
+      <div style={{
+        display: 'grid',
+        gap: 12,
+        gridTemplateColumns: navLayoutMode === 'phone' ? 'minmax(0, 1fr)' : 'repeat(2, minmax(0, 1fr))',
+        alignItems: 'start',
+        paddingBottom: 'calc(96px + env(safe-area-inset-bottom))',
+      }}>
         <PlanListPanel
           plans={plans}
           selectedPlanId={selectedPlanId}
