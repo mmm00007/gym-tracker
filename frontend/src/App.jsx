@@ -2130,14 +2130,17 @@ function EditMachineScreen({
     const primaryMuscles = fixedOptionMachineTaxonomyEnabled
       ? Array.from(new Set((form.primary_muscles || []).filter(Boolean)))
       : manualMuscles
-    const secondaryMuscles = fixedOptionMachineTaxonomyEnabled ? (form.secondary_muscles || []) : []
+    const secondaryMusclesSource = fixedOptionMachineTaxonomyEnabled ? (form.secondary_muscles || []) : []
+    const secondaryMuscles = secondaryMusclesSource
       .filter((entry) => entry?.group && !primaryMuscles.includes(entry.group))
       .map((entry) => ({
         group: entry.group,
         role: 'secondary',
         percent: Math.min(99, Math.max(1, Number(entry.percent) || 0)),
       }))
-    const movementPattern = fixedOptionMachineTaxonomyEnabled ? (form.movement_pattern || '') : ''
+    const movementPattern = fixedOptionMachineTaxonomyEnabled
+      ? (form.movement_pattern || '')
+      : String(form.movement_pattern || form.movement || '').trim()
     const movementLabel = fixedOptionMachineTaxonomyEnabled
       ? (movementPattern && MOVEMENT_CATALOG[movementPattern]
         ? MOVEMENT_CATALOG[movementPattern].label
@@ -2158,7 +2161,7 @@ function EditMachineScreen({
       ...form,
       name: (form.name || '').trim(),
       movement: movementLabel,
-      movement_pattern: movementPattern || null,
+      movement_pattern: fixedOptionMachineTaxonomyEnabled ? (movementPattern || null) : movementPattern,
       movement_variation: movementVariation,
       variations: movementVariation,
       exercise_type: (form.exercise_type || '').trim() || null,
