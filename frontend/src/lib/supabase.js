@@ -55,6 +55,26 @@ function throwMappedDbError(error, contextMessage) {
 const normalizeEquipment = (row = null) => {
   if (!row) return null
   const muscleGroups = Array.isArray(row.muscle_groups) ? row.muscle_groups : []
+  const thumbnails = Array.isArray(row.thumbnails)
+    ? row.thumbnails
+      .map((thumb) => {
+        if (typeof thumb === 'string') {
+          return {
+            src: thumb,
+            focalX: 50,
+            focalY: 35,
+          }
+        }
+        if (!thumb || typeof thumb !== 'object' || typeof thumb.src !== 'string') return null
+
+        return {
+          src: thumb.src,
+          focalX: Number.isFinite(Number(thumb.focalX)) ? Number(thumb.focalX) : 50,
+          focalY: Number.isFinite(Number(thumb.focalY)) ? Number(thumb.focalY) : 35,
+        }
+      })
+      .filter(Boolean)
+    : []
   const equipmentType = row.equipment_type || 'machine'
   const movement = row.movement || ''
   return {
@@ -70,6 +90,7 @@ const normalizeEquipment = (row = null) => {
     notes: row.notes || '',
     imageUrl: row.image_url || '',
     image_url: row.image_url || '',
+    thumbnails,
     createdAt: row.created_at || null,
     created_at: row.created_at || null,
     updatedAt: row.updated_at || null,
@@ -99,6 +120,18 @@ const EQUIPMENT_DB_COLUMNS = [
 function toEquipmentDbPayload(equipment = {}, userId) {
   const source = { ...equipment }
   const payload = {}
+
+  if (Array.isArray(source.thumbnails)) {
+    source.thumbnails = source.thumbnails
+      .map((thumb) => {
+        if (typeof thumb === 'string') {
+          return thumb
+        }
+        if (!thumb || typeof thumb !== 'object' || typeof thumb.src !== 'string') return null
+        return thumb.src
+      })
+      .filter((thumb) => typeof thumb === 'string' && thumb.trim().length > 0)
+  }
 
   // Accept aliases from normalized objects/forms and map to DB columns.
   if (source.equipmentType !== undefined && source.equipment_type === undefined) {

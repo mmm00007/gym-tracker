@@ -1768,9 +1768,24 @@ function PlanScreen({ machines, sets, onBack }) {
 // ─── Edit Machine ──────────────────────────────────────────
 
 function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
+  const normalizeThumbnail = useCallback((thumb) => {
+    if (typeof thumb === 'string') {
+      return { src: thumb, focalX: 50, focalY: 35 }
+    }
+    if (!thumb || typeof thumb !== 'object' || typeof thumb.src !== 'string') return null
+    return {
+      src: thumb.src,
+      focalX: Number.isFinite(Number(thumb.focalX)) ? Number(thumb.focalX) : 50,
+      focalY: Number.isFinite(Number(thumb.focalY)) ? Number(thumb.focalY) : 35,
+    }
+  }, [])
+
   const [form, setForm] = useState({
     equipment_type: 'machine',
     ...machine,
+    thumbnails: Array.isArray(machine?.thumbnails)
+      ? machine.thumbnails.map(normalizeThumbnail).filter(Boolean)
+      : [],
   })
   const upd = (k, v) => setForm({ ...form, [k]: v })
   const thumbRef = useRef(null)
@@ -1802,8 +1817,27 @@ function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
       }
     }
     if (dataUrls.length) {
-      upd('thumbnails', [...existing, ...dataUrls])
+      upd('thumbnails', [
+        ...existing,
+        ...dataUrls.map((src) => ({ src, focalX: 50, focalY: 35 })),
+      ])
     }
+  }
+
+  const updateThumbnailFocus = (index, axis, value) => {
+    const nextValue = Number(value)
+    upd(
+      'thumbnails',
+      (form.thumbnails || []).map((thumb, thumbIndex) => {
+        if (thumbIndex !== index) return thumb
+        const safeThumb = normalizeThumbnail(thumb)
+        if (!safeThumb) return thumb
+        return {
+          ...safeThumb,
+          [axis]: Number.isFinite(nextValue) ? nextValue : safeThumb[axis],
+        }
+      }),
+    )
   }
 
   const setInstructionImage = async (file) => {
@@ -1836,6 +1870,7 @@ function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
       source: (form.source || '').trim() || null,
       equipment_type: form.equipment_type || 'machine',
       muscle_groups: (form.muscle_groups || []).map((m) => m.trim()).filter(Boolean),
+      thumbnails: (form.thumbnails || []).map(normalizeThumbnail).filter(Boolean),
     }
 
     if (payload.equipment_type !== 'machine') {
@@ -1903,12 +1938,47 @@ function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
             {(form.thumbnails || []).length > 0 && (
               <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
                 {form.thumbnails.map((thumb, i) => (
-                  <div key={i} style={{ position: 'relative' }}>
-                    <img src={thumb} alt="" style={{ width: 78, height: 78, objectFit: 'cover', borderRadius: 12, border: '1px solid var(--border)' }} />
+                  <div key={i} style={{ position: 'relative', width: 150 }}>
+                    <img
+                      src={thumb.src}
+                      alt=""
+                      style={{
+                        width: '100%',
+                        height: 78,
+                        objectFit: 'cover',
+                        objectPosition: `${thumb.focalX}% ${thumb.focalY}%`,
+                        borderRadius: 12,
+                        border: '1px solid var(--border)',
+                      }}
+                    />
                     <button onClick={() => upd('thumbnails', form.thumbnails.filter((_, idx) => idx !== i))} style={{
                       position: 'absolute', top: -6, right: -6, width: 22, height: 22, borderRadius: 11,
                       background: 'var(--red)', color: '#fff', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}>×</button>
+                    <div style={{ marginTop: 8, display: 'grid', gap: 4 }}>
+                      <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                        X: {Math.round(thumb.focalX)}%
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={thumb.focalX}
+                          onChange={(e) => updateThumbnailFocus(i, 'focalX', e.target.value)}
+                          style={{ width: '100%' }}
+                        />
+                      </label>
+                      <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                        Y: {Math.round(thumb.focalY)}%
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={thumb.focalY}
+                          onChange={(e) => updateThumbnailFocus(i, 'focalY', e.target.value)}
+                          style={{ width: '100%' }}
+                        />
+                      </label>
+                    </div>
                   </div>
                 ))}
               </div>

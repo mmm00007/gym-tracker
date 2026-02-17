@@ -19,7 +19,19 @@ function MusclePill({ text, color }) {
 
 export default function MachineCard({ machine, onSelect, onEdit, compact, usageBadge, getMuscleColor }) {
   const primaryColor = getMuscleColor(machine.muscle_groups?.[0])
-  const thumbnails = machine.thumbnails || []
+  const thumbnails = Array.isArray(machine.thumbnails)
+    ? machine.thumbnails
+      .map((thumb) => {
+        if (typeof thumb === 'string') return { src: thumb, focalX: 50, focalY: 35 }
+        if (!thumb || typeof thumb !== 'object' || typeof thumb.src !== 'string') return null
+        return {
+          src: thumb.src,
+          focalX: Number.isFinite(Number(thumb.focalX)) ? Number(thumb.focalX) : 50,
+          focalY: Number.isFinite(Number(thumb.focalY)) ? Number(thumb.focalY) : 35,
+        }
+      })
+      .filter(Boolean)
+    : []
   const thumb = thumbnails[0]
 
   return (
@@ -30,7 +42,7 @@ export default function MachineCard({ machine, onSelect, onEdit, compact, usageB
     >
       <div className="machine-card__image-wrap">
         {thumb ? (
-          <img src={thumb} alt="" className="machine-card__image" />
+          <img src={thumb.src} alt="" className="machine-card__image" style={{ objectPosition: `${thumb.focalX}% ${thumb.focalY}%` }} />
         ) : (
           <span className="machine-card__placeholder">🏋️</span>
         )}
