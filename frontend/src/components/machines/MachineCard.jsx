@@ -26,6 +26,8 @@ export default function MachineCard({
   getMuscleColor,
   onToggleFavorite,
   onQuickRate,
+  machineRatingEnabled = true,
+  pinnedFavoritesEnabled = true,
 }) {
   const primaryColor = getMuscleColor(machine.muscle_groups?.[0])
   const rating = Number.isInteger(Number(machine?.rating)) ? Number(machine.rating) : null
@@ -68,19 +70,21 @@ export default function MachineCard({
         <div className="machine-card__content-main">
           <div className="machine-card__title">{machine.name}</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
-            <span
-              style={{
-                fontSize: 12,
-                borderRadius: 999,
-                border: `1px solid ${isFavorite ? 'var(--accent)' : 'var(--border)'}`,
-                padding: '2px 8px',
-                color: isFavorite ? 'var(--accent)' : 'var(--text-muted)',
-                background: isFavorite ? 'var(--accent)1a' : 'transparent',
-              }}
-            >
-              {isFavorite ? '♥ Favorite' : '♡ Favorite'}
-            </span>
-            {rating !== null && (
+            {pinnedFavoritesEnabled && (
+              <span
+                style={{
+                  fontSize: 12,
+                  borderRadius: 999,
+                  border: `1px solid ${isFavorite ? 'var(--accent)' : 'var(--border)'}`,
+                  padding: '2px 8px',
+                  color: isFavorite ? 'var(--accent)' : 'var(--text-muted)',
+                  background: isFavorite ? 'var(--accent)1a' : 'transparent',
+                }}
+              >
+                {isFavorite ? '♥ Favorite' : '♡ Favorite'}
+              </span>
+            )}
+            {machineRatingEnabled && rating !== null && (
               <span
                 style={{
                   fontSize: 12,
@@ -107,7 +111,7 @@ export default function MachineCard({
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {onToggleFavorite && (
+          {pinnedFavoritesEnabled && onToggleFavorite && (
             <button
               type="button"
               aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
@@ -120,7 +124,7 @@ export default function MachineCard({
               {isFavorite ? '♥' : '♡'}
             </button>
           )}
-          {onQuickRate && (
+          {machineRatingEnabled && onQuickRate && (
             <button
               type="button"
               aria-label="Rate machine"

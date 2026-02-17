@@ -720,6 +720,7 @@ function HomeScreen({
   libraryEnabled,
   plansEnabled,
   homeDashboardEnabled,
+  weightedMuscleProfileWorkloadEnabled,
   dayStartHour,
   onLogSets,
   onLibrary,
@@ -744,7 +745,10 @@ function HomeScreen({
       return { groups: [], totalWorkload: 0, contributingSetCount: 0, normalization: null }
     }
     try {
-      return computeWorkloadByMuscleGroup(scopedWorkload.sets, machines, { scope: scopedWorkload.scope })
+      return computeWorkloadByMuscleGroup(scopedWorkload.sets, machines, {
+        scope: scopedWorkload.scope,
+        weightedMuscleProfileWorkloadEnabled,
+      })
     } catch (error) {
       addLog({
         level: 'error',
@@ -759,7 +763,7 @@ function HomeScreen({
       })
       return { groups: [], totalWorkload: 0, contributingSetCount: 0, normalization: null }
     }
-  }, [homeDashboardEnabled, scopedWorkload, machines])
+  }, [homeDashboardEnabled, scopedWorkload, machines, weightedMuscleProfileWorkloadEnabled])
   const weeklyConsistency = useMemo(() => {
     if (!homeDashboardEnabled) {
       return { weeks: [], completedDays: 0, possibleDays: 0, ratio: 0 }
@@ -1826,7 +1830,16 @@ function PlanScreen({ machines, sets, onBack }) {
 
 // ─── Edit Machine ──────────────────────────────────────────
 
-function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
+function EditMachineScreen({
+  machine,
+  onSave,
+  onCancel,
+  onDelete,
+  machineRatingEnabled,
+  pinnedFavoritesEnabled,
+  machineAutofillEnabled,
+  fixedOptionMachineTaxonomyEnabled,
+}) {
   const parseMuscleProfile = useCallback((rawProfile, fallbackGroups) => {
     const profile = Array.isArray(rawProfile) ? rawProfile : []
     const primary = profile
@@ -1889,6 +1902,7 @@ function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
     thumbnails: Array.isArray(machine?.thumbnails)
       ? machine.thumbnails.map(normalizeThumbnail).filter(Boolean)
       : [],
+    manual_muscle_groups: Array.isArray(machine?.muscle_groups) ? machine.muscle_groups.join(', ') : '',
   })
   const [validationError, setValidationError] = useState('')
   const [customVariation, setCustomVariation] = useState('')
@@ -2104,18 +2118,33 @@ function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
 
   const isMachineType = form.equipment_type === 'machine'
 
+  const parseManualMuscleGroups = (rawValue) => Array.from(new Set(
+    String(rawValue || '')
+      .split(',')
+      .map((value) => normalizeMuscleGroup(value))
+      .filter(Boolean),
+  ))
+
   const buildPayload = () => {
-    const primaryMuscles = Array.from(new Set((form.primary_muscles || []).filter(Boolean)))
-    const secondaryMuscles = (form.secondary_muscles || [])
+    const manualMuscles = parseManualMuscleGroups(form.manual_muscle_groups)
+    const primaryMuscles = fixedOptionMachineTaxonomyEnabled
+      ? Array.from(new Set((form.primary_muscles || []).filter(Boolean)))
+      : manualMuscles
+    const secondaryMusclesSource = fixedOptionMachineTaxonomyEnabled ? (form.secondary_muscles || []) : []
+    const secondaryMuscles = secondaryMusclesSource
       .filter((entry) => entry?.group && !primaryMuscles.includes(entry.group))
       .map((entry) => ({
         group: entry.group,
         role: 'secondary',
         percent: Math.min(99, Math.max(1, Number(entry.percent) || 0)),
       }))
-    const movementPattern = form.movement_pattern || ''
-    const movementLabel = movementPattern && MOVEMENT_CATALOG[movementPattern]
-      ? MOVEMENT_CATALOG[movementPattern].label
+    const movementPattern = fixedOptionMachineTaxonomyEnabled
+      ? (form.movement_pattern || '')
+      : String(form.movement_pattern || form.movement || '').trim()
+    const movementLabel = fixedOptionMachineTaxonomyEnabled
+      ? (movementPattern && MOVEMENT_CATALOG[movementPattern]
+        ? MOVEMENT_CATALOG[movementPattern].label
+        : (form.movement || '').trim())
       : (form.movement || '').trim()
     const movementVariationSource = (form.movement_variation?.length ? form.movement_variation : form.variations) || []
     const movementVariation = Array.from(new Set(movementVariationSource.map((item) => String(item || '').trim()).filter(Boolean)))
@@ -2132,7 +2161,7 @@ function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
       ...form,
       name: (form.name || '').trim(),
       movement: movementLabel,
-      movement_pattern: movementPattern || null,
+      movement_pattern: fixedOptionMachineTaxonomyEnabled ? (movementPattern || null) : movementPattern,
       movement_variation: movementVariation,
       variations: movementVariation,
       exercise_type: (form.exercise_type || '').trim() || null,
@@ -2225,20 +2254,24 @@ function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
   }
 
   const handleSave = () => {
-    const hasMovement = Boolean(form.movement_pattern)
-    const primary = form.primary_muscles || []
+    const hasMovement = fixedOptionMachineTaxonomyEnabled
+      ? Boolean(form.movement_pattern)
+      : Boolean(String(form.movement || '').trim())
+    const primary = fixedOptionMachineTaxonomyEnabled
+      ? (form.primary_muscles || [])
+      : parseManualMuscleGroups(form.manual_muscle_groups)
     const secondary = form.secondary_muscles || []
     const hasInvalidSecondary = secondary.some((entry) => !entry.group || !Number.isFinite(Number(entry.percent)) || Number(entry.percent) < 1 || Number(entry.percent) > 99)
 
     if (!hasMovement) {
-      setValidationError('Please select a movement pattern before saving.')
+      setValidationError(fixedOptionMachineTaxonomyEnabled ? 'Please select a movement pattern before saving.' : 'Enter a movement before saving.')
       return
     }
     if (!primary.length) {
-      setValidationError('Select at least one primary muscle group.')
+      setValidationError(fixedOptionMachineTaxonomyEnabled ? 'Select at least one primary muscle group.' : 'Enter at least one valid muscle group from the allowed list.')
       return
     }
-    if (hasInvalidSecondary) {
+    if (fixedOptionMachineTaxonomyEnabled && hasInvalidSecondary) {
       setValidationError('Secondary muscle percentages must be between 1 and 99.')
       return
     }
@@ -2281,63 +2314,83 @@ function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
         </div>
       </div>
 
-      <div style={{ marginBottom: 16 }}>
-        <label style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6, fontFamily: 'var(--font-code)' }}>Movement</label>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {Object.entries(MOVEMENT_CATALOG).map(([key, option]) => {
-            const active = form.movement_pattern === key
-            return (
-              <button key={key} onClick={() => setMovementPattern(key)} style={{
-                padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
-                background: active ? 'var(--accent)22' : 'var(--surface2)', color: active ? 'var(--accent)' : 'var(--text-muted)',
-                fontSize: 12, fontWeight: 700,
-              }}>{option.label}</button>
-            )
-          })}
-        </div>
-      </div>
-
-      <div style={{ marginBottom: 16 }}>
-        <label style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6, fontFamily: 'var(--font-code)' }}>Primary Muscles</label>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {MUSCLE_GROUP_OPTIONS.map((group) => {
-            const active = (form.primary_muscles || []).includes(group)
-            return (
-              <button key={group} onClick={() => togglePrimaryMuscle(group)} style={{
-                padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
-                background: active ? 'var(--accent)22' : 'var(--surface2)', color: active ? 'var(--accent)' : 'var(--text-muted)',
-                fontSize: 12, fontWeight: 700,
-              }}>{group}</button>
-            )
-          })}
-        </div>
-      </div>
-
-      <div style={{ marginBottom: 16 }}>
-        <label style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6, fontFamily: 'var(--font-code)' }}>Secondary Muscles (%)</label>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-          {MUSCLE_GROUP_OPTIONS.filter((group) => !(form.primary_muscles || []).includes(group)).map((group) => {
-            const active = (form.secondary_muscles || []).some((entry) => entry.group === group)
-            return (
-              <button key={group} onClick={() => toggleSecondaryMuscle(group)} style={{
-                padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
-                background: active ? 'var(--accent)22' : 'var(--surface2)', color: active ? 'var(--accent)' : 'var(--text-muted)',
-                fontSize: 12, fontWeight: 700,
-              }}>{group}</button>
-            )
-          })}
-        </div>
-        {(form.secondary_muscles || []).map((entry) => (
-          <div key={entry.group} style={{ display: 'grid', gridTemplateColumns: '110px 1fr 64px', gap: 10, alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 13, color: 'var(--text)' }}>{entry.group}</span>
-            <input type="range" min="1" max="99" value={entry.percent}
-              onChange={(e) => updateSecondaryPercent(entry.group, e.target.value)} />
-            <input type="number" min="1" max="99" value={entry.percent}
-              onChange={(e) => updateSecondaryPercent(entry.group, e.target.value)}
-              style={{ width: '100%', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 8px', color: 'var(--text)', fontSize: 14, boxSizing: 'border-box' }} />
+      {fixedOptionMachineTaxonomyEnabled ? (
+        <>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6, fontFamily: 'var(--font-code)' }}>Movement</label>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {Object.entries(MOVEMENT_CATALOG).map(([key, option]) => {
+                const active = form.movement_pattern === key
+                return (
+                  <button key={key} onClick={() => setMovementPattern(key)} style={{
+                    padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                    background: active ? 'var(--accent)22' : 'var(--surface2)', color: active ? 'var(--accent)' : 'var(--text-muted)',
+                    fontSize: 12, fontWeight: 700,
+                  }}>{option.label}</button>
+                )
+              })}
+            </div>
           </div>
-        ))}
-      </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6, fontFamily: 'var(--font-code)' }}>Primary Muscles</label>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {MUSCLE_GROUP_OPTIONS.map((group) => {
+                const active = (form.primary_muscles || []).includes(group)
+                return (
+                  <button key={group} onClick={() => togglePrimaryMuscle(group)} style={{
+                    padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                    background: active ? 'var(--accent)22' : 'var(--surface2)', color: active ? 'var(--accent)' : 'var(--text-muted)',
+                    fontSize: 12, fontWeight: 700,
+                  }}>{group}</button>
+                )
+              })}
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6, fontFamily: 'var(--font-code)' }}>Secondary Muscles (%)</label>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+              {MUSCLE_GROUP_OPTIONS.filter((group) => !(form.primary_muscles || []).includes(group)).map((group) => {
+                const active = (form.secondary_muscles || []).some((entry) => entry.group === group)
+                return (
+                  <button key={group} onClick={() => toggleSecondaryMuscle(group)} style={{
+                    padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                    background: active ? 'var(--accent)22' : 'var(--surface2)', color: active ? 'var(--accent)' : 'var(--text-muted)',
+                    fontSize: 12, fontWeight: 700,
+                  }}>{group}</button>
+                )
+              })}
+            </div>
+            {(form.secondary_muscles || []).map((entry) => (
+              <div key={entry.group} style={{ display: 'grid', gridTemplateColumns: '110px 1fr 64px', gap: 10, alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 13, color: 'var(--text)' }}>{entry.group}</span>
+                <input type="range" min="1" max="99" value={entry.percent}
+                  onChange={(e) => updateSecondaryPercent(entry.group, e.target.value)} />
+                <input type="number" min="1" max="99" value={entry.percent}
+                  onChange={(e) => updateSecondaryPercent(entry.group, e.target.value)}
+                  style={{ width: '100%', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 8px', color: 'var(--text)', fontSize: 14, boxSizing: 'border-box' }} />
+              </div>
+            ))}
+          </div>
+        </>
+      ) : (
+        <div style={{ marginBottom: 16, display: 'grid', gap: 12 }}>
+          <div>
+            <label style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6, fontFamily: 'var(--font-code)' }}>Movement (manual)</label>
+            <input value={form.movement || ''} onChange={(e) => upd('movement', e.target.value)}
+              placeholder="e.g. Horizontal Press"
+              style={{ width: '100%', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 12, color: 'var(--text)', fontSize: 16, boxSizing: 'border-box' }} />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6, fontFamily: 'var(--font-code)' }}>Muscle Groups (comma-separated)</label>
+            <input value={form.manual_muscle_groups || ''} onChange={(e) => upd('manual_muscle_groups', e.target.value)}
+              placeholder="Chest, Shoulders"
+              style={{ width: '100%', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 12, color: 'var(--text)', fontSize: 16, boxSizing: 'border-box' }} />
+            <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-dim)' }}>Allowed groups: {MUSCLE_GROUP_OPTIONS.join(', ')}</div>
+          </div>
+        </div>
+      )}
 
       <div style={{ marginBottom: 16 }}>
         <label style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6, fontFamily: 'var(--font-code)' }}>Variations</label>
@@ -2360,26 +2413,30 @@ function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
         </div>
       </div>
 
-      <div style={{ marginBottom: 16 }}>
-        <label style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6, fontFamily: 'var(--font-code)' }}>Rating</label>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          {[1, 2, 3, 4, 5].map((score) => {
-            const active = Number(form.rating) === score
-            return (
-              <button key={score} onClick={() => upd('rating', score)} style={{
-                padding: '6px 10px', borderRadius: 999, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
-                background: active ? 'var(--accent)22' : 'var(--surface2)', color: active ? 'var(--accent)' : 'var(--text-muted)',
-                fontSize: 14,
-              }}>{'★'.repeat(score)}</button>
-            )
-          })}
-          <button onClick={() => upd('is_favorite', !form.is_favorite)} style={{
-            padding: '6px 10px', borderRadius: 999, border: `1px solid ${form.is_favorite ? 'var(--accent)' : 'var(--border)'}`,
-            background: form.is_favorite ? 'var(--accent)22' : 'var(--surface2)', color: form.is_favorite ? 'var(--accent)' : 'var(--text-muted)',
-            fontSize: 14, fontWeight: 700,
-          }}>{form.is_favorite ? '♥ Favorite' : '♡ Favorite'}</button>
+      {(machineRatingEnabled || pinnedFavoritesEnabled) && (
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6, fontFamily: 'var(--font-code)' }}>Machine Signals</label>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {machineRatingEnabled && [1, 2, 3, 4, 5].map((score) => {
+              const active = Number(form.rating) === score
+              return (
+                <button key={score} onClick={() => upd('rating', score)} style={{
+                  padding: '6px 10px', borderRadius: 999, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                  background: active ? 'var(--accent)22' : 'var(--surface2)', color: active ? 'var(--accent)' : 'var(--text-muted)',
+                  fontSize: 14,
+                }}>{'★'.repeat(score)}</button>
+              )
+            })}
+            {pinnedFavoritesEnabled && (
+              <button onClick={() => upd('is_favorite', !form.is_favorite)} style={{
+                padding: '6px 10px', borderRadius: 999, border: `1px solid ${form.is_favorite ? 'var(--accent)' : 'var(--border)'}`,
+                background: form.is_favorite ? 'var(--accent)22' : 'var(--surface2)', color: form.is_favorite ? 'var(--accent)' : 'var(--text-muted)',
+                fontSize: 14, fontWeight: 700,
+              }}>{form.is_favorite ? '♥ Favorite' : '♡ Favorite'}</button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {validationError && (
         <div style={{ marginBottom: 16, padding: 10, borderRadius: 10, border: '1px solid var(--red)', color: 'var(--red)', background: 'rgba(120,0,0,0.15)', fontSize: 13 }}>
@@ -2389,6 +2446,7 @@ function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
 
       {isMachineType ? (
         <>
+          {machineAutofillEnabled && (
           <div style={{ marginBottom: 16, padding: 12, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
               <div>
@@ -2430,6 +2488,8 @@ function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
               <div style={{ marginTop: 10, fontSize: 12, color: 'var(--red)' }}>{autoFillError}</div>
             )}
           </div>
+
+          )}
 
           <div style={{ marginBottom: 16 }}>
             <label style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6, fontFamily: 'var(--font-code)' }}>Machine Thumbnails</label>
@@ -2596,7 +2656,16 @@ function InlineFeedbackPopup({ feedback, onDismiss }) {
   )
 }
 
-function LibraryScreen({ machines, onSaveMachine, onDeleteMachine, onBack }) {
+function LibraryScreen({
+  machines,
+  onSaveMachine,
+  onDeleteMachine,
+  onBack,
+  machineRatingEnabled,
+  pinnedFavoritesEnabled,
+  machineAutofillEnabled,
+  fixedOptionMachineTaxonomyEnabled,
+}) {
   const [editingMachine, setEditingMachine] = useState(null)
   const [search, setSearch] = useState('')
   const [equipmentFilter, setEquipmentFilter] = useState('All')
@@ -2674,17 +2743,21 @@ function LibraryScreen({ machines, onSaveMachine, onDeleteMachine, onBack }) {
     }
 
     return [...filteredMachines].sort((a, b) => {
-      const aFavorite = Boolean(a?.is_favorite ?? a?.isFavorite)
-      const bFavorite = Boolean(b?.is_favorite ?? b?.isFavorite)
-      if (aFavorite !== bFavorite) return aFavorite ? -1 : 1
+      if (pinnedFavoritesEnabled) {
+        const aFavorite = Boolean(a?.is_favorite ?? a?.isFavorite)
+        const bFavorite = Boolean(b?.is_favorite ?? b?.isFavorite)
+        if (aFavorite !== bFavorite) return aFavorite ? -1 : 1
+      }
 
-      const aRating = Number.isInteger(Number(a?.rating)) ? Number(a.rating) : 0
-      const bRating = Number.isInteger(Number(b?.rating)) ? Number(b.rating) : 0
-      if (aRating !== bRating) return bRating - aRating
+      if (machineRatingEnabled) {
+        const aRating = Number.isInteger(Number(a?.rating)) ? Number(a.rating) : 0
+        const bRating = Number.isInteger(Number(b?.rating)) ? Number(b.rating) : 0
+        if (aRating !== bRating) return bRating - aRating
+      }
 
       return compareBySecondaryOrder(a, b)
     })
-  }, [filteredMachines])
+  }, [filteredMachines, machineRatingEnabled, pinnedFavoritesEnabled])
 
   const toggleFavorite = useCallback(async (machine) => {
     try {
@@ -2725,6 +2798,10 @@ function LibraryScreen({ machines, onSaveMachine, onDeleteMachine, onBack }) {
           onSave={handleSaveMachine}
           onCancel={() => setEditingMachine(null)}
           onDelete={handleDeleteMachine}
+          machineRatingEnabled={machineRatingEnabled}
+          pinnedFavoritesEnabled={pinnedFavoritesEnabled}
+          machineAutofillEnabled={machineAutofillEnabled}
+          fixedOptionMachineTaxonomyEnabled={fixedOptionMachineTaxonomyEnabled}
         />
       ) : (
         <div className="screen-frame">
@@ -2792,8 +2869,10 @@ function LibraryScreen({ machines, onSaveMachine, onDeleteMachine, onBack }) {
                   getMuscleColor={mc}
                   onSelect={() => setEditingMachine(machine)}
                   onEdit={() => setEditingMachine(machine)}
-                  onToggleFavorite={() => toggleFavorite(machine)}
-                  onQuickRate={() => bumpRating(machine)}
+                  onToggleFavorite={pinnedFavoritesEnabled ? () => toggleFavorite(machine) : undefined}
+                  onQuickRate={machineRatingEnabled ? () => bumpRating(machine) : undefined}
+                  machineRatingEnabled={machineRatingEnabled}
+                  pinnedFavoritesEnabled={pinnedFavoritesEnabled}
                 />
               ))}
             </div>
@@ -4938,6 +5017,11 @@ export default function App() {
   const plansEnabled = resolvedFlags.plansEnabled
   const favoritesOrderingEnabled = resolvedFlags.favoritesOrderingEnabled
   const homeDashboardEnabled = resolvedFlags.homeDashboardEnabled
+  const machineRatingEnabled = resolvedFlags.machineRatingEnabled
+  const pinnedFavoritesEnabled = resolvedFlags.pinnedFavoritesEnabled
+  const machineAutofillEnabled = resolvedFlags.machineAutofillEnabled
+  const weightedMuscleProfileWorkloadEnabled = resolvedFlags.weightedMuscleProfileWorkloadEnabled
+  const fixedOptionMachineTaxonomyEnabled = resolvedFlags.fixedOptionMachineTaxonomyEnabled
   const navigationMode = useNavigationLayoutMode()
   const primaryDestinations = useMemo(() => getPrimaryDestinations(resolvedFlags), [resolvedFlags])
 
@@ -5018,6 +5102,7 @@ export default function App() {
               libraryEnabled={libraryEnabled}
               plansEnabled={plansEnabled}
               homeDashboardEnabled={homeDashboardEnabled}
+              weightedMuscleProfileWorkloadEnabled={weightedMuscleProfileWorkloadEnabled}
               dayStartHour={PLAN_DAY_START_HOUR}
               onLogSets={() => navigateToScreen('log')}
               onLibrary={() => navigateToScreen('library')}
@@ -5056,6 +5141,10 @@ export default function App() {
               onSaveMachine={handleSaveMachine}
               onDeleteMachine={handleDeleteMachine}
               onBack={() => setScreen('home')}
+              machineRatingEnabled={machineRatingEnabled}
+              pinnedFavoritesEnabled={pinnedFavoritesEnabled}
+              machineAutofillEnabled={machineAutofillEnabled}
+              fixedOptionMachineTaxonomyEnabled={fixedOptionMachineTaxonomyEnabled}
             />
           )}
           {screen === 'history' && (

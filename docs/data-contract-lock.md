@@ -15,8 +15,16 @@ The backend exposes `GET /api/rollout-flags`.
 ```json
 {
   "setCentricLogging": true,
-  "libraryScreenEnabled": false,
-  "analysisOnDemandOnly": false
+  "libraryScreenEnabled": true,
+  "analysisOnDemandOnly": true,
+  "plansEnabled": true,
+  "favoritesOrderingEnabled": true,
+  "homeDashboardEnabled": true,
+  "machineRatingEnabled": true,
+  "pinnedFavoritesEnabled": true,
+  "machineAutofillEnabled": true,
+  "weightedMuscleProfileWorkloadEnabled": true,
+  "fixedOptionMachineTaxonomyEnabled": true
 }
 ```
 
@@ -25,9 +33,25 @@ The backend exposes `GET /api/rollout-flags`.
 - `setCentricLogging`
   - `true`: set writes are authorized by `sets.user_id` and grouped by training bucket.
 - `libraryScreenEnabled`
-  - `false`: existing management UX remains in place until the dedicated library screen ships.
+  - `false`: library destination is hidden and app redirects to Home.
 - `analysisOnDemandOnly`
-  - `false`: unchanged in Phase 1; redesigned analysis workflow is Phase 4.
+  - `true`: analysis runs on explicit user action only.
+- `plansEnabled`
+  - `false`: plans destination is hidden and app redirects to Home.
+- `favoritesOrderingEnabled`
+  - `false`: favorites recency window controls are hidden in Log flow.
+- `homeDashboardEnabled`
+  - `false`: dashboard cards on Home are hidden.
+- `machineRatingEnabled`
+  - `false`: rating input/display/sort signals are disabled.
+- `pinnedFavoritesEnabled`
+  - `false`: favorite toggle/icon/sort signals are disabled.
+- `machineAutofillEnabled`
+  - `false`: machine photo autofill panel is disabled; manual entry remains.
+- `weightedMuscleProfileWorkloadEnabled`
+  - `false`: workload uses even split by tagged muscle groups instead of weighted profile percentages.
+- `fixedOptionMachineTaxonomyEnabled`
+  - `false`: manual movement + comma-separated muscle group entry path is used instead of fixed option chips.
 
 ---
 

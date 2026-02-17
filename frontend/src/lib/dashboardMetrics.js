@@ -177,10 +177,11 @@ export function computeWindowedSets(sets = [], { scope = 'week', dayStartHour = 
   }
 }
 
-const resolveMuscleContributionProfile = (machine) => {
+const resolveMuscleContributionProfile = (machine, { weightedMuscleProfileWorkloadEnabled = true } = {}) => {
   const profileEntries = Array.isArray(machine?.muscle_profile) ? machine.muscle_profile : []
-  const weightedEntries = profileEntries
-    .map((entry) => {
+  const weightedEntries = weightedMuscleProfileWorkloadEnabled
+    ? profileEntries
+      .map((entry) => {
       const group = typeof entry?.group === 'string' ? entry.group.trim() : ''
       if (!group) return null
 
@@ -191,8 +192,9 @@ const resolveMuscleContributionProfile = (machine) => {
       }
 
       return { group, weight: 1 }
-    })
-    .filter((entry) => entry && entry.weight > 0)
+      })
+      .filter((entry) => entry && entry.weight > 0)
+    : []
 
   if (weightedEntries.length) {
     return { entries: weightedEntries, confidence: 'high' }
@@ -208,7 +210,7 @@ const resolveMuscleContributionProfile = (machine) => {
   }
 }
 
-export function computeWorkloadByMuscleGroup(sets = [], machines = [], { scope = 'all' } = {}) {
+export function computeWorkloadByMuscleGroup(sets = [], machines = [], { scope = 'all', weightedMuscleProfileWorkloadEnabled = true } = {}) {
   const machineById = new Map(machines.map((machine) => [machine.id, machine]))
   const totals = new Map()
   const groupSessionVolumes = new Map()
@@ -222,7 +224,7 @@ export function computeWorkloadByMuscleGroup(sets = [], machines = [], { scope =
     if (!Number.isFinite(reps) || !Number.isFinite(weight) || reps <= 0 || weight < 0) return
 
     const machine = machineById.get(set.machine_id)
-    const profile = resolveMuscleContributionProfile(machine)
+    const profile = resolveMuscleContributionProfile(machine, { weightedMuscleProfileWorkloadEnabled })
     if (!profile.entries.length) return
 
     const setVolume = reps * weight

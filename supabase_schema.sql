@@ -214,17 +214,6 @@ create trigger trg_sync_machine_muscle_fields
   for each row
   execute procedure public.sync_machine_muscle_fields();
 
--- Backfill helper for transitional rollouts that already have muscle_groups.
-update public.machines
-set muscle_profile = public.muscle_groups_array_to_profile(muscle_groups)
-where (
-    case
-      when jsonb_typeof(muscle_profile) = 'array' then jsonb_array_length(muscle_profile)
-      else 0
-    end
-  ) = 0
-  and coalesce(array_length(muscle_groups, 1), 0) > 0;
-
 alter table public.machines enable row level security;
 create policy "Users manage own machines" on public.machines
   for all
