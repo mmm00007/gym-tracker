@@ -1837,7 +1837,9 @@ function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
     movement: initialMovementPattern ? MOVEMENT_CATALOG[initialMovementPattern].label : (machine?.movement || ''),
     primary_muscles: initialMuscleProfile.primary,
     secondary_muscles: initialMuscleProfile.secondary,
-    movement_variation: Array.isArray(machine?.movement_variation) ? machine.movement_variation : [],
+    movement_variation: Array.isArray(machine?.movement_variation)
+      ? machine.movement_variation
+      : (Array.isArray(machine?.variations) ? machine.variations : []),
     variations: Array.isArray(machine?.variations) ? machine.variations : [],
     rating: Number.isInteger(Number(machine?.rating)) ? Number(machine.rating) : null,
     is_favorite: Boolean(machine?.is_favorite ?? machine?.isFavorite),
@@ -1932,7 +1934,8 @@ function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
     const movementLabel = movementPattern && MOVEMENT_CATALOG[movementPattern]
       ? MOVEMENT_CATALOG[movementPattern].label
       : (form.movement || '').trim()
-    const movementVariation = Array.from(new Set((form.movement_variation || []).map((item) => String(item || '').trim()).filter(Boolean)))
+    const movementVariationSource = (form.movement_variation?.length ? form.movement_variation : form.variations) || []
+    const movementVariation = Array.from(new Set(movementVariationSource.map((item) => String(item || '').trim()).filter(Boolean)))
     const muscleProfile = [
       ...primaryMuscles.map((group) => ({ group, role: 'primary', percent: 100 })),
       ...secondaryMuscles,
