@@ -1956,11 +1956,105 @@ function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
   )
 }
 
+function InlineFeedbackPopup({ feedback, onDismiss }) {
+  if (!feedback?.open) return null
+
+  const isError = feedback.tone === 'error'
+
+  return (
+    <div
+      role={isError ? 'alert' : 'status'}
+      aria-live={isError ? 'assertive' : 'polite'}
+      style={{
+        position: 'fixed',
+        left: '50%',
+        bottom: 22,
+        transform: 'translateX(-50%)',
+        padding: '10px 14px',
+        borderRadius: 10,
+        border: `1px solid ${isError ? 'var(--red)88' : 'var(--accent)66'}`,
+        background: isError ? 'rgba(40, 10, 10, 0.95)' : 'rgba(15, 30, 20, 0.95)',
+        color: isError ? 'var(--red)' : 'var(--accent)',
+        fontSize: 12,
+        fontWeight: 700,
+        fontFamily: 'var(--font-mono)',
+        letterSpacing: 0.3,
+        boxShadow: '0 6px 24px rgba(0,0,0,0.4)',
+        zIndex: 40,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+      }}
+    >
+      <span>{feedback.message}</span>
+      <button
+        onClick={onDismiss}
+        aria-label="Dismiss message"
+        style={{
+          background: 'transparent',
+          border: 'none',
+          color: 'inherit',
+          cursor: 'pointer',
+          fontSize: 14,
+          lineHeight: 1,
+          padding: 0,
+        }}
+      >
+        ×
+      </button>
+    </div>
+  )
+}
+
 function LibraryScreen({ machines, onSaveMachine, onDeleteMachine, onBack }) {
   const [editingMachine, setEditingMachine] = useState(null)
   const [search, setSearch] = useState('')
   const [equipmentFilter, setEquipmentFilter] = useState('All')
   const [muscleFilter, setMuscleFilter] = useState('All')
+  const [libraryFeedback, setLibraryFeedback] = useState({ open: false, tone: 'success', message: '' })
+  const libraryFeedbackTimeoutRef = useRef(null)
+
+  const showLibraryFeedback = useCallback((message, tone = 'success') => {
+    if (libraryFeedbackTimeoutRef.current) clearTimeout(libraryFeedbackTimeoutRef.current)
+    setLibraryFeedback({ open: true, message, tone })
+    libraryFeedbackTimeoutRef.current = setTimeout(() => {
+      setLibraryFeedback((prev) => ({ ...prev, open: false }))
+    }, 2200)
+  }, [])
+
+  useEffect(() => () => {
+    if (libraryFeedbackTimeoutRef.current) clearTimeout(libraryFeedbackTimeoutRef.current)
+  }, [])
+
+  const dismissLibraryFeedback = () => {
+    if (libraryFeedbackTimeoutRef.current) clearTimeout(libraryFeedbackTimeoutRef.current)
+    setLibraryFeedback((prev) => ({ ...prev, open: false }))
+  }
+
+  const handleSaveMachine = async (machine) => {
+    try {
+      await onSaveMachine(machine)
+      setEditingMachine(null)
+      showLibraryFeedback('Machine saved to library', 'success')
+    } catch (err) {
+      console.error(err)
+      showLibraryFeedback('Could not save machine. Try again.', 'error')
+    }
+  }
+
+  const handleDeleteMachine = async (id) => {
+    const confirmed = window.confirm('Delete this machine from your library?')
+    if (!confirmed) return
+
+    try {
+      await onDeleteMachine(id)
+      setEditingMachine(null)
+      showLibraryFeedback('Machine deleted', 'success')
+    } catch (err) {
+      console.error(err)
+      showLibraryFeedback('Could not delete machine. Try again.', 'error')
+    }
+  }
 
   const muscleGroups = useMemo(
     () => Array.from(new Set(machines.flatMap((m) => m.muscle_groups || []))).sort(),
@@ -1983,9 +2077,9 @@ function LibraryScreen({ machines, onSaveMachine, onDeleteMachine, onBack }) {
     return (
       <EditMachineScreen
         machine={editingMachine}
-        onSave={async (machine) => { await onSaveMachine(machine); setEditingMachine(null) }}
+        onSave={handleSaveMachine}
         onCancel={() => setEditingMachine(null)}
-        onDelete={async (id) => { await onDeleteMachine(id); setEditingMachine(null) }}
+        onDelete={handleDeleteMachine}
       />
     )
   }
@@ -2060,6 +2154,8 @@ function LibraryScreen({ machines, onSaveMachine, onDeleteMachine, onBack }) {
           ))}
         </div>
       )}
+
+      <InlineFeedbackPopup feedback={libraryFeedback} onDismiss={dismissLibraryFeedback} />
     </div>
   )
 }
