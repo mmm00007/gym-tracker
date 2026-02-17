@@ -2073,90 +2073,91 @@ function LibraryScreen({ machines, onSaveMachine, onDeleteMachine, onBack }) {
     })
   }, [machines, search, equipmentFilter, muscleFilter])
 
-  if (editingMachine) {
-    return (
-      <EditMachineScreen
-        machine={editingMachine}
-        onSave={handleSaveMachine}
-        onCancel={() => setEditingMachine(null)}
-        onDelete={handleDeleteMachine}
-      />
-    )
-  }
-
   return (
-    <div className="screen-frame">
-      <TopBar left={<BackBtn onClick={onBack} />} title="LIBRARY" right={<button onClick={() => setEditingMachine({})} style={{ fontSize: 13, color: 'var(--accent)' }}>+ Add</button>} />
-
-      <div style={{ marginBottom: 12 }}>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search exercises, movements, notes"
-          style={{ width: '100%', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 12, color: 'var(--text)', fontSize: 14, boxSizing: 'border-box' }}
+    <>
+      {editingMachine ? (
+        <EditMachineScreen
+          machine={editingMachine}
+          onSave={handleSaveMachine}
+          onCancel={() => setEditingMachine(null)}
+          onDelete={handleDeleteMachine}
         />
-      </div>
-
-      <div style={{ marginBottom: 12 }}>
-        <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, marginBottom: 8, fontFamily: 'var(--font-code)' }}>EQUIPMENT TYPE</div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {['All', ...EQUIPMENT_TYPE_OPTIONS].map((type) => {
-            const active = equipmentFilter === type
-            return (
-              <button key={type} onClick={() => setEquipmentFilter(type)} style={{
-                textTransform: type === 'All' ? 'none' : 'capitalize',
-                padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
-                background: active ? 'var(--accent)22' : 'var(--surface2)', color: active ? 'var(--accent)' : 'var(--text-muted)',
-                fontSize: 12, fontWeight: 700,
-              }}>{type}</button>
-            )
-          })}
-        </div>
-      </div>
-
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, marginBottom: 8, fontFamily: 'var(--font-code)' }}>MUSCLE GROUP</div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {['All', ...muscleGroups].map((group) => {
-            const active = muscleFilter === group
-            return (
-              <button key={group} onClick={() => setMuscleFilter(group)} style={{
-                padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--blue)' : 'var(--border)'}`,
-                background: active ? 'var(--blue)22' : 'var(--surface2)', color: active ? 'var(--blue)' : 'var(--text-muted)',
-                fontSize: 12, fontWeight: 700,
-              }}>{group}</button>
-            )
-          })}
-        </div>
-      </div>
-
-      {machines.length === 0 ? (
-        <div className="machine-grid__state machine-grid__state--empty">
-          <div style={{ fontSize: 40, marginBottom: 12 }}>🏋️</div>
-          <div>No exercises in your library yet.</div>
-        </div>
       ) : (
-        <div className="machine-grid">
-          {filteredMachines.length === 0 && (
-            <div className="machine-grid__state machine-grid__state--filtered" style={{ gridColumn: '1 / -1' }}>
-              No entries match your current filters.
+        <div className="screen-frame">
+          <TopBar left={<BackBtn onClick={onBack} />} title="LIBRARY" right={<button onClick={() => setEditingMachine({})} style={{ fontSize: 13, color: 'var(--accent)' }}>+ Add</button>} />
+
+          <div style={{ marginBottom: 12 }}>
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search exercises, movements, notes"
+              style={{ width: '100%', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 12, color: 'var(--text)', fontSize: 14, boxSizing: 'border-box' }}
+            />
+          </div>
+
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, marginBottom: 8, fontFamily: 'var(--font-code)' }}>EQUIPMENT TYPE</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {['All', ...EQUIPMENT_TYPE_OPTIONS].map((type) => {
+                const active = equipmentFilter === type
+                return (
+                  <button key={type} onClick={() => setEquipmentFilter(type)} style={{
+                    textTransform: type === 'All' ? 'none' : 'capitalize',
+                    padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                    background: active ? 'var(--accent)22' : 'var(--surface2)', color: active ? 'var(--accent)' : 'var(--text-muted)',
+                    fontSize: 12, fontWeight: 700,
+                  }}>{type}</button>
+                )
+              })}
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, marginBottom: 8, fontFamily: 'var(--font-code)' }}>MUSCLE GROUP</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {['All', ...muscleGroups].map((group) => {
+                const active = muscleFilter === group
+                return (
+                  <button key={group} onClick={() => setMuscleFilter(group)} style={{
+                    padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--blue)' : 'var(--border)'}`,
+                    background: active ? 'var(--blue)22' : 'var(--surface2)', color: active ? 'var(--blue)' : 'var(--text-muted)',
+                    fontSize: 12, fontWeight: 700,
+                  }}>{group}</button>
+                )
+              })}
+            </div>
+          </div>
+
+          {machines.length === 0 ? (
+            <div className="machine-grid__state machine-grid__state--empty">
+              <div style={{ fontSize: 40, marginBottom: 12 }}>🏋️</div>
+              <div>No exercises in your library yet.</div>
+            </div>
+          ) : (
+            <div className="machine-grid">
+              {filteredMachines.length === 0 && (
+                <div className="machine-grid__state machine-grid__state--filtered" style={{ gridColumn: '1 / -1' }}>
+                  No entries match your current filters.
+                </div>
+              )}
+              {filteredMachines.map((machine) => (
+                <MachineCard
+                  key={machine.id}
+                  machine={machine}
+                  compact
+                  getMuscleColor={mc}
+                  onSelect={() => setEditingMachine(machine)}
+                  onEdit={() => setEditingMachine(machine)}
+                />
+              ))}
             </div>
           )}
-          {filteredMachines.map((machine) => (
-            <MachineCard
-              key={machine.id}
-              machine={machine}
-              compact
-              getMuscleColor={mc}
-              onSelect={() => setEditingMachine(machine)}
-              onEdit={() => setEditingMachine(machine)}
-            />
-          ))}
+
         </div>
       )}
 
       <InlineFeedbackPopup feedback={libraryFeedback} onDismiss={dismissLibraryFeedback} />
-    </div>
+    </>
   )
 }
 
