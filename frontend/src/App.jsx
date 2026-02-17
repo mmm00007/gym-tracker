@@ -2424,6 +2424,60 @@ function LibraryScreen({ machines, onSaveMachine, onDeleteMachine, onBack }) {
     })
   }, [machines, search, equipmentFilter, muscleFilter])
 
+  const sortedMachines = useMemo(() => {
+    const compareBySecondaryOrder = (a, b) => {
+      const aName = (a.name || '').toLocaleLowerCase()
+      const bName = (b.name || '').toLocaleLowerCase()
+      if (aName !== bName) return aName.localeCompare(bName)
+      const aMovement = (a.movement || '').toLocaleLowerCase()
+      const bMovement = (b.movement || '').toLocaleLowerCase()
+      return aMovement.localeCompare(bMovement)
+    }
+
+    return [...filteredMachines].sort((a, b) => {
+      const aFavorite = Boolean(a?.is_favorite ?? a?.isFavorite)
+      const bFavorite = Boolean(b?.is_favorite ?? b?.isFavorite)
+      if (aFavorite !== bFavorite) return aFavorite ? -1 : 1
+
+      const aRating = Number.isInteger(Number(a?.rating)) ? Number(a.rating) : 0
+      const bRating = Number.isInteger(Number(b?.rating)) ? Number(b.rating) : 0
+      if (aRating !== bRating) return bRating - aRating
+
+      return compareBySecondaryOrder(a, b)
+    })
+  }, [filteredMachines])
+
+  const toggleFavorite = useCallback(async (machine) => {
+    try {
+      await onSaveMachine({
+        ...machine,
+        is_favorite: !Boolean(machine?.is_favorite ?? machine?.isFavorite),
+      })
+      showLibraryFeedback(
+        Boolean(machine?.is_favorite ?? machine?.isFavorite)
+          ? 'Removed from favorites'
+          : 'Added to favorites',
+        'success',
+      )
+    } catch (error) {
+      console.error(error)
+      showLibraryFeedback('Could not update favorite. Try again.', 'error')
+    }
+  }, [onSaveMachine, showLibraryFeedback])
+
+  const bumpRating = useCallback(async (machine) => {
+    const currentRating = Number.isInteger(Number(machine?.rating)) ? Number(machine.rating) : 0
+    const nextRating = currentRating >= 5 ? null : currentRating + 1
+
+    try {
+      await onSaveMachine({ ...machine, rating: nextRating })
+      showLibraryFeedback(nextRating ? `Rated ${nextRating}/5` : 'Rating cleared', 'success')
+    } catch (error) {
+      console.error(error)
+      showLibraryFeedback('Could not update rating. Try again.', 'error')
+    }
+  }, [onSaveMachine, showLibraryFeedback])
+
   return (
     <>
       {editingMachine ? (
@@ -2491,7 +2545,7 @@ function LibraryScreen({ machines, onSaveMachine, onDeleteMachine, onBack }) {
                   No entries match your current filters.
                 </div>
               )}
-              {filteredMachines.map((machine) => (
+              {sortedMachines.map((machine) => (
                 <MachineCard
                   key={machine.id}
                   machine={machine}
@@ -2499,6 +2553,8 @@ function LibraryScreen({ machines, onSaveMachine, onDeleteMachine, onBack }) {
                   getMuscleColor={mc}
                   onSelect={() => setEditingMachine(machine)}
                   onEdit={() => setEditingMachine(machine)}
+                  onToggleFavorite={() => toggleFavorite(machine)}
+                  onQuickRate={() => bumpRating(machine)}
                 />
               ))}
             </div>
@@ -2840,17 +2896,20 @@ function LogSetScreen({
     const filteredMachines = muscleFilter === 'All'
       ? machines
       : machines.filter(m => m.muscle_groups?.includes(muscleFilter))
-    const rankedMachines = (!favoritesOrderingEnabled || favoriteLoadFailed)
-      ? filteredMachines
-      : [...filteredMachines].sort((a, b) => {
-        const aCount = favoriteCountsByMachine[a.id] || 0
-        const bCount = favoriteCountsByMachine[b.id] || 0
-        const aPinned = aCount > 0
-        const bPinned = bCount > 0
-        if (aPinned !== bPinned) return aPinned ? -1 : 1
-        if (aPinned && bPinned && aCount !== bCount) return bCount - aCount
-        return compareBySecondaryOrder(a, b)
-      })
+    const shouldApplyFavoritesOrdering = favoritesOrderingEnabled && !favoriteLoadFailed
+    const rankedMachines = [...filteredMachines].sort((a, b) => {
+      if (!shouldApplyFavoritesOrdering) return compareBySecondaryOrder(a, b)
+
+      const aFavorite = Boolean(a?.is_favorite ?? a?.isFavorite)
+      const bFavorite = Boolean(b?.is_favorite ?? b?.isFavorite)
+      if (aFavorite !== bFavorite) return aFavorite ? -1 : 1
+
+      const aRating = Number.isInteger(Number(a?.rating)) ? Number(a.rating) : 0
+      const bRating = Number.isInteger(Number(b?.rating)) ? Number(b.rating) : 0
+      if (aRating !== bRating) return bRating - aRating
+
+      return compareBySecondaryOrder(a, b)
+    })
 
     const usageBadgeForMachine = (machineId) => {
       const count = favoriteCountsByMachine[machineId] || 0

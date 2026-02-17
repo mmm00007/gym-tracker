@@ -17,8 +17,19 @@ function MusclePill({ text, color }) {
   )
 }
 
-export default function MachineCard({ machine, onSelect, onEdit, compact, usageBadge, getMuscleColor }) {
+export default function MachineCard({
+  machine,
+  onSelect,
+  onEdit,
+  compact,
+  usageBadge,
+  getMuscleColor,
+  onToggleFavorite,
+  onQuickRate,
+}) {
   const primaryColor = getMuscleColor(machine.muscle_groups?.[0])
+  const rating = Number.isInteger(Number(machine?.rating)) ? Number(machine.rating) : null
+  const isFavorite = Boolean(machine?.is_favorite ?? machine?.isFavorite)
   const thumbnails = Array.isArray(machine.thumbnails)
     ? machine.thumbnails
       .map((thumb) => {
@@ -56,6 +67,34 @@ export default function MachineCard({ machine, onSelect, onEdit, compact, usageB
       <div className="machine-card__content-row">
         <div className="machine-card__content-main">
           <div className="machine-card__title">{machine.name}</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+            <span
+              style={{
+                fontSize: 12,
+                borderRadius: 999,
+                border: `1px solid ${isFavorite ? 'var(--accent)' : 'var(--border)'}`,
+                padding: '2px 8px',
+                color: isFavorite ? 'var(--accent)' : 'var(--text-muted)',
+                background: isFavorite ? 'var(--accent)1a' : 'transparent',
+              }}
+            >
+              {isFavorite ? '♥ Favorite' : '♡ Favorite'}
+            </span>
+            {rating !== null && (
+              <span
+                style={{
+                  fontSize: 12,
+                  borderRadius: 999,
+                  border: '1px solid var(--blue)',
+                  padding: '2px 8px',
+                  color: 'var(--blue)',
+                  background: 'var(--blue)1a',
+                }}
+              >
+                {'★'.repeat(Math.max(1, Math.min(rating, 5)))}
+              </span>
+            )}
+          </div>
           {usageBadge && (
             <div className="machine-card__usage-badge">
               <span style={{ fontFamily: 'var(--font-code)' }}>{usageBadge}</span>
@@ -67,18 +106,46 @@ export default function MachineCard({ machine, onSelect, onEdit, compact, usageB
             ))}
           </div>
         </div>
-        {onEdit && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              onEdit()
-            }}
-            className="machine-card__edit-btn"
-          >
-            ✎
-          </button>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {onToggleFavorite && (
+            <button
+              type="button"
+              aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+              onClick={(e) => {
+                e.stopPropagation()
+                onToggleFavorite()
+              }}
+              className="machine-card__edit-btn"
+            >
+              {isFavorite ? '♥' : '♡'}
+            </button>
+          )}
+          {onQuickRate && (
+            <button
+              type="button"
+              aria-label="Rate machine"
+              onClick={(e) => {
+                e.stopPropagation()
+                onQuickRate()
+              }}
+              className="machine-card__edit-btn"
+            >
+              ★
+            </button>
+          )}
+          {onEdit && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onEdit()
+              }}
+              className="machine-card__edit-btn"
+            >
+              ✎
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )
