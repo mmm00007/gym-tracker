@@ -547,7 +547,7 @@ function MiniLineChart({ points, color, height = 70 }) {
   const polylinePoints = coords.join(' ')
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height }} role="img" aria-label="Volume trend line chart">
+    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" style={{ width: '100%', height, display: 'block' }} role="img" aria-label="Volume trend line chart">
       <line x1="0" y1={height - 1} x2={width} y2={height - 1} stroke="var(--border)" strokeWidth="1" />
       <polyline fill="none" stroke={color} strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" points={polylinePoints} />
       {coords.map((point, index) => {
@@ -2910,6 +2910,19 @@ function AnalysisScreen({
   trainingBuckets,
   sorenessHistory,
 }) {
+  const navigationMode = useNavigationLayoutMode()
+  const isPhoneLayout = navigationMode === 'phone'
+  const isDesktopLayout = navigationMode === 'desktop'
+  const filterGridColumns = isPhoneLayout ? '1fr' : '1fr 1fr'
+  const sectionPadding = isPhoneLayout ? 12 : 14
+  const headingFontSize = isPhoneLayout ? 17 : 18
+  const bodyFontSize = isPhoneLayout ? 12 : 13
+  const chipButtonStyle = {
+    minHeight: 36,
+    minWidth: 88,
+    lineHeight: 1.2,
+  }
+
   const [selectedMachineId, setSelectedMachineId] = useState(machines[0]?.id || '')
   const [setTypeMode, setSetTypeMode] = useState('working')
   const [customSetTypes, setCustomSetTypes] = useState(['working'])
@@ -3144,18 +3157,18 @@ function AnalysisScreen({
     return (
       <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
         <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 6, letterSpacing: 1, fontFamily: 'var(--font-code)' }}>REPORT DETAIL</div>
-        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>{selectedReport?.title || 'Analysis report'}</div>
-        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>{selectedReportPayload.summary || selectedReport.summary || 'No summary available.'}</div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', marginBottom: 6, overflowWrap: 'anywhere' }}>{selectedReport?.title || 'Analysis report'}</div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8, overflowWrap: 'anywhere' }}>{selectedReportPayload.summary || selectedReport.summary || 'No summary available.'}</div>
         {selectedReportPayload.highlights?.length > 0 && selectedReportPayload.highlights.map((item, idx) => (
-          <div key={`saved-highlight-${idx}`} style={{ fontSize: 12, color: 'var(--text)', marginBottom: 4 }}>• {item}</div>
+          <div key={`saved-highlight-${idx}`} style={{ fontSize: 12, color: 'var(--text)', marginBottom: 4, overflowWrap: 'anywhere' }}>• {item}</div>
         ))}
 
         <div style={{ marginTop: 10 }}>
           <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 6, letterSpacing: 1, fontFamily: 'var(--font-code)' }}>WHY (EVIDENCE)</div>
           {selectedEvidence?.length ? selectedEvidence.map((item, idx) => (
-            <details key={`saved-evidence-${idx}`} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: '8px 10px', marginBottom: 8, background: 'var(--surface2)' }}>
-              <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--text)', fontWeight: 700 }}>{item.claim || 'Evidence claim'}</summary>
-              <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>
+            <details key={`saved-evidence-${idx}`} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: '8px 10px', marginBottom: 8, background: 'var(--surface2)', overflow: 'hidden' }}>
+              <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--text)', fontWeight: 700, overflowWrap: 'anywhere' }}>{item.claim || 'Evidence claim'}</summary>
+              <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)', overflowWrap: 'anywhere' }}>
                 <div>Metric: {item.metric || 'n/a'}</div>
                 <div>Period: {item.period || 'n/a'}</div>
                 <div>Delta: {item.delta ?? 'n/a'}</div>
@@ -3184,7 +3197,7 @@ function AnalysisScreen({
     <div className="screen-frame">
       <TopBar left={<BackBtn onClick={onBack} />} title="ANALYZE" />
 
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16, alignItems: 'stretch' }}>
         {[
           { key: 'run', label: 'Run Analysis' },
           { key: 'reports', label: 'Reports' },
@@ -3201,6 +3214,7 @@ function AnalysisScreen({
               color: isActive ? 'var(--accent)' : 'var(--text-muted)',
               fontSize: 12,
               fontWeight: 700,
+              ...chipButtonStyle,
             }}>{tab.label}</button>
           )
         })}
@@ -3209,11 +3223,11 @@ function AnalysisScreen({
       {activeTab === 'run' && (
       <>
       <div style={{ marginBottom: 12 }}>
-        <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', marginBottom: 2 }}>Run Analysis</div>
-        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Set scope, goals, and set-type policy, then generate a focused AI recommendation report.</div>
+        <div style={{ fontSize: headingFontSize, fontWeight: 800, color: 'var(--text)', marginBottom: 2 }}>Run Analysis</div>
+        <div style={{ fontSize: bodyFontSize, color: 'var(--text-muted)', lineHeight: 1.45 }}>Set scope, goals, and set-type policy, then generate a focused AI recommendation report.</div>
       </div>
 
-      <div style={{ background: 'var(--surface)', borderRadius: 14, border: '1px solid var(--border)', padding: 14, marginBottom: 16 }}>
+      <div style={{ background: 'var(--surface)', borderRadius: 14, border: '1px solid var(--border)', padding: sectionPadding, marginBottom: 16 }}>
         <div style={{ fontSize: 12, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)', marginBottom: 10 }}>ANALYZE MENU</div>
 
         <div style={{ marginBottom: 10 }}>
@@ -3230,13 +3244,14 @@ function AnalysisScreen({
                   padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
                   background: active ? 'var(--accent)22' : 'var(--surface2)', color: active ? 'var(--accent)' : 'var(--text-muted)',
                   fontSize: 12, fontWeight: 700,
+                  ...chipButtonStyle,
                 }}>{option.label}</button>
               )
             })}
           </div>
 
           {scopeMode === 'custom' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: filterGridColumns, gap: 8 }}>
               <input type="date" value={customScopeStart} onChange={(e) => setCustomScopeStart(e.target.value)} style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)' }} />
               <input type="date" value={customScopeEnd} onChange={(e) => setCustomScopeEnd(e.target.value)} style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)' }} />
             </div>
@@ -3255,6 +3270,7 @@ function AnalysisScreen({
                   padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--blue)' : 'var(--border)'}`,
                   background: active ? 'var(--blue)22' : 'var(--surface2)', color: active ? 'var(--blue)' : 'var(--text-muted)',
                   fontSize: 12, fontWeight: 700,
+                  ...chipButtonStyle,
                 }}>{goal}</button>
               )
             })}
@@ -3264,7 +3280,7 @@ function AnalysisScreen({
             onChange={(e) => setGoalsNotes(e.target.value)}
             placeholder="Optional note for the AI (constraints, soreness context, focus areas)."
             rows={3}
-            style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid var(--border)', resize: 'vertical', background: 'var(--surface2)', color: 'var(--text)', fontSize: 13 }}
+            style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid var(--border)', resize: 'vertical', background: 'var(--surface2)', color: 'var(--text)', fontSize: 13, lineHeight: 1.4 }}
           />
         </div>
 
@@ -3282,6 +3298,7 @@ function AnalysisScreen({
                   padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
                   background: active ? 'var(--accent)22' : 'var(--surface2)', color: active ? 'var(--accent)' : 'var(--text-muted)',
                   fontSize: 12, fontWeight: 700,
+                  ...chipButtonStyle,
                 }}>{mode.label}</button>
               )
             })}
@@ -3296,6 +3313,7 @@ function AnalysisScreen({
                     padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--blue)' : 'var(--border)'}`,
                     background: active ? 'var(--blue)22' : 'var(--surface2)', color: active ? 'var(--blue)' : 'var(--text-muted)',
                     fontSize: 12, fontWeight: 700,
+                    ...chipButtonStyle,
                   }}>{type}</button>
                 )
               })}
@@ -3304,7 +3322,7 @@ function AnalysisScreen({
         </div>
 
         <button onClick={handleRunRecommendations} disabled={recommendationState.loading} style={{
-          width: '100%', padding: 12, borderRadius: 10, border: '1px solid var(--border)',
+          width: '100%', minHeight: 42, padding: 12, borderRadius: 10, border: '1px solid var(--border)',
           background: recommendationState.loading ? 'var(--surface2)' : 'linear-gradient(135deg, var(--accent), var(--accent-dark))',
           color: recommendationState.loading ? 'var(--text-muted)' : '#000', fontWeight: 800, fontFamily: 'var(--font-mono)',
         }}>
@@ -3321,15 +3339,15 @@ function AnalysisScreen({
       </div>
 
       {recs && (
-        <div style={{ background: '#10131c', border: '1px solid #2a2f3a', borderRadius: 14, padding: 14, marginBottom: 16 }}>
+        <div style={{ background: '#10131c', border: '1px solid #2a2f3a', borderRadius: 14, padding: sectionPadding, marginBottom: 16 }}>
           <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 8, letterSpacing: 1, fontFamily: 'var(--font-code)' }}>LATEST RESPONSE</div>
           {recs.report_persisted === false && (
             <div style={{ fontSize: 12, color: '#f7b267', marginBottom: 8 }}>
               Generated successfully but couldn&apos;t save to Reports.
             </div>
           )}
-          {recs.summary && <div style={{ fontSize: 14, color: 'var(--text)', lineHeight: 1.5, marginBottom: 10 }}>{recs.summary}</div>}
-          {recs.highlights?.length > 0 && recs.highlights.map((item, idx) => <div key={`h-${idx}`} style={{ fontSize: 13, color: '#cde8ff', marginBottom: 4 }}>• {item}</div>)}
+          {recs.summary && <div style={{ fontSize: 14, color: 'var(--text)', lineHeight: 1.5, marginBottom: 10, overflowWrap: 'anywhere' }}>{recs.summary}</div>}
+          {recs.highlights?.length > 0 && recs.highlights.map((item, idx) => <div key={`h-${idx}`} style={{ fontSize: 13, color: '#cde8ff', marginBottom: 4, overflowWrap: 'anywhere' }}>• {item}</div>)}
         </div>
       )}
       </>
@@ -3338,14 +3356,14 @@ function AnalysisScreen({
       {activeTab === 'reports' && (
       <>
       <div style={{ marginBottom: 12 }}>
-        <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', marginBottom: 2 }}>Reports</div>
-        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Filter saved analyses, inspect detail, and quickly recover prior recommendations or evidence.</div>
+        <div style={{ fontSize: headingFontSize, fontWeight: 800, color: 'var(--text)', marginBottom: 2 }}>Reports</div>
+        <div style={{ fontSize: bodyFontSize, color: 'var(--text-muted)', lineHeight: 1.45 }}>Filter saved analyses, inspect detail, and quickly recover prior recommendations or evidence.</div>
       </div>
 
-      <div style={{ background: 'var(--surface)', borderRadius: 14, border: '1px solid var(--border)', padding: 14, marginBottom: 16 }}>
+      <div style={{ background: 'var(--surface)', borderRadius: 14, border: '1px solid var(--border)', padding: sectionPadding, marginBottom: 16 }}>
         <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)', marginBottom: 10 }}>REPORTS</div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: filterGridColumns, gap: 8, marginBottom: 8 }}>
           <select value={reportTypeFilter} onChange={(e) => setReportTypeFilter(e.target.value)} style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', fontSize: 13 }}>
             <option value="all">All report types</option>
             <option value="recommendation">Recommendations</option>
@@ -3366,7 +3384,7 @@ function AnalysisScreen({
           </select>
         </div>
         {reportDateFilter === 'custom' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: filterGridColumns, gap: 8, marginBottom: 8 }}>
             <input type="date" value={reportCustomStart} onChange={(e) => setReportCustomStart(e.target.value)} style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)' }} />
             <input type="date" value={reportCustomEnd} onChange={(e) => setReportCustomEnd(e.target.value)} style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)' }} />
           </div>
@@ -3388,9 +3406,9 @@ function AnalysisScreen({
                 textAlign: 'left', padding: 10, borderRadius: 10, border: '1px solid var(--border)',
                 background: selectedReport?.id === report.id ? 'var(--surface2)' : 'transparent', color: 'var(--text)',
               }}>
-                <div style={{ fontSize: 12, fontWeight: 700 }}>{report.title || 'Analysis report'}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, overflowWrap: 'anywhere' }}>{report.title || 'Analysis report'}</div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{report.report_type} · {new Date(report.created_at).toLocaleString()}</div>
-                {report.summary && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>{report.summary}</div>}
+                {report.summary && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3, overflowWrap: 'anywhere' }}>{report.summary}</div>}
               </button>
             ))}
           </div>
@@ -3404,27 +3422,27 @@ function AnalysisScreen({
       {activeTab === 'trends' && (
       <>
       <div style={{ marginBottom: 12 }}>
-        <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', marginBottom: 2 }}>Trends</div>
-        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Compare the latest weekly trend report with prior weeks to spot momentum shifts early.</div>
+        <div style={{ fontSize: headingFontSize, fontWeight: 800, color: 'var(--text)', marginBottom: 2 }}>Trends</div>
+        <div style={{ fontSize: bodyFontSize, color: 'var(--text-muted)', lineHeight: 1.45 }}>Compare the latest weekly trend report with prior weeks to spot momentum shifts early.</div>
       </div>
 
-      <div style={{ background: 'var(--surface)', borderRadius: 14, border: '1px solid var(--border)', padding: 14, marginBottom: 16 }}>
+      <div style={{ background: 'var(--surface)', borderRadius: 14, border: '1px solid var(--border)', padding: sectionPadding, marginBottom: 16 }}>
         <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)', marginBottom: 10 }}>WEEKLY TRENDS</div>
         {!latestTrend ? (
           <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>No weekly trend reports yet.</div>
         ) : (
           <>
             <button onClick={() => loadReportDetail(latestTrend.id)} style={{ width: '100%', textAlign: 'left', border: '1px solid var(--border)', borderRadius: 10, padding: 10, marginBottom: 8, background: 'var(--surface2)', color: 'var(--text)' }}>
-              <div style={{ fontSize: 12, fontWeight: 700 }}>Latest: {latestTrend.title || 'Weekly trends'}</div>
+              <div style={{ fontSize: 12, fontWeight: 700, overflowWrap: 'anywhere' }}>Latest: {latestTrend.title || 'Weekly trends'}</div>
               <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{new Date(latestTrend.created_at).toLocaleString()}</div>
               {formatTrendPeriod(latestTrend) && <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>{formatTrendPeriod(latestTrend)}</div>}
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{latestTrend.summary || 'No summary available.'}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, overflowWrap: 'anywhere' }}>{latestTrend.summary || 'No summary available.'}</div>
             </button>
             {previousTrends.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {previousTrends.map((trendReport) => (
                   <button key={trendReport.id} onClick={() => loadReportDetail(trendReport.id)} style={{ width: '100%', textAlign: 'left', border: '1px solid var(--border)', borderRadius: 10, padding: 10, background: 'transparent', color: 'var(--text)' }}>
-                    <div style={{ fontSize: 12, fontWeight: 700 }}>{trendReport.title || 'Weekly trends'}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, overflowWrap: 'anywhere' }}>{trendReport.title || 'Weekly trends'}</div>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{new Date(trendReport.created_at).toLocaleString()}</div>
                     {formatTrendPeriod(trendReport) && <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>{formatTrendPeriod(trendReport)}</div>}
                   </button>
@@ -3442,8 +3460,8 @@ function AnalysisScreen({
       {activeTab === 'metrics' && (
       <>
       <div style={{ marginBottom: 12 }}>
-        <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', marginBottom: 2 }}>Exercise Metrics</div>
-        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Pick one exercise to review local trend metrics and set-type filtered progression at a glance.</div>
+        <div style={{ fontSize: headingFontSize, fontWeight: 800, color: 'var(--text)', marginBottom: 2 }}>Exercise Metrics</div>
+        <div style={{ fontSize: bodyFontSize, color: 'var(--text-muted)', lineHeight: 1.45 }}>Pick one exercise to review local trend metrics and set-type filtered progression at a glance.</div>
       </div>
 
       <div style={{ marginBottom: 16 }}>
@@ -3490,8 +3508,9 @@ function AnalysisScreen({
               <button key={mode.key} onClick={() => setSetTypeMode(mode.key)} style={{
                 padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
                 background: active ? 'var(--accent)22' : 'var(--surface2)', color: active ? 'var(--accent)' : 'var(--text-muted)',
-                fontSize: 12, fontWeight: 700,
-              }}>{mode.label}</button>
+                  fontSize: 12, fontWeight: 700,
+                  ...chipButtonStyle,
+                }}>{mode.label}</button>
             )
           })}
         </div>
@@ -3510,6 +3529,7 @@ function AnalysisScreen({
                   padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--blue)' : 'var(--border)'}`,
                   background: active ? 'var(--blue)22' : 'var(--surface2)', color: active ? 'var(--blue)' : 'var(--text-muted)',
                   fontSize: 12, fontWeight: 700,
+                  ...chipButtonStyle,
                 }}>{type}</button>
               )
             })}
@@ -3535,8 +3555,8 @@ function AnalysisScreen({
             return (
               <div key={metric.key} style={{ background: 'var(--surface)', borderRadius: 14, padding: 14, border: '1px solid var(--border)', marginBottom: 12 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{metric.label}</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', flex: '1 1 190px', overflowWrap: 'anywhere' }}>{metric.label}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', flex: '1 1 150px', textAlign: isDesktopLayout ? 'right' : 'left', overflowWrap: 'anywhere' }}>
                     Latest: {metric.format(lastValue)}
                     {delta !== null && (
                       <span style={{ marginLeft: 8, color: delta >= 0 ? 'var(--accent)' : 'var(--red)' }}>
