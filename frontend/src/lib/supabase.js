@@ -55,6 +55,45 @@ function throwMappedDbError(error, contextMessage) {
 const normalizeEquipment = (row = null) => {
   if (!row) return null
   const muscleGroups = Array.isArray(row.muscle_groups) ? row.muscle_groups : []
+  const normalizedMuscleProfile = Array.isArray(row.muscle_profile)
+    ? row.muscle_profile
+      .map((entry) => {
+        if (!entry || typeof entry !== 'object') return null
+        const group = typeof entry.group === 'string' ? entry.group.trim() : ''
+        const role = entry.role === 'secondary' ? 'secondary' : 'primary'
+        const rawPercent = Number(entry.percent)
+
+        if (!group) return null
+        if (!Number.isInteger(rawPercent)) {
+          return {
+            group,
+            role,
+            percent: role === 'primary' ? 100 : 50,
+          }
+        }
+
+        if (role === 'primary') {
+          return {
+            group,
+            role,
+            percent: 100,
+          }
+        }
+
+        return {
+          group,
+          role,
+          percent: Math.min(Math.max(rawPercent, 1), 99),
+        }
+      })
+      .filter(Boolean)
+    : []
+  const muscleProfile = normalizedMuscleProfile.length > 0
+    ? normalizedMuscleProfile
+    : muscleGroups.map((group) => ({ group, role: 'primary', percent: 100 }))
+  const rating = Number.isInteger(Number(row.rating)) ? Number(row.rating) : null
+  const variations = Array.isArray(row.variations) ? row.variations : []
+  const movementVariation = Array.isArray(row.movement_variation) ? row.movement_variation : []
   const thumbnails = Array.isArray(row.thumbnails)
     ? row.thumbnails
       .map((thumb) => {
@@ -85,8 +124,18 @@ const normalizeEquipment = (row = null) => {
     movement,
     equipmentType,
     equipment_type: equipmentType,
+    rating,
+    isFavorite: Boolean(row.is_favorite),
+    is_favorite: Boolean(row.is_favorite),
     muscleGroups,
     muscle_groups: muscleGroups,
+    muscleProfile,
+    muscle_profile: muscleProfile,
+    variations,
+    movementPattern: row.movement_pattern || 'other',
+    movement_pattern: row.movement_pattern || 'other',
+    movementVariation,
+    movement_variation: movementVariation,
     notes: row.notes || '',
     imageUrl: row.image_url || '',
     image_url: row.image_url || '',
@@ -112,6 +161,12 @@ const EQUIPMENT_DB_COLUMNS = [
   'thumbnails',
   'instruction_image',
   'exercise_type',
+  'rating',
+  'is_favorite',
+  'muscle_profile',
+  'movement_pattern',
+  'movement_variation',
+  'variations',
   'source',
   'created_at',
   'updated_at',
@@ -142,6 +197,41 @@ function toEquipmentDbPayload(equipment = {}, userId) {
   }
   if (source.imageUrl !== undefined && source.image_url === undefined) {
     source.image_url = source.imageUrl
+  }
+  if (source.isFavorite !== undefined && source.is_favorite === undefined) {
+    source.is_favorite = source.isFavorite
+  }
+  if (source.muscleProfile !== undefined && source.muscle_profile === undefined) {
+    source.muscle_profile = source.muscleProfile
+  }
+  if (source.movementPattern !== undefined && source.movement_pattern === undefined) {
+    source.movement_pattern = source.movementPattern
+  }
+  if (source.movementVariation !== undefined && source.movement_variation === undefined) {
+    source.movement_variation = source.movementVariation
+  }
+  if (source.variationTags !== undefined && source.variations === undefined) {
+    source.variations = source.variationTags
+  }
+  if (source.rating !== undefined) {
+    const parsedRating = Number(source.rating)
+    source.rating = Number.isInteger(parsedRating) && parsedRating >= 1 && parsedRating <= 5
+      ? parsedRating
+      : null
+  }
+  if (source.is_favorite !== undefined) {
+    source.is_favorite = Boolean(source.is_favorite)
+  }
+  if (source.muscle_profile !== undefined) {
+    source.muscle_profile = Array.isArray(source.muscle_profile)
+      ? source.muscle_profile.filter((entry) => entry && typeof entry === 'object' && typeof entry.group === 'string' && entry.group.trim())
+      : []
+  }
+  if (source.movement_variation !== undefined && !Array.isArray(source.movement_variation)) {
+    source.movement_variation = []
+  }
+  if (source.variations !== undefined && !Array.isArray(source.variations)) {
+    source.variations = []
   }
 
   EQUIPMENT_DB_COLUMNS.forEach((key) => {
