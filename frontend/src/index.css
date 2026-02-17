@@ -88,17 +88,21 @@ body {
 .page-grid {
   display: grid;
   grid-template-columns: 1fr;
+  gap: 12px;
+  align-items: start;
 }
 
-@media (min-width: 700px) {
+@media (min-width: 768px) {
   .page-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
   }
 }
 
-@media (min-width: 1080px) {
+@media (min-width: 1440px) {
   .page-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
   }
 }
 
@@ -284,6 +288,28 @@ select:focus-visible {
   display: grid;
   grid-template-columns: 1fr;
   gap: 12px;
+  align-items: start;
+}
+
+.machine-grid__state {
+  text-align: center;
+  color: var(--text-dim);
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  display: grid;
+  place-items: center;
+}
+
+.machine-grid__state--empty {
+  min-height: clamp(220px, 42vh, 360px);
+  padding: 32px 20px;
+}
+
+.machine-grid__state--filtered {
+  min-height: clamp(120px, 24vh, 180px);
+  padding: 24px 16px;
+  font-size: 13px;
 }
 
 .machine-card {
@@ -295,11 +321,11 @@ select:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  min-height: 236px;
+  min-height: 0;
 }
 
 .machine-card--compact {
-  min-height: 214px;
+  min-height: 0;
 }
 
 .machine-card__image-wrap {
@@ -358,7 +384,20 @@ select:focus-visible {
   flex: 1;
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
   gap: 12px;
+  min-width: 0;
+}
+
+.machine-card__content-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.machine-card__pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .machine-card__title {
@@ -367,6 +406,7 @@ select:focus-visible {
   color: var(--text);
   font-family: var(--font-mono);
   margin-bottom: 8px;
+  overflow-wrap: anywhere;
 }
 
 .machine-card__usage-badge {
@@ -390,16 +430,21 @@ select:focus-visible {
   font-size: 14px;
   min-height: 40px;
   height: fit-content;
+  flex-shrink: 0;
 }
 
 @media (min-width: 768px) {
   .machine-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .machine-grid__state--empty {
+    min-height: clamp(260px, 40vh, 380px);
   }
 
   .machine-card {
     padding: 12px;
-    min-height: 208px;
   }
 
   .machine-card__image-wrap {
@@ -422,12 +467,17 @@ select:focus-visible {
 @media (min-width: 1024px) {
   .machine-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
   }
 }
 
-@media (min-width: 1360px) {
+@media (min-width: 1440px) {
   .machine-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .machine-grid__state--empty {
+    min-height: clamp(280px, 36vh, 420px);
   }
 }
 

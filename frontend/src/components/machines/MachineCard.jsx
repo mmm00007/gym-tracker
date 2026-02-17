@@ -42,14 +42,14 @@ export default function MachineCard({ machine, onSelect, onEdit, compact, usageB
       </div>
 
       <div className="machine-card__content-row">
-        <div style={{ flex: 1 }}>
+        <div className="machine-card__content-main">
           <div className="machine-card__title">{machine.name}</div>
           {usageBadge && (
             <div className="machine-card__usage-badge">
               <span style={{ fontFamily: 'var(--font-code)' }}>{usageBadge}</span>
             </div>
           )}
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <div className="machine-card__pill-row">
             {machine.muscle_groups?.map((group, i) => (
               <MusclePill key={`${group}-${i}`} text={group} color={getMuscleColor(group)} />
             ))}
@@ -57,6 +57,7 @@ export default function MachineCard({ machine, onSelect, onEdit, compact, usageB
         </div>
         {onEdit && (
           <button
+            type="button"
             onClick={(e) => {
               e.stopPropagation()
               onEdit()
