@@ -133,7 +133,6 @@ export async function getRecommendations(scope, groupedTraining, equipment, sore
       meta: { requestId, scopeId, status: res.status, ok: res.ok, duration_ms: Date.now() - startTime },
     })
     if (!res.ok) {
-      logIdentifyTelemetry({ phase: 'failed', mode, requestId, success: false, durationMs: Date.now() - startTime, status: res.status })
       const err = (await res.text()).trim()
       const detail = err || `Server error (${res.status})`
       throw new Error(`Recommendations failed: ${detail}`)
