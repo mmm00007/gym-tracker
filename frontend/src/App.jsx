@@ -2741,7 +2741,7 @@ function LibraryScreen({
       return aMovement.localeCompare(bMovement)
     }
 
-    return [...filteredMachines].sort((a, b) => {
+    const rankedMachines = [...filteredMachines].sort((a, b) => {
       if (pinnedFavoritesEnabled) {
         const aFavorite = Boolean(a?.is_favorite ?? a?.isFavorite)
         const bFavorite = Boolean(b?.is_favorite ?? b?.isFavorite)
@@ -2755,6 +2755,14 @@ function LibraryScreen({
       }
 
       return compareBySecondaryOrder(a, b)
+    })
+
+    const seenMachineKeys = new Set()
+    return rankedMachines.filter((machine) => {
+      const key = machine?.id || `${String(machine?.name || '').trim().toLowerCase()}::${String(machine?.movement || '').trim().toLowerCase()}::${String(machine?.equipment_type || machine?.equipmentType || 'machine').trim().toLowerCase()}`
+      if (!key || seenMachineKeys.has(key)) return false
+      seenMachineKeys.add(key)
+      return true
     })
   }, [filteredMachines, machineRatingEnabled, pinnedFavoritesEnabled])
 
@@ -2860,9 +2868,9 @@ function LibraryScreen({
                   No entries match your current filters.
                 </div>
               )}
-              {sortedMachines.map((machine) => (
+              {sortedMachines.map((machine, index) => (
                 <MachineCard
-                  key={machine.id}
+                  key={machine.id || `${machine.name || 'machine'}-${machine.movement || 'movement'}-${index}`}
                   machine={machine}
                   compact
                   getMuscleColor={mc}
