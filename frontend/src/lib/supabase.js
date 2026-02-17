@@ -117,6 +117,12 @@ const normalizeEquipment = (row = null) => {
       })
       .filter(Boolean)
     : []
+  const instructionImage = row.instruction_image || ''
+  const resolvedThumbnails = thumbnails.length > 0 && instructionImage
+    ? thumbnails
+    : instructionImage
+      ? [{ src: instructionImage, focalX: 50, focalY: 35 }]
+      : thumbnails
   const equipmentType = row.equipment_type || 'machine'
   const movement = row.movement || ''
   return {
@@ -142,7 +148,9 @@ const normalizeEquipment = (row = null) => {
     notes: row.notes || '',
     imageUrl: row.image_url || '',
     image_url: row.image_url || '',
-    thumbnails,
+    instructionImage,
+    instruction_image: instructionImage,
+    thumbnails: resolvedThumbnails,
     createdAt: row.created_at || null,
     created_at: row.created_at || null,
     updatedAt: row.updated_at || null,
