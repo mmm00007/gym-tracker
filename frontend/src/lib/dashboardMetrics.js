@@ -122,6 +122,11 @@ const MUSCLE_BASELINE_COEFFICIENT = {
 
 const DEFAULT_BASELINE_COEFFICIENT = 1
 const MIN_STABLE_SESSIONS_PER_GROUP = 3
+const MIN_STABLE_SESSIONS_BY_SCOPE = {
+  all: 3,
+  month: 2,
+  week: 1,
+}
 
 const isFiniteNonNegative = (value) => Number.isFinite(value) && value >= 0
 
@@ -142,10 +147,72 @@ const toTrainingSessionKey = (set) => {
   return loggedDate ? `day:${loggedDate}` : null
 }
 
-export function computeWorkloadByMuscleGroup(sets = [], machines = []) {
+export function computeWindowedSets(sets = [], { scope = 'week', dayStartHour = 4, now = new Date() } = {}) {
+  const effectiveToday = startOfLocalDay(shiftByEffectiveDayBoundary(now, { dayStartHour }))
+  if (!effectiveToday) {
+    return { scope, sets: [], fromDayKey: null, toDayKey: null }
+  }
+
+  const toDayKey = formatLocalDateKey(effectiveToday)
+  const scopeStart = scope === 'month'
+    ? new Date(effectiveToday.getFullYear(), effectiveToday.getMonth(), 1)
+    : startOfLocalWeek(effectiveToday)
+  const fromDayKey = formatLocalDateKey(scopeStart)
+
+  const scopedSets = sets.filter((set) => {
+    const dayKey = getSetLocalDayKey(set, { dayStartHour })
+    if (!dayKey || !fromDayKey || !toDayKey) return false
+    return dayKey >= fromDayKey && dayKey <= toDayKey
+  })
+  const trainingDayCount = new Set(scopedSets
+    .map((set) => getSetLocalDayKey(set, { dayStartHour }))
+    .filter(Boolean)).size
+
+  return {
+    scope: scope === 'month' ? 'month' : 'week',
+    sets: scopedSets,
+    fromDayKey,
+    toDayKey,
+    trainingDayCount,
+  }
+}
+
+const resolveMuscleContributionProfile = (machine) => {
+  const profileEntries = Array.isArray(machine?.muscle_profile) ? machine.muscle_profile : []
+  const weightedEntries = profileEntries
+    .map((entry) => {
+      const group = typeof entry?.group === 'string' ? entry.group.trim() : ''
+      if (!group) return null
+
+      if (entry?.role === 'secondary') {
+        const percent = Number(entry?.percent)
+        const ratio = Number.isFinite(percent) && percent > 0 ? percent / 100 : 0.5
+        return { group, weight: ratio }
+      }
+
+      return { group, weight: 1 }
+    })
+    .filter((entry) => entry && entry.weight > 0)
+
+  if (weightedEntries.length) {
+    return { entries: weightedEntries, confidence: 'high' }
+  }
+
+  const groups = (machine?.muscle_groups || []).filter(Boolean)
+  if (!groups.length) return { entries: [], confidence: 'none' }
+
+  const fallbackWeight = 1 / groups.length
+  return {
+    entries: groups.map((group) => ({ group, weight: fallbackWeight })),
+    confidence: 'low',
+  }
+}
+
+export function computeWorkloadByMuscleGroup(sets = [], machines = [], { scope = 'all' } = {}) {
   const machineById = new Map(machines.map((machine) => [machine.id, machine]))
   const totals = new Map()
   const groupSessionVolumes = new Map()
+  const groupFallbackContributions = new Map()
   let totalWorkload = 0
   let contributingSetCount = 0
 
@@ -155,20 +222,26 @@ export function computeWorkloadByMuscleGroup(sets = [], machines = []) {
     if (!Number.isFinite(reps) || !Number.isFinite(weight) || reps <= 0 || weight < 0) return
 
     const machine = machineById.get(set.machine_id)
-    const groups = (machine?.muscle_groups || []).filter(Boolean)
-    if (!groups.length) return
+    const profile = resolveMuscleContributionProfile(machine)
+    if (!profile.entries.length) return
 
     const setVolume = reps * weight
-    const contributionPerGroup = setVolume / groups.length
+    const weightTotal = profile.entries.reduce((sum, entry) => sum + entry.weight, 0)
+    if (!weightTotal) return
     const sessionKey = toTrainingSessionKey(set)
 
-    groups.forEach((group) => {
-      totals.set(group, (totals.get(group) || 0) + contributionPerGroup)
+    profile.entries.forEach(({ group, weight }) => {
+      const contribution = setVolume * (weight / weightTotal)
+      totals.set(group, (totals.get(group) || 0) + contribution)
 
       if (!sessionKey) return
       const sessions = groupSessionVolumes.get(group) || new Map()
-      sessions.set(sessionKey, (sessions.get(sessionKey) || 0) + contributionPerGroup)
+      sessions.set(sessionKey, (sessions.get(sessionKey) || 0) + contribution)
       groupSessionVolumes.set(group, sessions)
+
+      if (profile.confidence === 'low') {
+        groupFallbackContributions.set(group, (groupFallbackContributions.get(group) || 0) + contribution)
+      }
     })
 
     totalWorkload += setVolume
@@ -180,6 +253,8 @@ export function computeWorkloadByMuscleGroup(sets = [], machines = []) {
     .filter(isFiniteNonNegative)
   const globalGroupSessionMedian = computeMedian(allGroupSessionVolumes)
 
+  const minStableSessions = MIN_STABLE_SESSIONS_BY_SCOPE[scope] || MIN_STABLE_SESSIONS_PER_GROUP
+
   const groups = Array.from(totals.entries())
     .map(([muscleGroup, rawVolume]) => {
       const perSession = Array.from(groupSessionVolumes.get(muscleGroup)?.values() || [])
@@ -188,10 +263,10 @@ export function computeWorkloadByMuscleGroup(sets = [], machines = []) {
       const observedMedian = computeMedian(perSession)
       const priorBaseline = (globalGroupSessionMedian || 1)
         * (MUSCLE_BASELINE_COEFFICIENT[muscleGroup] || DEFAULT_BASELINE_COEFFICIENT)
-      const sparseWeight = Math.min(1, observedSessions / MIN_STABLE_SESSIONS_PER_GROUP)
+      const sparseWeight = Math.min(1, observedSessions / minStableSessions)
       const blendedBaseline = (observedMedian * sparseWeight) + (priorBaseline * (1 - sparseWeight))
       const normalizedRawScore = rawVolume / Math.max(blendedBaseline, 1)
-      const normalizedScore = observedSessions >= MIN_STABLE_SESSIONS_PER_GROUP
+      const normalizedScore = observedSessions >= minStableSessions
         ? normalizedRawScore
         : 1 + ((normalizedRawScore - 1) * sparseWeight)
 
@@ -202,7 +277,8 @@ export function computeWorkloadByMuscleGroup(sets = [], machines = []) {
         normalizedScore,
         baselineVolume: blendedBaseline,
         observedSessions,
-        sparseData: observedSessions < MIN_STABLE_SESSIONS_PER_GROUP,
+        sparseData: observedSessions < minStableSessions,
+        confidence: groupFallbackContributions.get(muscleGroup) > 0 ? 'mixed' : 'high',
       }
     })
     .sort((a, b) => b.normalizedScore - a.normalizedScore)
@@ -213,10 +289,11 @@ export function computeWorkloadByMuscleGroup(sets = [], machines = []) {
     contributingSetCount,
     normalization: {
       method: 'blended_group_session_median',
-      description: 'Normalized score = raw volume ÷ blended baseline, where baseline combines each group\'s median per-session volume with a coefficient-weighted global group-session median. Scores are shrunk toward 1.0 until at least 3 sessions exist for that group.',
-      minStableSessionsPerGroup: MIN_STABLE_SESSIONS_PER_GROUP,
+      description: 'Weighted set volume uses machine muscle profile (primary = 100%, secondary = configured %), then normalizes by a blended group baseline. Scores are shrunk toward 1.0 until each group reaches a scope-specific minimum session count.',
+      minStableSessionsPerGroup: minStableSessions,
       globalGroupSessionMedian,
       muscleBaselineCoefficient: MUSCLE_BASELINE_COEFFICIENT,
+      hasFallbackInference: groupFallbackContributions.size > 0,
     },
   }
 }
@@ -317,10 +394,15 @@ export function computeWorkloadBalanceIndex(workloadByGroup = []) {
   }
 }
 
-export function buildSampleWarning({ contributingSetCount = 0, activeGroups = 0, trainingDays = 0, rollingWeeks = 6 }) {
+export function buildSampleWarning({ contributingSetCount = 0, activeGroups = 0, trainingDays = 0, rollingWeeks = 6, scope = 'all' }) {
   if (contributingSetCount === 0) return 'No set volume data yet.'
   if (activeGroups < 2) return 'Need at least 2 active muscle groups for meaningful balance.'
-  const minDays = Math.min(rollingWeeks, 3)
+  const minDaysByScope = {
+    week: 1,
+    month: 2,
+    all: Math.min(rollingWeeks, 3),
+  }
+  const minDays = minDaysByScope[scope] || minDaysByScope.all
   if (trainingDays < minDays) return `Consistency may be noisy with fewer than ${minDays} training days.`
   return null
 }
