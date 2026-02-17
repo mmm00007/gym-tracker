@@ -88,3 +88,22 @@ export function subscribeLogs(listener) {
   listener(logs.slice())
   return () => listeners.delete(listener)
 }
+
+export function logIdentifyTelemetry({ phase = 'start', mode = 'base', requestId, success, durationMs, status, error } = {}) {
+  const normalizedMode = mode === 'web_search_enriched' ? 'web_search_enriched' : 'base'
+  const event = `identify.telemetry.${phase}`
+  const level = phase === 'failed' || success === false ? 'error' : 'info'
+  return addLog({
+    level,
+    event,
+    message: `Identify ${phase} (${normalizedMode})`,
+    meta: {
+      requestId,
+      mode: normalizedMode,
+      success: typeof success === 'boolean' ? success : undefined,
+      duration_ms: Number.isFinite(durationMs) ? durationMs : undefined,
+      status,
+      error,
+    },
+  })
+}

@@ -259,6 +259,7 @@ async def persist_analysis_report(
 
 class IdentifyRequest(BaseModel):
     images: list[dict]
+    enrich_with_web_search: bool = False
 
 
 @app.post("/api/identify-machine")
@@ -270,19 +271,7 @@ async def identify_machine(req: IdentifyRequest, user_id: str = Depends(get_curr
 
     logger.debug("identify-machine request authorized for user_id=%s", user_id)
 
-    content = []
-    for img in req.images:
-        content.append({
-            "type": "image",
-            "source": {
-                "type": "base64",
-                "media_type": img.get("media_type", "image/jpeg"),
-                "data": img["data"],
-            },
-        })
-    content.append({
-        "type": "text",
-        "text": """You are a gym equipment expert. Analyze these photos of a gym machine or exercise station.
+    base_prompt = """You are a gym equipment expert. Analyze these photos of a gym machine or exercise station.
 Identify the machine and the specific exercise/movement it's set up for.
 Look for details like grip position, seat adjustment, cable angle, etc.
 
@@ -296,7 +285,44 @@ Return ONLY valid JSON (no markdown, no backticks):
   "defaultWeight": 20,
   "defaultReps": 10,
   "notes": "brief form tips"
-}""",
+}"""
+
+    enriched_prompt = """You are a gym equipment expert. Analyze these photos of a gym machine or exercise station.
+Use an enriched lookup approach (as if cross-checking common gym catalogs and web references) to infer likely machine family/model, aliases, and target muscles.
+Identify the machine and the specific exercise/movement it's set up for.
+Look for details like grip position, seat adjustment, cable angle, and foot/seat/chest-pad positioning.
+
+Return ONLY valid JSON (no markdown, no backticks):
+{
+  "name": "short machine name",
+  "exerciseType": "Push | Pull | Legs | Core",
+  "movement": "specific movement name with variation",
+  "muscleGroups": ["Primary", "Secondary"],
+  "muscleProfile": {
+    "primary": ["muscle groups"],
+    "secondary": ["muscle groups"]
+  },
+  "variations": ["other exercises possible on this machine"],
+  "aliases": ["common alternate names for this station"],
+  "likelyModel": "optional likely machine family or model name",
+  "defaultWeight": 20,
+  "defaultReps": 10,
+  "notes": "brief form tips including confidence caveats"
+}"""
+
+    content = []
+    for img in req.images:
+        content.append({
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": img.get("media_type", "image/jpeg"),
+                "data": img["data"],
+            },
+        })
+    content.append({
+        "type": "text",
+        "text": enriched_prompt if req.enrich_with_web_search else base_prompt,
     })
 
     try:
