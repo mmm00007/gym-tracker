@@ -83,6 +83,22 @@ const fmtNumber = (value, digits = 1) => {
 const estimate1RM = (weight, reps) => weight * (1 + reps / 30)
 const SET_TYPE_OPTIONS = ['warmup', 'working', 'top', 'drop', 'backoff', 'failure']
 const EQUIPMENT_TYPE_OPTIONS = ['machine', 'freeweight', 'bodyweight', 'cable', 'band', 'other']
+const MUSCLE_GROUP_OPTIONS = ['Chest', 'Back', 'Shoulders', 'Legs', 'Arms', 'Core', 'Glutes', 'Calves', 'Forearms']
+const MOVEMENT_CATALOG = {
+  horizontal_press: { label: 'Horizontal Press', variations: ['Flat', 'Incline', 'Decline', 'Close-Grip', 'Wide-Grip'] },
+  vertical_press: { label: 'Vertical Press', variations: ['Seated', 'Standing', 'Neutral Grip', 'Arnold'] },
+  horizontal_pull: { label: 'Horizontal Pull', variations: ['Chest-Supported', 'Cable', 'Single-Arm', 'Wide-Grip'] },
+  vertical_pull: { label: 'Vertical Pull', variations: ['Wide-Grip', 'Neutral Grip', 'Supinated', 'Single-Arm'] },
+  squat: { label: 'Squat', variations: ['Back Squat', 'Front Squat', 'Goblet', 'Hack Squat'] },
+  hinge: { label: 'Hinge', variations: ['Romanian', 'Conventional', 'Stiff-Leg', 'Hip Hinge Machine'] },
+  lunge: { label: 'Lunge', variations: ['Walking', 'Reverse', 'Split Squat', 'Bulgarian'] },
+  curl: { label: 'Curl', variations: ['Barbell', 'Dumbbell', 'Hammer', 'Cable'] },
+  triceps_extension: { label: 'Triceps Extension', variations: ['Rope', 'Bar', 'Overhead', 'Single-Arm'] },
+  leg_extension: { label: 'Leg Extension', variations: ['Single-Leg', 'Paused', 'Tempo'] },
+  leg_curl: { label: 'Leg Curl', variations: ['Seated', 'Lying', 'Single-Leg', 'Nordic'] },
+  calf_raise: { label: 'Calf Raise', variations: ['Seated', 'Standing', 'Single-Leg'] },
+  core_flexion: { label: 'Core Flexion', variations: ['Crunch', 'Cable Crunch', 'Hanging Raise', 'Machine Crunch'] },
+}
 const TREND_TIMEFRAME_OPTIONS = [
   { key: '1d', label: '1D', ms: 24 * 60 * 60 * 1000 },
   { key: '1w', label: '1W', ms: 7 * 24 * 60 * 60 * 1000 },
@@ -1768,6 +1784,40 @@ function PlanScreen({ machines, sets, onBack }) {
 // ─── Edit Machine ──────────────────────────────────────────
 
 function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
+  const parseMuscleProfile = useCallback((rawProfile, fallbackGroups) => {
+    const profile = Array.isArray(rawProfile) ? rawProfile : []
+    const primary = profile
+      .filter((entry) => entry?.role !== 'secondary' && typeof entry?.group === 'string')
+      .map((entry) => entry.group)
+      .filter(Boolean)
+    const secondary = profile
+      .filter((entry) => entry?.role === 'secondary' && typeof entry?.group === 'string')
+      .map((entry) => ({
+        group: entry.group,
+        percent: Number.isFinite(Number(entry.percent)) ? Math.min(99, Math.max(1, Number(entry.percent))) : 30,
+      }))
+      .filter((entry) => entry.group)
+
+    if (primary.length || secondary.length) {
+      return { primary, secondary }
+    }
+
+    const fallback = Array.isArray(fallbackGroups) ? fallbackGroups.filter(Boolean) : []
+    return { primary: fallback, secondary: [] }
+  }, [])
+
+  const detectMovementPattern = useCallback((draftMachine) => {
+    const explicitPattern = String(draftMachine?.movement_pattern || '').trim()
+    if (explicitPattern && MOVEMENT_CATALOG[explicitPattern]) return explicitPattern
+
+    const normalizedMovement = String(draftMachine?.movement || '').trim().toLowerCase()
+    const matched = Object.entries(MOVEMENT_CATALOG)
+      .find(([, value]) => value.label.toLowerCase() === normalizedMovement)
+    return matched?.[0] || ''
+  }, [])
+
+  const initialMuscleProfile = parseMuscleProfile(machine?.muscle_profile, machine?.muscle_groups)
+  const initialMovementPattern = detectMovementPattern(machine)
   const normalizeThumbnail = useCallback((thumb) => {
     if (typeof thumb === 'string') {
       return { src: thumb, focalX: 50, focalY: 35 }
@@ -1783,11 +1833,23 @@ function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
   const [form, setForm] = useState({
     equipment_type: 'machine',
     ...machine,
+    movement_pattern: initialMovementPattern,
+    movement: initialMovementPattern ? MOVEMENT_CATALOG[initialMovementPattern].label : (machine?.movement || ''),
+    primary_muscles: initialMuscleProfile.primary,
+    secondary_muscles: initialMuscleProfile.secondary,
+    movement_variation: Array.isArray(machine?.movement_variation)
+      ? machine.movement_variation
+      : (Array.isArray(machine?.variations) ? machine.variations : []),
+    variations: Array.isArray(machine?.variations) ? machine.variations : [],
+    rating: Number.isInteger(Number(machine?.rating)) ? Number(machine.rating) : null,
+    is_favorite: Boolean(machine?.is_favorite ?? machine?.isFavorite),
     thumbnails: Array.isArray(machine?.thumbnails)
       ? machine.thumbnails.map(normalizeThumbnail).filter(Boolean)
       : [],
   })
-  const upd = (k, v) => setForm({ ...form, [k]: v })
+  const [validationError, setValidationError] = useState('')
+  const [customVariation, setCustomVariation] = useState('')
+  const upd = (k, v) => setForm((prev) => ({ ...prev, [k]: v }))
   const thumbRef = useRef(null)
   const instructionRef = useRef(null)
 
@@ -1852,7 +1914,6 @@ function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
 
   const fields = [
     ['name', 'Exercise Name', 'text'],
-    ['movement', 'Movement', 'text'],
     ['exercise_type', 'Classification (Push/Pull/Legs/Core)', 'text'],
     ['source', 'Source', 'text'],
     ['notes', 'Coaching Notes', 'textarea'],
@@ -1861,15 +1922,44 @@ function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
   const isMachineType = form.equipment_type === 'machine'
 
   const buildPayload = () => {
+    const primaryMuscles = Array.from(new Set((form.primary_muscles || []).filter(Boolean)))
+    const secondaryMuscles = (form.secondary_muscles || [])
+      .filter((entry) => entry?.group && !primaryMuscles.includes(entry.group))
+      .map((entry) => ({
+        group: entry.group,
+        role: 'secondary',
+        percent: Math.min(99, Math.max(1, Number(entry.percent) || 0)),
+      }))
+    const movementPattern = form.movement_pattern || ''
+    const movementLabel = movementPattern && MOVEMENT_CATALOG[movementPattern]
+      ? MOVEMENT_CATALOG[movementPattern].label
+      : (form.movement || '').trim()
+    const movementVariationSource = (form.movement_variation?.length ? form.movement_variation : form.variations) || []
+    const movementVariation = Array.from(new Set(movementVariationSource.map((item) => String(item || '').trim()).filter(Boolean)))
+    const muscleProfile = [
+      ...primaryMuscles.map((group) => ({ group, role: 'primary', percent: 100 })),
+      ...secondaryMuscles,
+    ]
+    const muscleGroups = Array.from(new Set([
+      ...primaryMuscles,
+      ...secondaryMuscles.map((entry) => entry.group),
+    ]))
+
     const payload = {
       ...form,
       name: (form.name || '').trim(),
-      movement: (form.movement || '').trim(),
+      movement: movementLabel,
+      movement_pattern: movementPattern || null,
+      movement_variation: movementVariation,
+      variations: movementVariation,
       exercise_type: (form.exercise_type || '').trim() || null,
       notes: (form.notes || '').trim() || null,
       source: (form.source || '').trim() || null,
       equipment_type: form.equipment_type || 'machine',
-      muscle_groups: (form.muscle_groups || []).map((m) => m.trim()).filter(Boolean),
+      muscle_profile: muscleProfile,
+      muscle_groups: muscleGroups,
+      rating: Number.isInteger(Number(form.rating)) ? Number(form.rating) : null,
+      is_favorite: Boolean(form.is_favorite),
       thumbnails: (form.thumbnails || []).map(normalizeThumbnail).filter(Boolean),
     }
 
@@ -1880,6 +1970,98 @@ function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
     }
 
     return payload
+  }
+
+  const setMovementPattern = (pattern) => {
+    const movementLabel = MOVEMENT_CATALOG[pattern]?.label || ''
+    upd('movement_pattern', pattern)
+    upd('movement', movementLabel)
+    const allowedVariations = MOVEMENT_CATALOG[pattern]?.variations || []
+    upd('movement_variation', (form.movement_variation || []).filter((value) => allowedVariations.includes(value)))
+    upd('variations', (form.movement_variation || []).filter((value) => allowedVariations.includes(value)))
+  }
+
+  const movementVariationOptions = useMemo(
+    () => (form.movement_pattern ? (MOVEMENT_CATALOG[form.movement_pattern]?.variations || []) : []),
+    [form.movement_pattern],
+  )
+  const movementVariationChips = useMemo(
+    () => Array.from(new Set([...(form.movement_variation || []), ...movementVariationOptions])),
+    [form.movement_variation, movementVariationOptions],
+  )
+
+  const togglePrimaryMuscle = (group) => {
+    const current = new Set(form.primary_muscles || [])
+    if (current.has(group)) current.delete(group)
+    else current.add(group)
+    const nextPrimary = Array.from(current)
+    upd('primary_muscles', nextPrimary)
+    upd('secondary_muscles', (form.secondary_muscles || []).filter((entry) => !nextPrimary.includes(entry.group)))
+  }
+
+  const toggleSecondaryMuscle = (group) => {
+    const existing = form.secondary_muscles || []
+    if (existing.some((entry) => entry.group === group)) {
+      upd('secondary_muscles', existing.filter((entry) => entry.group !== group))
+      return
+    }
+    upd('secondary_muscles', [...existing, { group, percent: 30 }])
+  }
+
+  const updateSecondaryPercent = (group, nextPercent) => {
+    upd(
+      'secondary_muscles',
+      (form.secondary_muscles || []).map((entry) => (
+        entry.group === group
+          ? { ...entry, percent: Math.min(99, Math.max(1, Number(nextPercent) || 1)) }
+          : entry
+      )),
+    )
+  }
+
+  const toggleVariation = (variation) => {
+    const current = new Set(form.movement_variation || [])
+    if (current.has(variation)) current.delete(variation)
+    else current.add(variation)
+    const next = Array.from(current)
+    upd('movement_variation', next)
+    upd('variations', next)
+  }
+
+  const addCustomVariation = () => {
+    const trimmed = customVariation.trim()
+    if (!trimmed) return
+    if ((form.movement_variation || []).includes(trimmed)) {
+      setCustomVariation('')
+      return
+    }
+    const next = [...(form.movement_variation || []), trimmed]
+    upd('movement_variation', next)
+    upd('variations', next)
+    setCustomVariation('')
+  }
+
+  const handleSave = () => {
+    const hasMovement = Boolean(form.movement_pattern)
+    const primary = form.primary_muscles || []
+    const secondary = form.secondary_muscles || []
+    const hasInvalidSecondary = secondary.some((entry) => !entry.group || !Number.isFinite(Number(entry.percent)) || Number(entry.percent) < 1 || Number(entry.percent) > 99)
+
+    if (!hasMovement) {
+      setValidationError('Please select a movement pattern before saving.')
+      return
+    }
+    if (!primary.length) {
+      setValidationError('Select at least one primary muscle group.')
+      return
+    }
+    if (hasInvalidSecondary) {
+      setValidationError('Secondary muscle percentages must be between 1 and 99.')
+      return
+    }
+
+    setValidationError('')
+    onSave(buildPayload())
   }
 
   return (
@@ -1917,11 +2099,110 @@ function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
       </div>
 
       <div style={{ marginBottom: 16 }}>
-        <label style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6, fontFamily: 'var(--font-code)' }}>Muscle Groups (comma-separated)</label>
-        <input value={(form.muscle_groups || []).join(', ')}
-          onChange={(e) => upd('muscle_groups', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
-          style={{ width: '100%', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 12, color: 'var(--text)', fontSize: 16, boxSizing: 'border-box' }} />
+        <label style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6, fontFamily: 'var(--font-code)' }}>Movement</label>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {Object.entries(MOVEMENT_CATALOG).map(([key, option]) => {
+            const active = form.movement_pattern === key
+            return (
+              <button key={key} onClick={() => setMovementPattern(key)} style={{
+                padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                background: active ? 'var(--accent)22' : 'var(--surface2)', color: active ? 'var(--accent)' : 'var(--text-muted)',
+                fontSize: 12, fontWeight: 700,
+              }}>{option.label}</button>
+            )
+          })}
+        </div>
       </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <label style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6, fontFamily: 'var(--font-code)' }}>Primary Muscles</label>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {MUSCLE_GROUP_OPTIONS.map((group) => {
+            const active = (form.primary_muscles || []).includes(group)
+            return (
+              <button key={group} onClick={() => togglePrimaryMuscle(group)} style={{
+                padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                background: active ? 'var(--accent)22' : 'var(--surface2)', color: active ? 'var(--accent)' : 'var(--text-muted)',
+                fontSize: 12, fontWeight: 700,
+              }}>{group}</button>
+            )
+          })}
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <label style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6, fontFamily: 'var(--font-code)' }}>Secondary Muscles (%)</label>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+          {MUSCLE_GROUP_OPTIONS.filter((group) => !(form.primary_muscles || []).includes(group)).map((group) => {
+            const active = (form.secondary_muscles || []).some((entry) => entry.group === group)
+            return (
+              <button key={group} onClick={() => toggleSecondaryMuscle(group)} style={{
+                padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                background: active ? 'var(--accent)22' : 'var(--surface2)', color: active ? 'var(--accent)' : 'var(--text-muted)',
+                fontSize: 12, fontWeight: 700,
+              }}>{group}</button>
+            )
+          })}
+        </div>
+        {(form.secondary_muscles || []).map((entry) => (
+          <div key={entry.group} style={{ display: 'grid', gridTemplateColumns: '110px 1fr 64px', gap: 10, alignItems: 'center', marginBottom: 8 }}>
+            <span style={{ fontSize: 13, color: 'var(--text)' }}>{entry.group}</span>
+            <input type="range" min="1" max="99" value={entry.percent}
+              onChange={(e) => updateSecondaryPercent(entry.group, e.target.value)} />
+            <input type="number" min="1" max="99" value={entry.percent}
+              onChange={(e) => updateSecondaryPercent(entry.group, e.target.value)}
+              style={{ width: '100%', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 8px', color: 'var(--text)', fontSize: 14, boxSizing: 'border-box' }} />
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <label style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6, fontFamily: 'var(--font-code)' }}>Variations</label>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+          {movementVariationChips.map((variation) => {
+            const active = (form.movement_variation || []).includes(variation)
+            return (
+              <button key={variation} onClick={() => toggleVariation(variation)} style={{
+                padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                background: active ? 'var(--accent)22' : 'var(--surface2)', color: active ? 'var(--accent)' : 'var(--text-muted)',
+                fontSize: 12, fontWeight: 700,
+              }}>{variation}</button>
+            )
+          })}
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input value={customVariation} onChange={(e) => setCustomVariation(e.target.value)} placeholder="Add custom variation"
+            style={{ flex: 1, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 10, color: 'var(--text)', fontSize: 14, boxSizing: 'border-box' }} />
+          <button onClick={addCustomVariation} style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)', fontWeight: 700 }}>Add</button>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <label style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6, fontFamily: 'var(--font-code)' }}>Rating</label>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          {[1, 2, 3, 4, 5].map((score) => {
+            const active = Number(form.rating) === score
+            return (
+              <button key={score} onClick={() => upd('rating', score)} style={{
+                padding: '6px 10px', borderRadius: 999, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                background: active ? 'var(--accent)22' : 'var(--surface2)', color: active ? 'var(--accent)' : 'var(--text-muted)',
+                fontSize: 14,
+              }}>{'★'.repeat(score)}</button>
+            )
+          })}
+          <button onClick={() => upd('is_favorite', !form.is_favorite)} style={{
+            padding: '6px 10px', borderRadius: 999, border: `1px solid ${form.is_favorite ? 'var(--accent)' : 'var(--border)'}`,
+            background: form.is_favorite ? 'var(--accent)22' : 'var(--surface2)', color: form.is_favorite ? 'var(--accent)' : 'var(--text-muted)',
+            fontSize: 14, fontWeight: 700,
+          }}>{form.is_favorite ? '♥ Favorite' : '♡ Favorite'}</button>
+        </div>
+      </div>
+
+      {validationError && (
+        <div style={{ marginBottom: 16, padding: 10, borderRadius: 10, border: '1px solid var(--red)', color: 'var(--red)', background: 'rgba(120,0,0,0.15)', fontSize: 13 }}>
+          {validationError}
+        </div>
+      )}
 
       {isMachineType ? (
         <>
@@ -2012,7 +2293,7 @@ function EditMachineScreen({ machine, onSave, onCancel, onDelete }) {
       )}
 
       <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
-        <button onClick={() => onSave(buildPayload())} style={{
+        <button onClick={handleSave} style={{
           flex: 1, padding: 16, borderRadius: 12, background: 'var(--accent)', color: '#000',
           fontSize: 16, fontWeight: 800, fontFamily: 'var(--font-mono)',
         }}>Save</button>
