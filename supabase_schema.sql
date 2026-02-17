@@ -14,6 +14,103 @@ as $$
   select exists (select 1 from pg_timezone_names where name = tz);
 $$;
 
+create or replace function public.muscle_groups_array_to_profile(groups text[])
+returns jsonb
+language sql
+immutable
+set search_path = public
+as $$
+  select coalesce(
+    (
+      select jsonb_agg(
+        jsonb_build_object(
+          'group', trim(group_name),
+          'role', 'primary',
+          'percent', 100
+        )
+      )
+      from unnest(coalesce(groups, '{}'::text[])) as group_name
+      where length(trim(group_name)) > 0
+    ),
+    '[]'::jsonb
+  );
+$$;
+
+create or replace function public.is_valid_muscle_profile(profile jsonb)
+returns boolean
+language sql
+immutable
+set search_path = public
+as $$
+  with entries as (
+    select
+      elem,
+      elem ->> 'group' as group_name,
+      elem ->> 'role' as role,
+      (elem ->> 'percent')::int as percent
+    from jsonb_array_elements(coalesce(profile, '[]'::jsonb)) elem
+  )
+  select
+    jsonb_typeof(coalesce(profile, '[]'::jsonb)) = 'array'
+    and jsonb_array_length(coalesce(profile, '[]'::jsonb)) > 0
+    and not exists (
+      select 1
+      from entries
+      where jsonb_typeof(elem) <> 'object'
+        or group_name is null
+        or length(trim(group_name)) = 0
+        or role not in ('primary', 'secondary')
+        or percent is null
+    )
+    and exists (
+      select 1
+      from entries
+      where role = 'primary'
+    )
+    and not exists (
+      select 1
+      from entries
+      where role = 'primary' and percent <> 100
+    )
+    and not exists (
+      select 1
+      from entries
+      where role = 'secondary' and (percent < 1 or percent > 99)
+    );
+$$;
+
+create or replace function public.sync_machine_muscle_fields()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if (
+       case
+         when jsonb_typeof(new.muscle_profile) = 'array' then jsonb_array_length(new.muscle_profile)
+         else 0
+       end
+     ) = 0
+     and coalesce(array_length(new.muscle_groups, 1), 0) > 0 then
+    new.muscle_profile := public.muscle_groups_array_to_profile(new.muscle_groups);
+  elsif coalesce(array_length(new.muscle_groups, 1), 0) = 0
+        and (
+          case
+            when jsonb_typeof(new.muscle_profile) = 'array' then jsonb_array_length(new.muscle_profile)
+            else 0
+          end
+        ) > 0 then
+    new.muscle_groups := array(
+      select distinct trim(entry ->> 'group')
+      from jsonb_array_elements(new.muscle_profile) entry
+      where length(trim(entry ->> 'group')) > 0
+    );
+  end if;
+
+  return new;
+end;
+$$;
+
 -- Drop in dependency order for clean re-apply during development.
 drop view if exists public.session_summaries;
 drop view if exists public.equipment_set_counts;
@@ -57,7 +154,26 @@ create table public.machines (
   equipment_type text not null default 'machine' check (
     equipment_type in ('machine', 'freeweight', 'bodyweight', 'cable', 'band', 'other')
   ),
+  rating smallint check (rating between 1 and 5),
+  is_favorite boolean not null default false,
   muscle_groups text[] not null default '{}',
+  muscle_profile jsonb not null default '[]'::jsonb,
+  movement_pattern text not null default 'other' check (
+    movement_pattern in (
+      'squat',
+      'hip_hinge',
+      'lunge',
+      'horizontal_push',
+      'vertical_push',
+      'horizontal_pull',
+      'vertical_pull',
+      'carry',
+      'rotation',
+      'isolation',
+      'other'
+    )
+  ),
+  movement_variation text[] not null default '{}',
   variations text[] not null default '{}',
   thumbnails text[] not null default '{}',
   instruction_image text,
@@ -68,6 +184,7 @@ create table public.machines (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   check (coalesce(array_length(muscle_groups, 1), 0) > 0),
+  check (public.is_valid_muscle_profile(muscle_profile)),
   check (
     equipment_type = 'machine'
     or (
@@ -78,6 +195,22 @@ create table public.machines (
   )
 );
 
+create trigger trg_sync_machine_muscle_fields
+  before insert or update on public.machines
+  for each row
+  execute procedure public.sync_machine_muscle_fields();
+
+-- Backfill helper for transitional rollouts that already have muscle_groups.
+update public.machines
+set muscle_profile = public.muscle_groups_array_to_profile(muscle_groups)
+where (
+    case
+      when jsonb_typeof(muscle_profile) = 'array' then jsonb_array_length(muscle_profile)
+      else 0
+    end
+  ) = 0
+  and coalesce(array_length(muscle_groups, 1), 0) > 0;
+
 alter table public.machines enable row level security;
 create policy "Users manage own machines" on public.machines
   for all
@@ -85,6 +218,9 @@ create policy "Users manage own machines" on public.machines
   with check ((select auth.uid()) = user_id);
 create index idx_machines_user on public.machines(user_id);
 create index idx_machines_equipment_type on public.machines(user_id, equipment_type);
+create index idx_machines_user_is_favorite on public.machines(user_id, is_favorite);
+create index idx_machines_user_rating_desc on public.machines(user_id, rating desc);
+create index idx_machines_muscle_profile_gin on public.machines using gin (muscle_profile jsonb_path_ops);
 create unique index uq_machines_id_user on public.machines(id, user_id);
 
 
