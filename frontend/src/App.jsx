@@ -2024,14 +2024,14 @@ function LibraryScreen({ machines, onSaveMachine, onDeleteMachine, onBack }) {
       </div>
 
       {machines.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-dim)' }}>
+        <div className="machine-grid__state machine-grid__state--empty">
           <div style={{ fontSize: 40, marginBottom: 12 }}>🏋️</div>
           <div>No exercises in your library yet.</div>
         </div>
       ) : (
         <div className="machine-grid">
           {filteredMachines.length === 0 && (
-            <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-dim)', fontSize: 13, gridColumn: '1 / -1' }}>
+            <div className="machine-grid__state machine-grid__state--filtered" style={{ gridColumn: '1 / -1' }}>
               No entries match your current filters.
             </div>
           )}
@@ -2443,14 +2443,14 @@ function LogSetScreen({
           </div>
         </div>
         {machines.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-dim)' }}>
+          <div className="machine-grid__state machine-grid__state--empty">
             <div style={{ fontSize: 40, marginBottom: 12 }}>🏋️</div>
             <div>{libraryEnabled ? 'No exercises yet. Add one from Library.' : 'No exercises available yet.'}</div>
           </div>
         ) : (
           <div className="machine-grid">
             {filteredMachines.length === 0 && (
-              <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-dim)', fontSize: 13, gridColumn: '1 / -1' }}>
+              <div className="machine-grid__state machine-grid__state--filtered" style={{ gridColumn: '1 / -1' }}>
                 No exercises for that muscle group yet.
               </div>
             )}
