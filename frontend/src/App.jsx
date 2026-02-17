@@ -2448,23 +2448,34 @@ function LibraryScreen({ machines, onSaveMachine, onDeleteMachine, onBack }) {
   }, [filteredMachines])
 
   const toggleFavorite = useCallback(async (machine) => {
-    await onSaveMachine({
-      ...machine,
-      is_favorite: !Boolean(machine?.is_favorite ?? machine?.isFavorite),
-    })
-    showLibraryFeedback(
-      Boolean(machine?.is_favorite ?? machine?.isFavorite)
-        ? 'Removed from favorites'
-        : 'Added to favorites',
-      'success',
-    )
+    try {
+      await onSaveMachine({
+        ...machine,
+        is_favorite: !Boolean(machine?.is_favorite ?? machine?.isFavorite),
+      })
+      showLibraryFeedback(
+        Boolean(machine?.is_favorite ?? machine?.isFavorite)
+          ? 'Removed from favorites'
+          : 'Added to favorites',
+        'success',
+      )
+    } catch (error) {
+      console.error(error)
+      showLibraryFeedback('Could not update favorite. Try again.', 'error')
+    }
   }, [onSaveMachine, showLibraryFeedback])
 
   const bumpRating = useCallback(async (machine) => {
     const currentRating = Number.isInteger(Number(machine?.rating)) ? Number(machine.rating) : 0
     const nextRating = currentRating >= 5 ? null : currentRating + 1
-    await onSaveMachine({ ...machine, rating: nextRating })
-    showLibraryFeedback(nextRating ? `Rated ${nextRating}/5` : 'Rating cleared', 'success')
+
+    try {
+      await onSaveMachine({ ...machine, rating: nextRating })
+      showLibraryFeedback(nextRating ? `Rated ${nextRating}/5` : 'Rating cleared', 'success')
+    } catch (error) {
+      console.error(error)
+      showLibraryFeedback('Could not update rating. Try again.', 'error')
+    }
   }, [onSaveMachine, showLibraryFeedback])
 
   return (
