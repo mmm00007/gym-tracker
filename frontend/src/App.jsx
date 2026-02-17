@@ -3901,7 +3901,7 @@ function AppNavigation({
               aria-current={active ? 'page' : undefined}
               style={{
                 flex: layout === 'bottom' || layout === 'top' ? 1 : 'none',
-                minWidth: layout === 'rail' ? 94 : 0,
+                minWidth: layout === 'rail' ? 94 : iconOnly ? 44 : 0,
                 minHeight: 44,
                 display: 'inline-flex',
                 alignItems: 'center',
