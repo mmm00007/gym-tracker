@@ -1354,7 +1354,7 @@ function PlanItemEditor({ day, items, machines, loading, error, onSaveItem, onDe
             ))}
           </div>
 
-          <div style={{ display: 'grid', gap: 8, paddingBottom: 'calc(72px + env(safe-area-inset-bottom))' }}>
+          <div className="u-safe-area-bottom-pad" style={{ display: 'grid', gap: 8 }}>
             <button onClick={() => setShowMachinePicker((prev) => !prev)} style={{ textAlign: 'left', padding: 10, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text)' }}>
               {selectedMachine ? `Exercise: ${selectedMachine.name}` : 'Select exercise/equipment'}
             </button>
@@ -1378,13 +1378,13 @@ function PlanItemEditor({ day, items, machines, loading, error, onSaveItem, onDe
               style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: 10, color: 'var(--text)' }}>
               {SET_TYPE_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
             </select>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
+            <div className="u-responsive-grid-140">
               <input type="number" min="0" value={form.targetSets} onChange={(e) => setForm((prev) => ({ ...prev, targetSets: e.target.value }))} placeholder="Target sets"
                 style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: 10, color: 'var(--text)' }} />
               <input type="number" min="0" value={form.orderIndex} onChange={(e) => setForm((prev) => ({ ...prev, orderIndex: e.target.value }))} placeholder="Order"
                 style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: 10, color: 'var(--text)' }} />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
+            <div className="u-responsive-grid-140">
               <input type="number" min="0" value={form.repMin} onChange={(e) => setForm((prev) => ({ ...prev, repMin: e.target.value }))} placeholder="Rep min"
                 style={{ width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: 10, color: 'var(--text)' }} />
               <input type="number" min="0" value={form.repMax} onChange={(e) => setForm((prev) => ({ ...prev, repMax: e.target.value }))} placeholder="Rep max"
@@ -2814,8 +2814,8 @@ function LogSetScreen({
             </div>
           )}
 
-          <div style={{ position: 'sticky', bottom: 12, zIndex: 5, marginBottom: 20 }}>
-            <div style={{ borderRadius: 14, border: '1px solid var(--border)', background: 'rgba(11,13,16,0.92)', backdropFilter: 'blur(4px)', padding: 10 }}>
+          <div className="sticky-bottom-controls">
+            <div className="sticky-bottom-controls__panel">
               <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, marginBottom: 8, fontFamily: 'var(--font-code)' }}>SUBMIT</div>
               {actionState === 'start' && (
                 <button onClick={handleStartSet} disabled={logging || !selectedMachine} style={{
@@ -3876,27 +3876,14 @@ function AppNavigation({
     }
   }
 
-  const navStyle = layout === 'bottom'
-    ? {
-        position: 'fixed',
-        left: 0,
-        right: 0,
-        bottom: 0,
-        zIndex: 30,
-        borderTop: '1px solid var(--border)',
-        background: 'color-mix(in oklab, var(--surface) 95%, #000 5%)',
-        padding: '10px 12px max(10px, env(safe-area-inset-bottom))',
-      }
-    : {
-        border: '1px solid var(--border)',
-        borderRadius: 18,
-        background: 'var(--surface)',
-        padding: 10,
-      }
+  const navClasses = [
+    `app-navigation app-navigation--${layout}`,
+    layout === 'bottom' ? 'app-navigation--bottom' : 'app-navigation--panel',
+  ].join(' ')
 
   return (
-    <nav aria-label="Primary" className={`app-navigation app-navigation--${layout}`} style={navStyle}>
-      <div style={{ display: 'flex', flexDirection: layout === 'rail' ? 'column' : 'row', gap: 8, alignItems: 'stretch' }}>
+    <nav aria-label="Primary" className={navClasses}>
+      <div className={`u-nav-stack ${layout === 'rail' ? 'u-nav-stack--column' : 'u-nav-stack--row'}`}>
         {destinations.map((destination, index) => {
           const active = activeScreen === destination.key
           return (
@@ -3931,7 +3918,7 @@ function AppNavigation({
             </button>
           )
         })}
-        <div style={{ position: 'relative', flex: layout === 'bottom' || layout === 'top' ? 1 : 'none' }}>
+        <div className={layout === 'bottom' || layout === 'top' ? 'u-nav-item-grow' : ''} style={{ position: 'relative' }}>
           <button
             className="app-navigation__button app-navigation__button--overflow"
             ref={(node) => { navButtonRefs.current[destinations.length] = node }}
