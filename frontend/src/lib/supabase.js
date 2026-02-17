@@ -125,16 +125,12 @@ function toEquipmentDbPayload(equipment = {}, userId) {
     source.thumbnails = source.thumbnails
       .map((thumb) => {
         if (typeof thumb === 'string') {
-          return { src: thumb, focalX: 50, focalY: 35 }
+          return thumb
         }
         if (!thumb || typeof thumb !== 'object' || typeof thumb.src !== 'string') return null
-        return {
-          src: thumb.src,
-          focalX: Number.isFinite(Number(thumb.focalX)) ? Number(thumb.focalX) : 50,
-          focalY: Number.isFinite(Number(thumb.focalY)) ? Number(thumb.focalY) : 35,
-        }
+        return thumb.src
       })
-      .filter(Boolean)
+      .filter((thumb) => typeof thumb === 'string' && thumb.trim().length > 0)
   }
 
   // Accept aliases from normalized objects/forms and map to DB columns.
