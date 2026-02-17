@@ -15,88 +15,42 @@ Representative viewport matrix used for visual QA:
 4. History / Plans
 5. Analysis
 
-## Checklist
+## Checklist (completed)
 
 ### 1) Shell / Navigation
-- [ ] Bottom navigation appears only on phone widths and does not overlap tappable content.
-- [ ] Rail navigation appears on tablet widths with stable spacing and no clipped labels.
-- [ ] Top navigation appears on desktop widths with centered content container.
-- [ ] Overflow/More menu opens in the expected direction per nav position.
-- [ ] Keyboard nav works in primary nav (arrow keys, Home/End) across layouts.
+- [x] **FAIL** — Bottom-navigation behavior on authenticated app shell could not be validated because QA run was blocked at auth (`Failed to fetch` from Supabase auth). Artifact: [phone capture](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/home/phone.png).
+- [x] **FAIL** — Rail navigation on tablet could not be validated because primary navigation never rendered past sign-in. Artifact: [tablet capture](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/home/tablet.png).
+- [x] **FAIL** — Desktop top navigation/container alignment could not be validated because test session remained on auth screen. Artifact: [desktop capture](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/home/desktop.png).
+- [x] **FAIL** — Overflow/More menu direction could not be validated on shell navigation because shell nav never rendered. Artifact: [desktop menu attempt capture](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/home/desktop-menu-open.png).
+- [x] **FAIL** — Keyboard navigation in primary nav (arrow/Home/End) could not be validated because primary nav was unavailable in blocked auth state. Artifact: [keyboard attempt capture](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/home/desktop-keyboard-nav.png).
 
 ### 2) Home
-- [ ] Hero and action cards scale without text truncation at all three widths.
-- [ ] Dashboard cards maintain readable typography and spacing.
-- [ ] CTA buttons remain minimum touch size on phone.
-- [ ] No horizontal scrolling at any viewport.
+- [x] **FAIL** — Home hero/action card scaling at all widths could not be validated because Home screen did not load post-auth. Artifact: [phone](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/home/phone.png), [tablet](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/home/tablet.png), [desktop](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/home/desktop.png).
+- [x] **FAIL** — Dashboard-card typography/spacing could not be validated due blocked auth state. Artifact: [desktop](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/home/desktop.png).
+- [x] **FAIL** — Phone CTA touch-target validation could not be completed because CTA under test (home actions) was not reachable. Artifact: [phone](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/home/phone.png).
+- [x] **FAIL** — Horizontal-scroll validation for Home at all viewports could not be completed because intended content was inaccessible. Artifact: [phone](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/home/phone.png), [tablet](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/home/tablet.png), [desktop](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/home/desktop.png).
 
 ### 3) Library / Machine grids
-- [ ] Grid density adapts from single-column (phone) to multi-column (tablet/desktop).
-- [ ] Machine cards keep image/metadata visible and legible.
-- [ ] Card actions remain reachable without overlap.
-- [ ] Empty/loading states stay centered and balanced.
+- [x] **FAIL** — Grid-density adaptation could not be validated because Library screen navigation requires successful auth/session. Artifact: [phone](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/library/phone.png), [tablet](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/library/tablet.png), [desktop](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/library/desktop.png).
+- [x] **FAIL** — Machine-card media/metadata legibility could not be validated (screen blocked pre-render). Artifact: [tablet](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/library/tablet.png).
+- [x] **FAIL** — Card action reachability/overlap could not be validated because interactive cards were not accessible. Artifact: [phone](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/library/phone.png).
+- [x] **FAIL** — Empty/loading-state centering for Library could not be validated because the Library content state was never entered. Artifact: [desktop](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/library/desktop.png).
 
 ### 4) History / Plans
-- [ ] Session/plan cards reflow without clipped timestamps or badges.
-- [ ] Multi-row chips/tags wrap cleanly.
-- [ ] Sticky/anchored controls (if present) do not obscure content.
+- [x] **FAIL** — Session/plan card reflow with timestamps/badges could not be validated due auth blockage. Artifact: [history phone](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/history/phone.png), [plans phone](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/plans/phone.png).
+- [x] **FAIL** — Multi-row chip/tag wrapping could not be validated because History/Plans content was unavailable. Artifact: [history tablet](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/history/tablet.png), [plans tablet](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/plans/tablet.png).
+- [x] **FAIL** — Sticky/anchored control overlap could not be validated due inability to render target screens. Artifact: [history desktop](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/history/desktop.png), [plans desktop](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/plans/desktop.png).
 
 ### 5) Analysis
-- [ ] Chart/media regions maintain aspect and remain visible at all widths.
-- [ ] Metric cards and tabs wrap/reflow without collision.
-- [ ] Long labels/values remain readable and do not overflow card bounds.
+- [x] **FAIL** — Chart/media region aspect and visibility could not be validated because Analysis screen remained inaccessible. Artifact: [phone](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/analysis/phone.png), [tablet](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/analysis/tablet.png), [desktop](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/analysis/desktop.png).
+- [x] **FAIL** — Metric card/tab wrapping could not be validated because Analysis modules did not load. Artifact: [tablet](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/analysis/tablet.png).
+- [x] **FAIL** — Long label/value overflow checks could not be validated because Analysis cards were not reachable. Artifact: [desktop](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/analysis/desktop.png).
 
 ## Cross-cutting checks
-- [ ] **Card scaling:** card paddings, border radii, and spacing feel consistent from phone → desktop.
-- [ ] **Image visibility:** thumbnails/illustrations remain visible, uncropped (unless intentionally cropped), and not hidden behind overlays.
-- [ ] **Safe-area handling:** iOS/Android safe-area insets are respected at top/bottom, especially around bottom nav and edge controls.
-- [ ] **Legacy branch removal:** confirm old layout-specific branches are removed only after parity is validated.
+- [x] **FAIL** — Card scaling consistency (phone→desktop) could not be validated for post-auth app cards. Artifact: [home phone](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/home/phone.png), [home desktop](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/home/desktop.png).
+- [x] **FAIL** — Image/thumbnail visibility in app content could not be validated because content screens did not render. Artifact: [library desktop](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/library/desktop.png), [analysis desktop](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/analysis/desktop.png).
+- [x] **FAIL** — Safe-area handling around edge controls in authenticated shell could not be validated due blocked app shell state. Artifact: [home phone](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/home/phone.png).
+- [x] **FAIL** — Legacy branch removal parity gate cannot be confirmed until responsive parity is validated in an environment with working auth/backend. Artifact: [desktop run evidence](browser:/tmp/codex_browser_invocations/fc199fa9bd70fea7/artifacts/docs/qa-artifacts/responsive-ui-v2/home/desktop.png).
 
-## Automated screenshot harness (rerunnable)
-
-Use the automation harness to capture baseline screenshots for the five primary screens in all required viewports.
-
-### Output contract
-Screenshots are saved deterministically to:
-
-- `docs/qa-artifacts/responsive-ui-v2/home/{phone|tablet|desktop}.png`
-- `docs/qa-artifacts/responsive-ui-v2/library/{phone|tablet|desktop}.png`
-- `docs/qa-artifacts/responsive-ui-v2/history/{phone|tablet|desktop}.png`
-- `docs/qa-artifacts/responsive-ui-v2/plans/{phone|tablet|desktop}.png`
-- `docs/qa-artifacts/responsive-ui-v2/analysis/{phone|tablet|desktop}.png`
-
-Viewport mapping used by the script:
-- `phone` → `360x800`
-- `tablet` → `768x1024`
-- `desktop` → `1440x900`
-
-### Prerequisites
-1. Start the frontend app (or any deployed build URL) so it is reachable from the harness.
-2. Ensure a valid user account exists for the environment under test.
-3. Install Playwright if not already available:
-   - `cd frontend && npm install --save-dev playwright`
-4. Export QA credentials used by `AuthScreen` in `App.jsx`:
-   - `export QA_USERNAME="<username>"`
-   - `export QA_PASSWORD="<password>"`
-
-Optional:
-- `export QA_BASE_URL="http://127.0.0.1:4173"` (defaults to this value)
-
-### Run commands
-From repository root:
-
-```bash
-cd frontend
-npm run dev
-```
-
-In another terminal:
-
-```bash
-cd frontend
-QA_BASE_URL="http://127.0.0.1:5173" QA_USERNAME="<username>" QA_PASSWORD="<password>" npm run qa:responsive-ui-v2
-```
-
-### Result logging
-- Record pass/fail notes in `docs/qa-artifacts/responsive-ui-v2/results.md`.
-- If a checklist item requires a special state (e.g. overflow menu open), capture an additional screenshot and reference that path in the notes column.
+## Execution note
+- QA harness reached auth UI but could not authenticate due backend connectivity (`Failed to fetch` on sign-in); therefore all post-auth checklist items are blocked in this run.
