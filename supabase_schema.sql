@@ -1,6 +1,8 @@
 -- ============================================================
--- GYM TRACKER - Supabase Schema (Phase 1 cutover)
--- DB-first, no legacy migration path.
+-- ⚠️  DESTRUCTIVE RESET SCHEMA (DEV/BOOTSTRAP ONLY)
+-- This script drops and recreates core objects.
+-- Do NOT rerun in production/editor environments with live user data.
+-- Use incremental files in supabase/migrations/ for updates.
 -- ============================================================
 
 create extension if not exists "uuid-ossp";
