@@ -250,6 +250,8 @@ begin
     instruction_image = null,
     source = null
   where user_id = v_user_id
+    and source = 'default_catalog'
+    and equipment_type = 'machine'
     and lower(name) = 'leg press machine';
 
   update public.machines
@@ -266,6 +268,8 @@ begin
     instruction_image = null,
     source = null
   where user_id = v_user_id
+    and source = 'default_catalog'
+    and equipment_type = 'machine'
     and lower(name) = 'lat pulldown machine';
 
   update public.machines
