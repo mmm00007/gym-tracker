@@ -106,6 +106,42 @@ create table if not exists public.machines (
   updated_at timestamptz not null default now()
 );
 
+alter table public.user_preferences enable row level security;
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'user_preferences'
+      and policyname = 'Users manage own preferences'
+  ) then
+    create policy "Users manage own preferences" on public.user_preferences
+      for all
+      using ((select auth.uid()) = user_id)
+      with check ((select auth.uid()) = user_id);
+  end if;
+end;
+$$;
+
+alter table public.machines enable row level security;
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'machines'
+      and policyname = 'Users manage own machines'
+  ) then
+    create policy "Users manage own machines" on public.machines
+      for all
+      using ((select auth.uid()) = user_id)
+      with check ((select auth.uid()) = user_id);
+  end if;
+end;
+$$;
+
 alter table public.machines
   add column if not exists muscle_groups text[] not null default '{}',
   add column if not exists muscle_profile jsonb not null default '[]'::jsonb,
