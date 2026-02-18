@@ -95,15 +95,33 @@ create table if not exists public.machines (
   name text not null check (length(trim(name)) > 0),
   exercise_type text,
   movement text not null check (length(trim(movement)) > 0),
-  equipment_type text not null default 'machine',
-  rating smallint,
+  equipment_type text not null default 'machine' check (
+    equipment_type in ('machine', 'freeweight', 'bodyweight', 'cable', 'band', 'other')
+  ),
+  rating smallint check (rating between 1 and 5),
   is_favorite boolean not null default false,
   muscle_groups text[] not null default '{}',
   muscle_profile jsonb not null default '[]'::jsonb,
-  movement_pattern text not null default 'other',
+  movement_pattern text not null default 'other' check (
+    movement_pattern in (
+      'squat',
+      'hip_hinge',
+      'lunge',
+      'horizontal_push',
+      'vertical_push',
+      'horizontal_pull',
+      'vertical_pull',
+      'carry',
+      'rotation',
+      'isolation',
+      'other'
+    )
+  ),
   is_unilateral boolean not null default false,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  check (coalesce(array_length(muscle_groups, 1), 0) > 0),
+  check (public.is_valid_muscle_profile(muscle_profile))
 );
 
 alter table public.user_preferences enable row level security;
@@ -152,6 +170,79 @@ alter table public.machines
 alter table public.machines
   alter column muscle_profile set default '[]'::jsonb,
   alter column muscle_groups set default '{}';
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'machines_equipment_type_check'
+      and conrelid = 'public.machines'::regclass
+  ) then
+    alter table public.machines
+      add constraint machines_equipment_type_check
+      check (equipment_type in ('machine', 'freeweight', 'bodyweight', 'cable', 'band', 'other')) not valid;
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'machines_rating_check'
+      and conrelid = 'public.machines'::regclass
+  ) then
+    alter table public.machines
+      add constraint machines_rating_check
+      check (rating between 1 and 5) not valid;
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'machines_movement_pattern_check'
+      and conrelid = 'public.machines'::regclass
+  ) then
+    alter table public.machines
+      add constraint machines_movement_pattern_check
+      check (
+        movement_pattern in (
+          'squat',
+          'hip_hinge',
+          'lunge',
+          'horizontal_push',
+          'vertical_push',
+          'horizontal_pull',
+          'vertical_pull',
+          'carry',
+          'rotation',
+          'isolation',
+          'other'
+        )
+      ) not valid;
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'machines_muscle_groups_check'
+      and conrelid = 'public.machines'::regclass
+  ) then
+    alter table public.machines
+      add constraint machines_muscle_groups_check
+      check (coalesce(array_length(muscle_groups, 1), 0) > 0) not valid;
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'machines_muscle_profile_check'
+      and conrelid = 'public.machines'::regclass
+  ) then
+    alter table public.machines
+      add constraint machines_muscle_profile_check
+      check (public.is_valid_muscle_profile(muscle_profile)) not valid;
+  end if;
+end;
+$$;
 
 update public.machines
 set muscle_profile = public.muscle_groups_array_to_profile(muscle_groups)
