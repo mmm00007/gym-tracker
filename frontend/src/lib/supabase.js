@@ -370,10 +370,23 @@ export async function bootstrapDefaultEquipmentCatalog() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user?.id) return
 
+  // Keep a local marker, but also re-check DB state so table recreation/data wipes self-heal.
   const bootstrapKey = `library-seeded:v4:${user.id}`
   const alreadyBootstrapped = typeof window !== 'undefined' && window.localStorage.getItem(bootstrapKey) === 'done'
+  let hasExistingMachine = false
 
-  if (alreadyBootstrapped) return
+  if (alreadyBootstrapped) {
+    const { data: existingMachineRows, error: existingMachineError } = await supabase
+      .from('machines')
+      .select('id')
+      .eq('user_id', user.id)
+      .limit(1)
+
+    if (existingMachineError) throw existingMachineError
+    hasExistingMachine = (existingMachineRows || []).length > 0
+  }
+
+  if (alreadyBootstrapped && hasExistingMachine) return
 
   const markDone = () => {
     if (typeof window !== 'undefined') {
