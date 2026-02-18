@@ -26,9 +26,21 @@ Mobile-first gym tracker with AI machine identification and smart recommendation
 ### 1. Supabase
 
 1. Create project at [supabase.com](https://supabase.com)
-2. **SQL Editor** → paste and run `supabase_schema.sql`
+2. **SQL Editor** → paste and run `supabase_schema.sql` (first-time bootstrap only)
 3. **Authentication → Settings** → enable Email provider
 4. Note your **Project URL** and **Anon public key** (Settings → API)
+
+### Supabase update process
+
+- `supabase_schema.sql` is intentionally destructive and should be used only for full local reset / fresh dev bootstrap.
+- Do **not** rerun `supabase_schema.sql` in production or in a populated Supabase project editor.
+- For ongoing updates, run files from `supabase/migrations/` in timestamp order.
+- Migration files should use non-destructive patterns (`alter table`, `create table if not exists`, `create or replace function`) so existing rows remain intact.
+
+#### Recovery (if your library appears empty)
+
+- If a reset already happened and the machine library looks empty, remove `library-seeded:v4:<userId>` from browser `localStorage`.
+- Sign in again to trigger reseeding, or call the seed RPC directly (`public.seed_default_equipment_catalog()`) in SQL editor for that authenticated user context.
 
 ### 2. Backend (Render)
 
