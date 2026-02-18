@@ -2759,8 +2759,8 @@ function LibraryScreen({
 
     const seenMachineKeys = new Set()
     return rankedMachines.filter((machine) => {
-      const key = machine?.id || `${String(machine?.name || '').trim().toLowerCase()}::${String(machine?.movement || '').trim().toLowerCase()}::${String(machine?.equipment_type || machine?.equipmentType || 'machine').trim().toLowerCase()}`
-      if (!key || seenMachineKeys.has(key)) return false
+      const key = `${String(machine?.name || '').trim().toLowerCase()}::${String(machine?.movement || '').trim().toLowerCase()}::${String(machine?.equipment_type || machine?.equipmentType || 'machine').trim().toLowerCase()}`
+      if (!String(machine?.name || '').trim() || seenMachineKeys.has(key)) return false
       seenMachineKeys.add(key)
       return true
     })
