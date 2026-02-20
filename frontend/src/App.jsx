@@ -5128,6 +5128,7 @@ export default function App() {
     if (!machineId) return
     const machineHistoryQuery = machineHistoryById[machineId]
     if (!machineHistoryQuery || machineHistoryQuery.isFetching) return
+    if (machineHistoryQuery.isSuccess && !machineHistoryQuery.isStale) return
     try {
       await machineHistoryQuery.refetch()
     } catch (error) {
