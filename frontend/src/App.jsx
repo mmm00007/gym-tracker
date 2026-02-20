@@ -11,7 +11,6 @@ import {
 } from './lib/supabase'
 import { API_BASE_URL, pingHealth, getRecommendations, identifyMachine } from './lib/api'
 import { getFeatureFlags, DEFAULT_FLAGS } from './lib/featureFlags'
-import { clearUserScopedQueryCache } from './lib/queryCache'
 import { queryKeys } from './lib/queryKeys'
 import { addLog, subscribeLogs } from './lib/logs'
 import {
@@ -24,6 +23,7 @@ import Accordion from './components/Accordion'
 import HistoryScreen from './screens/HistoryScreen'
 import MachineCard from './components/machines/MachineCard'
 import {
+  useCurrentUserQuery,
   useMachinesQuery,
   useSetsQuery,
   useRecentSorenessQuery,
@@ -4833,7 +4833,6 @@ function AppNavigation({
 // ─── Main App ──────────────────────────────────────────────
 
 export default function App() {
-  const [user, setUser] = useState(undefined) // undefined=loading, null=logged out
   const [screen, setScreen] = useState('home')
   const [analysisInitialTab, setAnalysisInitialTab] = useState('run')
   const [featureFlags, setFeatureFlags] = useState(DEFAULT_FLAGS)
@@ -4866,36 +4865,12 @@ export default function App() {
   }, [restTimerEnabled, restTimerLastSetAtMs, screen])
 
   const queryClient = useQueryClient()
-
-  // Auth listener
-  useEffect(() => {
-    let active = true
-    const loadUser = async () => {
-      const { data, error } = await supabase.auth.getUser()
-      if (!active) return
-      if (error) {
-        addLog({ level: 'error', event: 'auth.get_user_failed', message: error.message })
-        setUser(null)
-        return
-      }
-      setUser(data?.user || null)
-    }
-    loadUser()
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setUser(session?.user || null)
-
-      if (event === 'SIGNED_OUT' || !session?.user) {
-        await clearUserScopedQueryCache(queryClient)
-      }
-    })
-    return () => {
-      active = false
-      subscription.unsubscribe()
-    }
-  }, [queryClient])
+  const authUserQuery = useCurrentUserQuery()
+  const userLoading = authUserQuery.status === 'pending'
+  const user = authUserQuery.data ?? null
 
   useEffect(() => {
-    if (user === undefined) return
+    if (userLoading) return
     let active = true
 
     const loadFlags = async () => {
@@ -4917,7 +4892,7 @@ export default function App() {
     return () => {
       active = false
     }
-  }, [user])
+  }, [userLoading])
 
   const userId = user?.id
 
@@ -5139,7 +5114,7 @@ export default function App() {
   }, [featureFlagsLoading, plansEnabled, screen])
 
   // ─── Loading / Auth ──────────────────────────────────────
-  if (user === undefined) {
+  if (userLoading) {
     return (
       <div className="app-shell">
         <div className="page-container" style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -5200,7 +5175,7 @@ export default function App() {
               onDiagnostics={() => setScreen('diagnostics')}
               onSorenessSubmit={handleSorenessSubmit}
               onSorenessDismiss={handleSorenessDismiss}
-              onSignOut={async () => { await signOut(); setUser(null); setScreen('home') }}
+              onSignOut={async () => { await signOut(); setScreen('home') }}
             />
           )}
           {screen === 'log' && (
