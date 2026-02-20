@@ -2,14 +2,14 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useQueries } from '@tanstack/react-query'
 import {
   supabase, signUp, signIn, signOut, getSession,
-  getMachines, upsertMachine, deleteMachine as dbDeleteMachine,
-  getSets, logSet as dbLogSet, deleteSet as dbDeleteSet,
+  getMachines,
+  getSets,
   getPlans, createPlan as dbCreatePlan, updatePlan as dbUpdatePlan, deletePlan as dbDeletePlan,
   getPlanDays, upsertPlanDay as dbUpsertPlanDay, deletePlanDay as dbDeletePlanDay,
   getPlanItems, upsertPlanItem as dbUpsertPlanItem, deletePlanItem as dbDeletePlanItem,
   getTodayPlanSuggestions, getEquipmentFavorites,
   bootstrapDefaultEquipmentCatalog,
-  getPendingSoreness, submitSoreness, getRecentSoreness,
+  getPendingSoreness, getRecentSoreness,
   getAnalysisReports, getAnalysisReport,
 } from './lib/supabase'
 import { API_BASE_URL, pingHealth, getRecommendations, identifyMachine } from './lib/api'
@@ -25,6 +25,13 @@ import {
 import Accordion from './components/Accordion'
 import HistoryScreen from './screens/HistoryScreen'
 import MachineCard from './components/machines/MachineCard'
+import {
+  useDeleteMachineMutation,
+  useDeleteSetMutation,
+  useLogSetMutation,
+  useSubmitSorenessMutation,
+  useUpsertMachineMutation,
+} from './features/data/hooks'
 import {
   computeWorkloadByMuscleGroup,
   computeWeeklyConsistency,
@@ -4994,6 +5001,12 @@ export default function App() {
     if (pendingSorenessQuery.data) setPendingSoreness(pendingSorenessQuery.data)
   }, [pendingSorenessQuery.data])
 
+  const logSetMutation = useLogSetMutation(userId)
+  const deleteSetMutation = useDeleteSetMutation(userId)
+  const upsertMachineMutation = useUpsertMachineMutation(userId)
+  const deleteMachineMutation = useDeleteMachineMutation(userId)
+  const submitSorenessMutation = useSubmitSorenessMutation(userId)
+
   const loadData = useCallback(async () => {
     if (!userId) return
     await Promise.all([
@@ -5030,19 +5043,27 @@ export default function App() {
 
   // ─── Actions ─────────────────────────────────────────────
   const handleLogSet = async (machineId, reps, weight, duration, rest, setType = 'working') => {
-    const s = await dbLogSet(null, machineId, reps, weight, duration, rest, setType)
+    const s = await logSetMutation.mutateAsync({
+      sessionId: null,
+      machineId,
+      reps,
+      weight,
+      durationSeconds: duration,
+      restSeconds: rest,
+      setType,
+    })
     setSets(prev => [...prev, s])
     const loggedAtMs = new Date(s.logged_at).getTime()
     setRestTimerLastSetAtMs(Number.isNaN(loggedAtMs) ? Date.now() : loggedAtMs)
   }
 
   const handleDeleteSet = async (id) => {
-    await dbDeleteSet(id)
+    await deleteSetMutation.mutateAsync(id)
     setSets(prev => prev.filter(s => s.id !== id))
   }
 
   const handleSaveMachine = async (machineData) => {
-    const saved = await upsertMachine(machineData)
+    const saved = await upsertMachineMutation.mutateAsync(machineData)
     setMachines(prev => {
       const exists = prev.find(m => m.id === saved.id)
       return exists ? prev.map(m => m.id === saved.id ? saved : m) : [saved, ...prev]
@@ -5051,12 +5072,12 @@ export default function App() {
   }
 
   const handleDeleteMachine = async (id) => {
-    await dbDeleteMachine(id)
+    await deleteMachineMutation.mutateAsync(id)
     setMachines(prev => prev.filter(m => m.id !== id))
   }
 
   const handleSorenessSubmit = async (trainingBucketId, reports) => {
-    await submitSoreness(trainingBucketId, reports)
+    await submitSorenessMutation.mutateAsync({ trainingBucketId, reports })
     setPendingSoreness(prev => prev.filter((s) => s.training_bucket_id !== trainingBucketId))
   }
 
