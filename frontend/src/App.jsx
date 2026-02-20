@@ -5025,14 +5025,14 @@ export default function App() {
   useEffect(() => {
     if (featureFlagsLoading || libraryEnabled || screen !== 'library') return
     addLog({ level: 'warn', event: 'feature_flags.library_fallback', message: 'Library screen disabled; redirecting to home.' })
-    navigate({ to: APP_SCREEN_TO_PATH.home })
+    navigate({ to: APP_SCREEN_TO_PATH.home, replace: true })
   }, [featureFlagsLoading, libraryEnabled, navigate, screen])
 
 
   useEffect(() => {
     if (featureFlagsLoading || plansEnabled || screen !== 'plans') return
     addLog({ level: 'warn', event: 'feature_flags.plans_fallback', message: 'Plans screen disabled; redirecting to home.' })
-    navigate({ to: APP_SCREEN_TO_PATH.home })
+    navigate({ to: APP_SCREEN_TO_PATH.home, replace: true })
   }, [featureFlagsLoading, navigate, plansEnabled, screen])
 
   // ─── Loading / Auth ──────────────────────────────────────
