@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { useQueries, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   supabase, signUp, signIn, signOut, getSession,
   getPlans, createPlan as dbCreatePlan, updatePlan as dbUpdatePlan, deletePlan as dbDeletePlan,
@@ -11,7 +11,6 @@ import {
 } from './lib/supabase'
 import { API_BASE_URL, pingHealth, getRecommendations, identifyMachine } from './lib/api'
 import { DEFAULT_FLAGS } from './lib/featureFlags'
-import { queryKeys } from './lib/queryKeys'
 import { addLog, subscribeLogs } from './lib/logs'
 import {
   TopAppBar,
@@ -34,6 +33,7 @@ import {
   useSubmitSorenessMutation,
   useUpsertMachineMutation,
   useFeatureFlagsQuery,
+  useMachineHistoryQueries,
 } from './features/data/hooks'
 import {
   computeWorkloadByMuscleGroup,
@@ -4959,27 +4959,14 @@ export default function App() {
       .filter(Boolean)
   }, [sets, machines])
 
-  const machineHistoryQueries = useQueries({
-    queries: machines.map((machine) => ({
-      queryKey: queryKeys.machines.history(userId, machine.id),
-      queryFn: async () => buildMachineHistoryEntries(machine.id),
-      enabled: false,
-    })),
+  const {
+    historyByMachineId: machineHistory,
+    queryByMachineId: machineHistoryById,
+  } = useMachineHistoryQueries({
+    userId,
+    machines,
+    buildMachineHistoryEntries,
   })
-
-  const machineHistory = useMemo(() => {
-    return machines.reduce((acc, machine, index) => {
-      acc[machine.id] = machineHistoryQueries[index]?.data || []
-      return acc
-    }, {})
-  }, [machines, machineHistoryQueries])
-
-  const machineHistoryById = useMemo(() => {
-    return machines.reduce((acc, machine, index) => {
-      acc[machine.id] = machineHistoryQueries[index]
-      return acc
-    }, {})
-  }, [machines, machineHistoryQueries])
 
   const logSetMutation = useLogSetMutation(userId)
   const deleteSetMutation = useDeleteSetMutation(userId)
