@@ -32,3 +32,9 @@ export const queryKeys = {
   soreness,
   featureFlags,
 }
+
+const USER_SCOPED_QUERY_ROOTS = new Set(['machines', 'sets', 'soreness'])
+
+export const isUserScopedQueryKey = (queryKey) => (
+  Array.isArray(queryKey) && queryKey.length > 0 && USER_SCOPED_QUERY_ROOTS.has(queryKey[0])
+)

@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { DEFAULT_FLAGS, getFeatureFlags } from '../../../lib/featureFlags'
+import { clearUserScopedQueryCache } from '../../../lib/queryCache'
 import { queryDefaults, withQueryDefaults } from '../../../lib/queryDefaults'
 import { queryKeys } from '../../../lib/queryKeys'
 import {
@@ -17,11 +18,13 @@ import {
 } from '../../../lib/supabase'
 
 const normalizeArray = (value) => (Array.isArray(value) ? value : [])
+const LOG_SET_OPTIMISTIC_UPDATES_ENABLED = false
 
 const callHandler = (handler, ...args) => {
   if (typeof handler === 'function') {
-    handler(...args)
+    return handler(...args)
   }
+  return undefined
 }
 
 export function useCurrentUserQuery(options = {}) {
@@ -29,9 +32,13 @@ export function useCurrentUserQuery(options = {}) {
   const authUserQueryKey = useMemo(() => queryKeys.auth.user(), [])
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       queryClient.setQueryData(authUserQueryKey, session?.user || null)
       queryClient.invalidateQueries({ queryKey: authUserQueryKey })
+
+      if (event === 'SIGNED_OUT' || !session?.user) {
+        await clearUserScopedQueryCache(queryClient)
+      }
     })
 
     return () => {
@@ -109,12 +116,21 @@ export function usePendingSorenessQuery(userOrId, options = {}) {
 
 export function useLogSetMutation(userOrId, options = {}) {
   const queryClient = useQueryClient()
-  const { onSuccess, onError, ...mutationOptions } = options
+  const { onMutate, onSuccess, onError, ...mutationOptions } = options
 
   return useMutation({
     mutationFn: ({ sessionId = null, machineId, reps, weight, durationSeconds, restSeconds, setType = 'working' }) => (
       logSet(sessionId, machineId, reps, weight, durationSeconds, restSeconds, setType)
     ),
+    onMutate: async (variables) => {
+      // Explicitly disabled for now because set logging is high-frequency and server-side
+      // shape/ordering drives several dependent experiences (history + soreness prompts).
+      if (!LOG_SET_OPTIMISTIC_UPDATES_ENABLED) {
+        return { optimisticUpdateApplied: false }
+      }
+
+      return callHandler(onMutate, variables)
+    },
     onSuccess: (data, variables, context) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.sets.list(userOrId) })
       void queryClient.invalidateQueries({ queryKey: queryKeys.soreness.pending(userOrId) })
@@ -124,6 +140,10 @@ export function useLogSetMutation(userOrId, options = {}) {
       callHandler(onError, error, variables, context)
     },
     ...mutationOptions,
+    meta: {
+      ...mutationOptions.meta,
+      operationName: mutationOptions.meta?.operationName || 'logSet',
+    },
   })
 }
 
