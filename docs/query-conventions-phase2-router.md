@@ -8,7 +8,7 @@ Validated on this branch before starting Router work.
 
 | Checklist item | Status | Validation notes |
 | --- | --- | --- |
-| no `loadData` function remains | ✅ Pass | `rg -n "\bloadData\b"` returns no matches in repo. |
+| no `loadData` function remains | ✅ Pass | `rg -n "\bloadData\b" frontend/src backend` returns no matches in source files. |
 | no local mirror state for query-backed entities | ❌ Fail | `DiagnosticsScreen` keeps local auth session mirror state via `authInfo`/`setAuthInfo` and a direct `getSession()` effect, while auth is already query-backed elsewhere. |
 | no inline `useQueries` in `App.jsx` | ✅ Pass | `useQueries` exists only in `frontend/src/features/data/hooks/useMachineHistoryQueries.js`; no matches in `frontend/src/App.jsx`. |
 | no raw query key literals | ✅ Pass | `rg -n "queryKey\s*:\s*\[" frontend/src` finds no literal query keys in query definitions; keys are sourced from `queryKeys`. |
