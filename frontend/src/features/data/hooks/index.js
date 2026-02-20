@@ -115,11 +115,9 @@ export function useLogSetMutation(userOrId, options = {}) {
     mutationFn: ({ sessionId = null, machineId, reps, weight, durationSeconds, restSeconds, setType = 'working' }) => (
       logSet(sessionId, machineId, reps, weight, durationSeconds, restSeconds, setType)
     ),
-    onSuccess: async (data, variables, context) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.sets.list(userOrId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.soreness.pending(userOrId) }),
-      ])
+    onSuccess: (data, variables, context) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sets.list(userOrId) })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.soreness.pending(userOrId) })
       callHandler(onSuccess, data, variables, context)
     },
     onError: (error, variables, context) => {
