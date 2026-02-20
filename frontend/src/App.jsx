@@ -4836,10 +4836,6 @@ export default function App() {
   const [user, setUser] = useState(undefined) // undefined=loading, null=logged out
   const [screen, setScreen] = useState('home')
   const [analysisInitialTab, setAnalysisInitialTab] = useState('run')
-  const [machines, setMachines] = useState([])
-  const [sets, setSets] = useState([])
-  const [pendingSoreness, setPendingSoreness] = useState([])
-  const [sorenessHistory, setSorenessHistory] = useState([])
   const [featureFlags, setFeatureFlags] = useState(DEFAULT_FLAGS)
   const [featureFlagsLoading, setFeatureFlagsLoading] = useState(true)
   const [catalogBootstrapComplete, setCatalogBootstrapComplete] = useState(false)
@@ -4956,22 +4952,10 @@ export default function App() {
   const setsQuery = useSetsQuery(userId)
   const sorenessHistoryQuery = useRecentSorenessQuery(userId)
   const pendingSorenessQuery = usePendingSorenessQuery(userId)
-
-  useEffect(() => {
-    if (machinesQuery.data) setMachines(machinesQuery.data)
-  }, [machinesQuery.data])
-
-  useEffect(() => {
-    if (setsQuery.data) setSets(setsQuery.data)
-  }, [setsQuery.data])
-
-  useEffect(() => {
-    if (sorenessHistoryQuery.data) setSorenessHistory(sorenessHistoryQuery.data)
-  }, [sorenessHistoryQuery.data])
-
-  useEffect(() => {
-    if (pendingSorenessQuery.data) setPendingSoreness(pendingSorenessQuery.data)
-  }, [pendingSorenessQuery.data])
+  const machines = machinesQuery.data ?? []
+  const sets = setsQuery.data ?? []
+  const sorenessHistory = sorenessHistoryQuery.data ?? []
+  const pendingSoreness = pendingSorenessQuery.data ?? []
 
   const buildMachineHistoryEntries = useCallback((machineId) => {
     const buckets = buildTrainingBuckets(sets, machines)
@@ -5060,7 +5044,7 @@ export default function App() {
       restSeconds: rest,
       setType,
     })
-    setSets(prev => [...prev, s])
+    queryClient.setQueryData(queryKeys.sets.list(userId), (prev = []) => [...prev, s])
     await queryClient.invalidateQueries({ queryKey: ['machines', 'history'] })
     const loggedAtMs = new Date(s.logged_at).getTime()
     setRestTimerLastSetAtMs(Number.isNaN(loggedAtMs) ? Date.now() : loggedAtMs)
@@ -5068,13 +5052,13 @@ export default function App() {
 
   const handleDeleteSet = async (id) => {
     await deleteSetMutation.mutateAsync(id)
-    setSets(prev => prev.filter(s => s.id !== id))
+    queryClient.setQueryData(queryKeys.sets.list(userId), (prev = []) => prev.filter((s) => s.id !== id))
     await queryClient.invalidateQueries({ queryKey: ['machines', 'history'] })
   }
 
   const handleSaveMachine = async (machineData) => {
     const saved = await upsertMachineMutation.mutateAsync(machineData)
-    setMachines(prev => {
+    queryClient.setQueryData(queryKeys.machines.list(userId), (prev = []) => {
       const exists = prev.find(m => m.id === saved.id)
       return exists ? prev.map(m => m.id === saved.id ? saved : m) : [saved, ...prev]
     })
@@ -5084,17 +5068,21 @@ export default function App() {
 
   const handleDeleteMachine = async (id) => {
     await deleteMachineMutation.mutateAsync(id)
-    setMachines(prev => prev.filter(m => m.id !== id))
+    queryClient.setQueryData(queryKeys.machines.list(userId), (prev = []) => prev.filter((m) => m.id !== id))
     await queryClient.invalidateQueries({ queryKey: ['machines', 'history'] })
   }
 
   const handleSorenessSubmit = async (trainingBucketId, reports) => {
     await submitSorenessMutation.mutateAsync({ trainingBucketId, reports })
-    setPendingSoreness(prev => prev.filter((s) => s.training_bucket_id !== trainingBucketId))
+    queryClient.setQueryData(queryKeys.soreness.pending(userId), (prev = []) => (
+      prev.filter((s) => s.training_bucket_id !== trainingBucketId)
+    ))
   }
 
   const handleSorenessDismiss = (trainingBucketId) => {
-    setPendingSoreness(prev => prev.filter((s) => s.training_bucket_id !== trainingBucketId))
+    queryClient.setQueryData(queryKeys.soreness.pending(userId), (prev = []) => (
+      prev.filter((s) => s.training_bucket_id !== trainingBucketId)
+    ))
   }
 
   const loadMachineHistory = useCallback(async (machineId) => {
