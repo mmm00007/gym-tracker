@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { useQueries } from '@tanstack/react-query'
+import { useQueries, useQueryClient } from '@tanstack/react-query'
 import {
   supabase, signUp, signIn, signOut, getSession,
   getMachines,
@@ -4838,8 +4838,6 @@ export default function App() {
   const [sets, setSets] = useState([])
   const [pendingSoreness, setPendingSoreness] = useState([])
   const [sorenessHistory, setSorenessHistory] = useState([])
-  const [machineHistory, setMachineHistory] = useState({})
-  const [machineHistoryStatus, setMachineHistoryStatus] = useState({})
   const [featureFlags, setFeatureFlags] = useState(DEFAULT_FLAGS)
   const [featureFlagsLoading, setFeatureFlagsLoading] = useState(true)
   const [catalogBootstrapComplete, setCatalogBootstrapComplete] = useState(false)
@@ -4918,6 +4916,7 @@ export default function App() {
   }, [user])
 
   const userId = user?.id
+  const queryClient = useQueryClient()
 
   useEffect(() => {
     if (!userId) {
@@ -5001,6 +5000,47 @@ export default function App() {
     if (pendingSorenessQuery.data) setPendingSoreness(pendingSorenessQuery.data)
   }, [pendingSorenessQuery.data])
 
+  const buildMachineHistoryEntries = useCallback((machineId) => {
+    const buckets = buildTrainingBuckets(sets, machines)
+    return buckets
+      .map((bucket) => {
+        const machineSets = bucket.sets.filter((set) => set.machine_id === machineId)
+        if (!machineSets.length) return null
+        return {
+          training_bucket_id: bucket.training_bucket_id,
+          workout_cluster_id: bucket.workout_cluster_id,
+          workout_cluster_ids: bucket.workout_cluster_ids || [],
+          training_date: bucket.training_date,
+          started_at: bucket.started_at,
+          ended_at: bucket.ended_at,
+          sets: machineSets,
+        }
+      })
+      .filter(Boolean)
+  }, [sets, machines])
+
+  const machineHistoryQueries = useQueries({
+    queries: machines.map((machine) => ({
+      queryKey: queryKeys.machines.history(userId, machine.id),
+      queryFn: async () => buildMachineHistoryEntries(machine.id),
+      enabled: false,
+    })),
+  })
+
+  const machineHistory = useMemo(() => {
+    return machines.reduce((acc, machine, index) => {
+      acc[machine.id] = machineHistoryQueries[index]?.data || []
+      return acc
+    }, {})
+  }, [machines, machineHistoryQueries])
+
+  const machineHistoryById = useMemo(() => {
+    return machines.reduce((acc, machine, index) => {
+      acc[machine.id] = machineHistoryQueries[index]
+      return acc
+    }, {})
+  }, [machines, machineHistoryQueries])
+
   const logSetMutation = useLogSetMutation(userId)
   const deleteSetMutation = useDeleteSetMutation(userId)
   const upsertMachineMutation = useUpsertMachineMutation(userId)
@@ -5022,11 +5062,6 @@ export default function App() {
     sorenessHistoryQuery,
     pendingSorenessQuery,
   ])
-
-  useEffect(() => {
-    setMachineHistory({})
-    setMachineHistoryStatus({})
-  }, [sets.length])
 
   useEffect(() => {
     if (!sets.length) {
@@ -5053,6 +5088,7 @@ export default function App() {
       setType,
     })
     setSets(prev => [...prev, s])
+    await queryClient.invalidateQueries({ queryKey: ['machines', 'history'] })
     const loggedAtMs = new Date(s.logged_at).getTime()
     setRestTimerLastSetAtMs(Number.isNaN(loggedAtMs) ? Date.now() : loggedAtMs)
   }
@@ -5060,6 +5096,7 @@ export default function App() {
   const handleDeleteSet = async (id) => {
     await deleteSetMutation.mutateAsync(id)
     setSets(prev => prev.filter(s => s.id !== id))
+    await queryClient.invalidateQueries({ queryKey: ['machines', 'history'] })
   }
 
   const handleSaveMachine = async (machineData) => {
@@ -5068,12 +5105,14 @@ export default function App() {
       const exists = prev.find(m => m.id === saved.id)
       return exists ? prev.map(m => m.id === saved.id ? saved : m) : [saved, ...prev]
     })
+    await queryClient.invalidateQueries({ queryKey: ['machines', 'history'] })
     return saved
   }
 
   const handleDeleteMachine = async (id) => {
     await deleteMachineMutation.mutateAsync(id)
     setMachines(prev => prev.filter(m => m.id !== id))
+    await queryClient.invalidateQueries({ queryKey: ['machines', 'history'] })
   }
 
   const handleSorenessSubmit = async (trainingBucketId, reports) => {
@@ -5087,33 +5126,15 @@ export default function App() {
 
   const loadMachineHistory = useCallback(async (machineId) => {
     if (!machineId) return
-    if (machineHistory[machineId] || machineHistoryStatus[machineId] === 'loading') return
-    setMachineHistoryStatus(prev => ({ ...prev, [machineId]: 'loading' }))
+    const machineHistoryQuery = machineHistoryById[machineId]
+    if (!machineHistoryQuery || machineHistoryQuery.isFetching) return
+    if (machineHistoryQuery.isSuccess && !machineHistoryQuery.isStale) return
     try {
-      const buckets = buildTrainingBuckets(sets, machines)
-      const entries = buckets
-        .map((bucket) => {
-          const machineSets = bucket.sets.filter((set) => set.machine_id === machineId)
-          if (!machineSets.length) return null
-          return {
-            training_bucket_id: bucket.training_bucket_id,
-            workout_cluster_id: bucket.workout_cluster_id,
-            workout_cluster_ids: bucket.workout_cluster_ids || [],
-            training_date: bucket.training_date,
-            started_at: bucket.started_at,
-            ended_at: bucket.ended_at,
-            sets: machineSets,
-          }
-        })
-        .filter(Boolean)
-
-      setMachineHistory(prev => ({ ...prev, [machineId]: entries }))
-      setMachineHistoryStatus(prev => ({ ...prev, [machineId]: 'done' }))
+      await machineHistoryQuery.refetch()
     } catch (error) {
       addLog({ level: 'error', event: 'machine_history.failed', message: error?.message || 'Failed to load machine history.' })
-      setMachineHistoryStatus(prev => ({ ...prev, [machineId]: 'error' }))
     }
-  }, [machineHistory, machineHistoryStatus, sets, machines])
+  }, [machineHistoryById])
 
   const trainingBuckets = useMemo(() => buildTrainingBuckets(sets, machines), [sets, machines])
   const resolvedFlags = featureFlagsLoading ? DEFAULT_FLAGS : featureFlags
