@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useLocation, useNavigate } from '@tanstack/react-router'
+import { Link, useLocation, useNavigate } from '@tanstack/react-router'
 import {
   supabase, signUp, signIn, signOut, getSession,
   getPlans, createPlan as dbCreatePlan, updatePlan as dbUpdatePlan, deletePlan as dbDeletePlan,
@@ -4676,9 +4676,7 @@ function DiagnosticsScreen({ user, machines, onBack, onDataRefresh }) {
 function AppNavigation({
   destinations,
   activeScreen,
-  onNavigate,
   layout,
-  onOpenDiagnostics,
 }) {
   const [isOverflowOpen, setIsOverflowOpen] = useState(false)
   const navButtonRefs = useRef([])
@@ -4731,15 +4729,13 @@ function AppNavigation({
         {destinations.map((destination, index) => {
           const active = activeScreen === destination.key
           return (
-            <button
+            <Link
               className={`app-navigation__button ${iconOnly ? 'app-navigation__button--icon-only' : ''}`}
               key={destination.key}
+              to={APP_SCREEN_TO_PATH[destination.key] || APP_SCREEN_TO_PATH.home}
               ref={(node) => { navButtonRefs.current[index] = node }}
               onKeyDown={(event) => onNavKeyDown(event, index)}
-              onClick={() => {
-                setIsOverflowOpen(false)
-                onNavigate(destination.key)
-              }}
+              onClick={() => setIsOverflowOpen(false)}
               aria-label={`Go to ${destination.label}`}
               aria-current={active ? 'page' : undefined}
               style={{
@@ -4760,7 +4756,7 @@ function AppNavigation({
             >
               <span aria-hidden="true" style={{ fontSize: 16 }}>{destination.icon}</span>
               {!iconOnly && <span style={{ fontSize: 12, letterSpacing: 0.2 }}>{destination.label}</span>}
-            </button>
+            </Link>
           )
         })}
         <div className={layout === 'bottom' || layout === 'top' ? 'u-nav-item-grow' : ''} style={{ position: 'relative' }}>
@@ -4803,13 +4799,11 @@ function AppNavigation({
               padding: 6,
               zIndex: 40,
             }}>
-              <button
+              <Link
                 className="app-navigation__menu-item"
+                to={APP_SCREEN_TO_PATH.diagnostics}
                 role="menuitem"
-                onClick={() => {
-                  setIsOverflowOpen(false)
-                  onOpenDiagnostics()
-                }}
+                onClick={() => setIsOverflowOpen(false)}
                 aria-label="Open diagnostics"
                 style={{
                   width: '100%',
@@ -4821,7 +4815,7 @@ function AppNavigation({
                 }}
               >
                 🧰 Diagnostics
-              </button>
+              </Link>
             </div>
           )}
         </div>
@@ -5008,14 +5002,16 @@ export default function App() {
   const fixedOptionMachineTaxonomyEnabled = resolvedFlags.fixedOptionMachineTaxonomyEnabled
   const navigationMode = useNavigationLayoutMode()
   const primaryDestinations = useMemo(() => getPrimaryDestinations(resolvedFlags), [resolvedFlags])
-
-  const navigateToScreen = useCallback((nextScreen) => {
-    const nextPath = APP_SCREEN_TO_PATH[nextScreen] || APP_SCREEN_TO_PATH.home
-    if (nextScreen === 'analysis') {
-      setAnalysisInitialTab('run')
-    }
-    navigate({ to: nextPath })
+  const navigateHome = useCallback(() => navigate({ to: APP_SCREEN_TO_PATH.home }), [navigate])
+  const navigateLog = useCallback(() => navigate({ to: APP_SCREEN_TO_PATH.log }), [navigate])
+  const navigateLibrary = useCallback(() => navigate({ to: APP_SCREEN_TO_PATH.library }), [navigate])
+  const navigateHistory = useCallback(() => navigate({ to: APP_SCREEN_TO_PATH.history }), [navigate])
+  const navigateAnalysis = useCallback(() => {
+    setAnalysisInitialTab('run')
+    navigate({ to: APP_SCREEN_TO_PATH.analysis })
   }, [navigate])
+  const navigatePlans = useCallback(() => navigate({ to: APP_SCREEN_TO_PATH.plans }), [navigate])
+  const navigateDiagnostics = useCallback(() => navigate({ to: APP_SCREEN_TO_PATH.diagnostics }), [navigate])
 
   useEffect(() => {
     if (!featureFlagsLoading) return
@@ -5072,101 +5068,101 @@ export default function App() {
             <AppNavigation
               destinations={primaryDestinations}
               activeScreen={screen}
-              onNavigate={navigateToScreen}
               layout={navigationLayout}
-              onOpenDiagnostics={() => navigateToScreen('diagnostics')}
             />
           </div>
         )}
         <main className={`app-content-slot page-transition ${navigationLayout === 'bottom' && showNavigation ? 'app-content-slot--bottom-nav' : ''}`} aria-label="Primary content">
-          {screen === 'home' && (
-            <HomeScreen
-              pendingSoreness={visiblePendingSoreness}
-              sets={sets}
-              machines={machines}
-              libraryEnabled={libraryEnabled}
-              plansEnabled={plansEnabled}
-              homeDashboardEnabled={homeDashboardEnabled}
-              weightedMuscleProfileWorkloadEnabled={weightedMuscleProfileWorkloadEnabled}
-              dayStartHour={PLAN_DAY_START_HOUR}
-              onLogSets={() => navigateToScreen('log')}
-              onLibrary={() => navigateToScreen('library')}
-              onHistory={() => navigateToScreen('history')}
-              onAnalysis={() => navigateToScreen('analysis')}
-              onPlans={() => navigateToScreen('plans')}
-              onDiagnostics={() => navigateToScreen('diagnostics')}
-              onSorenessSubmit={handleSorenessSubmit}
-              onSorenessDismiss={handleSorenessDismiss}
-              onSignOut={async () => { await signOut(); navigateToScreen('home') }}
-            />
-          )}
-          {screen === 'log' && (
-            <LogSetScreen
-              sets={sets}
-              machines={machines}
-              machineHistory={machineHistory}
-              onLoadMachineHistory={loadMachineHistory}
-              onLogSet={handleLogSet}
-              onDeleteSet={handleDeleteSet}
-              onBack={() => navigateToScreen('home')}
-              onOpenLibrary={() => navigateToScreen('library')}
-              libraryEnabled={libraryEnabled}
-              dayStartHour={PLAN_DAY_START_HOUR}
-              setCentricLoggingEnabled={setCentricLoggingEnabled}
-              favoritesOrderingEnabled={favoritesOrderingEnabled}
-              restTimerEnabled={restTimerEnabled}
-              onSetRestTimerEnabled={setRestTimerEnabled}
-              restTimerSeconds={restTimerSeconds}
-              restTimerLastSetAtMs={restTimerLastSetAtMs}
-            />
-          )}
-          {libraryEnabled && screen === 'library' && (
-            <LibraryScreen
-              machines={machines}
-              onSaveMachine={handleSaveMachine}
-              onDeleteMachine={handleDeleteMachine}
-              onBack={() => navigateToScreen('home')}
-              machineRatingEnabled={machineRatingEnabled}
-              pinnedFavoritesEnabled={pinnedFavoritesEnabled}
-              machineAutofillEnabled={machineAutofillEnabled}
-              fixedOptionMachineTaxonomyEnabled={fixedOptionMachineTaxonomyEnabled}
-            />
-          )}
-          {screen === 'history' && (
-            <HistoryScreen
-              trainingBuckets={trainingBuckets}
-              machines={machines}
-              onBack={() => navigateToScreen('home')}
-              getMuscleColor={mc}
-            />
-          )}
-          {screen === 'analysis' && (
-            <AnalysisScreen
-              machines={machines}
-              machineHistory={machineHistory}
-              onLoadMachineHistory={loadMachineHistory}
-              onBack={() => navigateToScreen('home')}
-              initialTab={analysisInitialTab}
-              analysisOnDemandOnly={analysisOnDemandOnly}
-              trainingBuckets={trainingBuckets}
-              sorenessHistory={sorenessHistory}
-            />
-          )}
-          {screen === 'diagnostics' && (
-            <DiagnosticsScreen
-              user={user}
-              machines={machines}
-              onBack={() => navigateToScreen('home')}
-              onDataRefresh={refreshData}
-            />
-          )}
-          {plansEnabled && screen === 'plans' && (
-            <PlanScreen
-              machines={machines}
-              sets={sets}
-              onBack={() => navigateToScreen('home')}
-            />
-          )}
+          {{
+            home: (
+              <HomeScreen
+                pendingSoreness={visiblePendingSoreness}
+                sets={sets}
+                machines={machines}
+                libraryEnabled={libraryEnabled}
+                plansEnabled={plansEnabled}
+                homeDashboardEnabled={homeDashboardEnabled}
+                weightedMuscleProfileWorkloadEnabled={weightedMuscleProfileWorkloadEnabled}
+                dayStartHour={PLAN_DAY_START_HOUR}
+                onLogSets={navigateLog}
+                onLibrary={navigateLibrary}
+                onHistory={navigateHistory}
+                onAnalysis={navigateAnalysis}
+                onPlans={navigatePlans}
+                onDiagnostics={navigateDiagnostics}
+                onSorenessSubmit={handleSorenessSubmit}
+                onSorenessDismiss={handleSorenessDismiss}
+                onSignOut={async () => { await signOut(); navigateHome() }}
+              />
+            ),
+            log: (
+              <LogSetScreen
+                sets={sets}
+                machines={machines}
+                machineHistory={machineHistory}
+                onLoadMachineHistory={loadMachineHistory}
+                onLogSet={handleLogSet}
+                onDeleteSet={handleDeleteSet}
+                onBack={navigateHome}
+                onOpenLibrary={navigateLibrary}
+                libraryEnabled={libraryEnabled}
+                dayStartHour={PLAN_DAY_START_HOUR}
+                setCentricLoggingEnabled={setCentricLoggingEnabled}
+                favoritesOrderingEnabled={favoritesOrderingEnabled}
+                restTimerEnabled={restTimerEnabled}
+                onSetRestTimerEnabled={setRestTimerEnabled}
+                restTimerSeconds={restTimerSeconds}
+                restTimerLastSetAtMs={restTimerLastSetAtMs}
+              />
+            ),
+            library: libraryEnabled ? (
+              <LibraryScreen
+                machines={machines}
+                onSaveMachine={handleSaveMachine}
+                onDeleteMachine={handleDeleteMachine}
+                onBack={navigateHome}
+                machineRatingEnabled={machineRatingEnabled}
+                pinnedFavoritesEnabled={pinnedFavoritesEnabled}
+                machineAutofillEnabled={machineAutofillEnabled}
+                fixedOptionMachineTaxonomyEnabled={fixedOptionMachineTaxonomyEnabled}
+              />
+            ) : null,
+            history: (
+              <HistoryScreen
+                trainingBuckets={trainingBuckets}
+                machines={machines}
+                onBack={navigateHome}
+                getMuscleColor={mc}
+              />
+            ),
+            analysis: (
+              <AnalysisScreen
+                machines={machines}
+                machineHistory={machineHistory}
+                onLoadMachineHistory={loadMachineHistory}
+                onBack={navigateHome}
+                initialTab={analysisInitialTab}
+                analysisOnDemandOnly={analysisOnDemandOnly}
+                trainingBuckets={trainingBuckets}
+                sorenessHistory={sorenessHistory}
+              />
+            ),
+            diagnostics: (
+              <DiagnosticsScreen
+                user={user}
+                machines={machines}
+                onBack={navigateHome}
+                onDataRefresh={refreshData}
+              />
+            ),
+            plans: plansEnabled ? (
+              <PlanScreen
+                machines={machines}
+                sets={sets}
+                onBack={navigateHome}
+              />
+            ) : null,
+          }[screen] ?? null}
         </main>
       </div>
     </div>
