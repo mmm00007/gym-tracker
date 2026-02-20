@@ -10,7 +10,7 @@ import {
   getAnalysisReports, getAnalysisReport,
 } from './lib/supabase'
 import { API_BASE_URL, pingHealth, getRecommendations, identifyMachine } from './lib/api'
-import { getFeatureFlags, DEFAULT_FLAGS } from './lib/featureFlags'
+import { DEFAULT_FLAGS } from './lib/featureFlags'
 import { queryKeys } from './lib/queryKeys'
 import { addLog, subscribeLogs } from './lib/logs'
 import {
@@ -33,6 +33,7 @@ import {
   useLogSetMutation,
   useSubmitSorenessMutation,
   useUpsertMachineMutation,
+  useFeatureFlagsQuery,
 } from './features/data/hooks'
 import {
   computeWorkloadByMuscleGroup,
@@ -4835,8 +4836,6 @@ function AppNavigation({
 export default function App() {
   const [screen, setScreen] = useState('home')
   const [analysisInitialTab, setAnalysisInitialTab] = useState('run')
-  const [featureFlags, setFeatureFlags] = useState(DEFAULT_FLAGS)
-  const [featureFlagsLoading, setFeatureFlagsLoading] = useState(true)
   const [catalogBootstrapComplete, setCatalogBootstrapComplete] = useState(false)
   const [restTimerEnabled, setRestTimerEnabled] = useState(() => {
     if (typeof window === 'undefined') return false
@@ -4868,31 +4867,8 @@ export default function App() {
   const authUserQuery = useCurrentUserQuery()
   const userLoading = authUserQuery.status === 'pending'
   const user = authUserQuery.data ?? null
-
-  useEffect(() => {
-    if (userLoading) return
-    let active = true
-
-    const loadFlags = async () => {
-      setFeatureFlagsLoading(true)
-      try {
-        const resolvedFlags = await getFeatureFlags()
-        if (!active) return
-        setFeatureFlags(resolvedFlags)
-      } catch (error) {
-        if (!active) return
-        addLog({ level: 'warn', event: 'feature_flags.load_failed', message: error?.message || 'Falling back to default feature flags.' })
-        setFeatureFlags(DEFAULT_FLAGS)
-      } finally {
-        if (active) setFeatureFlagsLoading(false)
-      }
-    }
-
-    loadFlags()
-    return () => {
-      active = false
-    }
-  }, [userLoading])
+  const featureFlagsQuery = useFeatureFlagsQuery({ enabled: !userLoading })
+  const featureFlagsLoading = featureFlagsQuery.status === 'pending'
 
   const userId = user?.id
 
@@ -5073,7 +5049,7 @@ export default function App() {
   }, [machineHistoryById])
 
   const trainingBuckets = useMemo(() => buildTrainingBuckets(sets, machines), [sets, machines])
-  const resolvedFlags = featureFlagsLoading ? DEFAULT_FLAGS : featureFlags
+  const resolvedFlags = featureFlagsQuery.data ?? DEFAULT_FLAGS
   const setCentricLoggingEnabled = resolvedFlags.setCentricLogging
   const libraryEnabled = resolvedFlags.libraryScreenEnabled
   const analysisOnDemandOnly = resolvedFlags.analysisOnDemandOnly
