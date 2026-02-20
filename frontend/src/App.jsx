@@ -6,7 +6,6 @@ import {
   getPlanDays, upsertPlanDay as dbUpsertPlanDay, deletePlanDay as dbDeletePlanDay,
   getPlanItems, upsertPlanItem as dbUpsertPlanItem, deletePlanItem as dbDeletePlanItem,
   getTodayPlanSuggestions, getEquipmentFavorites,
-  bootstrapDefaultEquipmentCatalog,
   getAnalysisReports, getAnalysisReport,
 } from './lib/supabase'
 import { API_BASE_URL, pingHealth, getRecommendations, identifyMachine } from './lib/api'
@@ -23,19 +22,18 @@ import Accordion from './components/Accordion'
 import HistoryScreen from './screens/HistoryScreen'
 import MachineCard from './components/machines/MachineCard'
 import {
-  useCurrentUserQuery,
-  useMachinesQuery,
-  useSetsQuery,
-  useRecentSorenessQuery,
-  usePendingSorenessQuery,
   useDeleteMachineMutation,
   useDeleteSetMutation,
   useLogSetMutation,
   useSubmitSorenessMutation,
   useUpsertMachineMutation,
-  useFeatureFlagsQuery,
   useMachineHistoryQueries,
 } from './features/data/hooks'
+import {
+  useAppData,
+  useCatalogBootstrap,
+  useRestTimer,
+} from './features/app/hooks'
 import {
   computeWorkloadByMuscleGroup,
   computeWeeklyConsistency,
@@ -57,7 +55,6 @@ const fmtTime = (d) => new Date(d).toLocaleTimeString('en-GB', { hour: '2-digit'
 const fmtDur = (ms) => { const m = Math.floor(ms / 60000); return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m` }
 const fmtTimer = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 const PLAN_DAY_START_HOUR = 4
-const REST_TIMER_ENABLED_STORAGE_KEY = 'gym-tracker.rest-timer-enabled'
 
 const getLocalDateKey = (date) => {
   const year = date.getFullYear()
@@ -4836,74 +4833,33 @@ function AppNavigation({
 export default function App() {
   const [screen, setScreen] = useState('home')
   const [analysisInitialTab, setAnalysisInitialTab] = useState('run')
-  const [catalogBootstrapComplete, setCatalogBootstrapComplete] = useState(false)
-  const [restTimerEnabled, setRestTimerEnabled] = useState(() => {
-    if (typeof window === 'undefined') return false
-    return window.localStorage.getItem(REST_TIMER_ENABLED_STORAGE_KEY) === 'true'
-  })
-  const [restTimerLastSetAtMs, setRestTimerLastSetAtMs] = useState(null)
-  const [restTimerSeconds, setRestTimerSeconds] = useState(0)
   const [dismissedSorenessBucketIds, setDismissedSorenessBucketIds] = useState(() => new Set())
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    window.localStorage.setItem(REST_TIMER_ENABLED_STORAGE_KEY, String(restTimerEnabled))
-  }, [restTimerEnabled])
-
-  useEffect(() => {
-    const restTimerUiActive = restTimerEnabled && screen === 'log'
-    if (!restTimerLastSetAtMs || !restTimerUiActive) {
-      setRestTimerSeconds(0)
-      return undefined
-    }
-    const tick = () => {
-      setRestTimerSeconds(Math.max(0, Math.floor((Date.now() - restTimerLastSetAtMs) / 1000)))
-    }
-    tick()
-    const timer = setInterval(tick, 1000)
-    return () => clearInterval(timer)
-  }, [restTimerEnabled, restTimerLastSetAtMs, screen])
-
   const queryClient = useQueryClient()
-  const authUserQuery = useCurrentUserQuery()
-  const userLoading = authUserQuery.status === 'pending'
-  const user = authUserQuery.data ?? null
-  const featureFlagsQuery = useFeatureFlagsQuery({ enabled: !userLoading })
+
+  const { catalogBootstrapComplete } = useCatalogBootstrap()
+  const {
+    authUserQuery,
+    userLoading,
+    user,
+    userId,
+    featureFlagsQuery,
+    machinesQuery,
+    setsQuery,
+    sorenessHistoryQuery,
+    pendingSorenessQuery,
+  } = useAppData({ catalogBootstrapComplete })
   const featureFlagsLoading = featureFlagsQuery.status === 'pending'
 
-  const userId = user?.id
-
-  useEffect(() => {
-    if (!userId) {
-      setCatalogBootstrapComplete(false)
-      return undefined
-    }
-
-    let cancelled = false
-    setCatalogBootstrapComplete(false)
-
-    const seedCatalog = async () => {
-      try {
-        await bootstrapDefaultEquipmentCatalog()
-      } catch (seedError) {
-        addLog({ level: 'warn', event: 'catalog.seed_failed', message: seedError?.message || 'Default catalog seed failed.' })
-      } finally {
-        if (!cancelled) setCatalogBootstrapComplete(true)
-      }
-    }
-
-    seedCatalog()
-    return () => {
-      cancelled = true
-    }
-  }, [userId])
-
-  const machinesQuery = useMachinesQuery(userId, {
-    enabled: Boolean(userId) && catalogBootstrapComplete,
+  const {
+    restTimerEnabled,
+    setRestTimerEnabled,
+    restTimerLastSetAtMs,
+    setRestTimerLastSetAtMs,
+    restTimerSeconds,
+  } = useRestTimer({
+    screen,
+    sets: setsQuery.data ?? [],
   })
-  const setsQuery = useSetsQuery(userId)
-  const sorenessHistoryQuery = useRecentSorenessQuery(userId)
-  const pendingSorenessQuery = usePendingSorenessQuery(userId)
   const machines = machinesQuery.data ?? []
   const sets = setsQuery.data ?? []
   const sorenessHistory = sorenessHistoryQuery.data ?? []
@@ -4974,19 +4930,6 @@ export default function App() {
   const upsertMachineMutation = useUpsertMachineMutation(userId)
   const deleteMachineMutation = useDeleteMachineMutation(userId)
   const submitSorenessMutation = useSubmitSorenessMutation(userId)
-
-  useEffect(() => {
-    if (!sets.length) {
-      setRestTimerLastSetAtMs(null)
-      return
-    }
-    const latestSetTimestamp = sets.reduce((latest, set) => {
-      const loggedAt = new Date(set.logged_at).getTime()
-      if (Number.isNaN(loggedAt)) return latest
-      return loggedAt > latest ? loggedAt : latest
-    }, 0)
-    setRestTimerLastSetAtMs((prev) => (prev === latestSetTimestamp ? prev : latestSetTimestamp || null))
-  }, [sets])
 
   // ─── Actions ─────────────────────────────────────────────
   const handleLogSet = async (machineId, reps, weight, duration, rest, setType = 'working') => {
