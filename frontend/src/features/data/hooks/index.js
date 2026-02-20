@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
+import { useEffect, useMemo } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { DEFAULT_FLAGS, getFeatureFlags } from '../../../lib/featureFlags'
 import { queryDefaults, withQueryDefaults } from '../../../lib/queryDefaults'
 import { queryKeys } from '../../../lib/queryKeys'
@@ -13,8 +14,22 @@ import {
 const normalizeArray = (value) => (Array.isArray(value) ? value : [])
 
 export function useCurrentUserQuery(options = {}) {
+  const queryClient = useQueryClient()
+  const authUserQueryKey = useMemo(() => queryKeys.auth.user(), [])
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      queryClient.setQueryData(authUserQueryKey, session?.user || null)
+      queryClient.invalidateQueries({ queryKey: authUserQueryKey })
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [authUserQueryKey, queryClient])
+
   return useQuery({
-    queryKey: queryKeys.auth.user(),
+    queryKey: authUserQueryKey,
     queryFn: async () => {
       const { data, error } = await supabase.auth.getUser()
       if (error) throw error
