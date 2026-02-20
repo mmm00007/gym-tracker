@@ -5018,27 +5018,6 @@ export default function App() {
     addLog({ level: 'info', event: 'feature_flags.defaults_applied', message: 'Using safe default flags until remote flags are loaded.' })
   }, [featureFlagsLoading])
 
-  // ─── Loading / Auth ──────────────────────────────────────
-  if (userLoading) {
-    return (
-      <div className="app-shell">
-        <div className="page-container" style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>Loading...</div>
-        </div>
-      </div>
-    )
-  }
-  if (!user) {
-    return (
-      <div className="app-shell">
-        <div className="page-container">
-          <AuthScreen />
-        </div>
-      </div>
-    )
-  }
-
-  // ─── Screens ─────────────────────────────────────────────
   const showNavigation = screen !== 'diagnostics'
   const navigationLayoutByMode = {
     phone: 'bottom',
@@ -5128,6 +5107,28 @@ export default function App() {
     visiblePendingSoreness,
     weightedMuscleProfileWorkloadEnabled,
   ])
+
+  // ─── Loading / Auth ──────────────────────────────────────
+  if (userLoading) {
+    return (
+      <div className="app-shell">
+        <div className="page-container" style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>Loading...</div>
+        </div>
+      </div>
+    )
+  }
+  if (!user) {
+    return (
+      <div className="app-shell">
+        <div className="page-container">
+          <AuthScreen />
+        </div>
+      </div>
+    )
+  }
+
+  // ─── Screens ─────────────────────────────────────────────
 
   return (
     <div className="app-shell">
