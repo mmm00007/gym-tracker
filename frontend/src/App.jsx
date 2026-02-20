@@ -602,7 +602,7 @@ function MetricCard({ label, value, sub }) {
 
 // ─── Auth Screen ───────────────────────────────────────────
 
-function AuthScreen({ onAuth }) {
+function AuthScreen() {
   const [mode, setMode] = useState('login')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -622,7 +622,6 @@ function AuthScreen({ onAuth }) {
         if (!/^[a-zA-Z0-9_]+$/.test(username.trim())) { setError('Username: letters, numbers, underscores only'); setLoading(false); return }
         await signUp(username, password)
       }
-      onAuth()
     } catch (e) {
       const msg = e.message || ''
       if (msg.includes('Invalid login')) setError('Wrong username or password')
@@ -4427,7 +4426,7 @@ function AnalysisScreen({
 
 // ─── Diagnostics Screen ────────────────────────────────────
 
-function DiagnosticsScreen({ user, machines, onBack, onDataRefresh }) {
+function DiagnosticsScreen({ user, machines, onBack, onRefetchSets }) {
   const [logs, setLogs] = useState([])
   const [healthStatus, setHealthStatus] = useState(null)
   const [authInfo, setAuthInfo] = useState({ state: 'loading', session: null, error: null })
@@ -4512,7 +4511,7 @@ function DiagnosticsScreen({ user, machines, onBack, onDataRefresh }) {
     try {
       const { error } = await supabase.from('sets').insert(rows)
       if (error) throw error
-      await onDataRefresh?.()
+      await onRefetchSets?.()
       setHistoricalSeedStatus({
         state: 'success',
         message: `Added ${rows.length} sets across ${sessionCount} training days over the last ${HISTORICAL_SAMPLE_DAYS} days.`,
@@ -4955,22 +4954,6 @@ export default function App() {
   const deleteMachineMutation = useDeleteMachineMutation(userId)
   const submitSorenessMutation = useSubmitSorenessMutation(userId)
 
-  const loadData = useCallback(async () => {
-    if (!userId) return
-    await Promise.all([
-      machinesQuery.refetch(),
-      setsQuery.refetch(),
-      sorenessHistoryQuery.refetch(),
-      pendingSorenessQuery.refetch(),
-    ])
-  }, [
-    userId,
-    machinesQuery,
-    setsQuery,
-    sorenessHistoryQuery,
-    pendingSorenessQuery,
-  ])
-
   useEffect(() => {
     if (!sets.length) {
       setRestTimerLastSetAtMs(null)
@@ -5103,7 +5086,7 @@ export default function App() {
     return (
       <div className="app-shell">
         <div className="page-container">
-          <AuthScreen onAuth={loadData} />
+          <AuthScreen />
         </div>
       </div>
     )
@@ -5211,7 +5194,7 @@ export default function App() {
               user={user}
               machines={machines}
               onBack={() => setScreen('home')}
-              onDataRefresh={loadData}
+              onRefetchSets={setsQuery.refetch}
             />
           )}
           {plansEnabled && screen === 'plans' && (
