@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Link, useLocation, useNavigate } from '@tanstack/react-router'
+import { Link, Outlet, useLocation, useNavigate } from '@tanstack/react-router'
 import {
   supabase, signUp, signIn, signOut, getSession,
   getPlans, createPlan as dbCreatePlan, updatePlan as dbUpdatePlan, deletePlan as dbDeletePlan,
@@ -20,7 +20,6 @@ import {
   SegmentedButtons,
 } from './components/uiPrimitives'
 import Accordion from './components/Accordion'
-import HistoryScreen from './screens/HistoryScreen'
 import MachineCard from './components/machines/MachineCard'
 import {
   useDeleteMachineMutation,
@@ -423,7 +422,7 @@ const MUSCLE_COLORS = {
   Triceps: '#a8e6cf', Legs: '#88d8b0', Core: '#ffd93d', Glutes: '#c9b1ff',
   Calves: '#6bcb77', Forearms: '#ffa07a', Hamstrings: '#ff8a5c', Quadriceps: '#88d8b0',
 }
-const mc = (m) => MUSCLE_COLORS[m] || '#888'
+export const mc = (m) => MUSCLE_COLORS[m] || '#888'
 
 const SORENESS_LABELS = ['None', 'Mild', 'Moderate', 'Very Sore', 'Extreme']
 const SORENESS_EMOJI = ['😊', '🙂', '😐', '😣', '🤕']
@@ -724,7 +723,7 @@ function SorenessPrompt({ session, muscleGroups, onSubmit, onDismiss }) {
 
 // ─── Home Screen ───────────────────────────────────────────
 
-function HomeScreen({
+export function HomeScreen({
   pendingSoreness,
   sets,
   machines,
@@ -1487,7 +1486,7 @@ function PlanItemEditor({ day, items, machines, loading, error, onSaveItem, onDe
   )
 }
 
-function PlanScreen({ machines, sets, onBack }) {
+export function PlanScreen({ machines, sets, onBack }) {
   const [plans, setPlans] = useState([])
   const [planStatus, setPlanStatus] = useState({ loading: true, error: null })
   const [selectedPlanId, setSelectedPlanId] = useState(null)
@@ -2666,7 +2665,7 @@ function InlineFeedbackPopup({ feedback, onDismiss }) {
   )
 }
 
-function LibraryScreen({
+export function LibraryScreen({
   machines,
   onSaveMachine,
   onDeleteMachine,
@@ -2906,7 +2905,7 @@ function LibraryScreen({
 
 // ─── Log Set Screen ────────────────────────────────────────
 
-function LogSetScreen({
+export function LogSetScreen({
   sets,
   machines,
   machineHistory,
@@ -3743,7 +3742,7 @@ function LogSetScreen({
 
 // ─── Analysis Screen ───────────────────────────────────────
 
-function AnalysisScreen({
+export function AnalysisScreen({
   machines,
   machineHistory,
   onLoadMachineHistory,
@@ -4426,7 +4425,7 @@ function AnalysisScreen({
 
 // ─── Diagnostics Screen ────────────────────────────────────
 
-function DiagnosticsScreen({ user, machines, onBack, onDataRefresh }) {
+export function DiagnosticsScreen({ user, machines, onBack, onDataRefresh }) {
   const [logs, setLogs] = useState([])
   const [healthStatus, setHealthStatus] = useState(null)
   const [authInfo, setAuthInfo] = useState({ state: 'loading', session: null, error: null })
@@ -5018,19 +5017,6 @@ export default function App() {
     addLog({ level: 'info', event: 'feature_flags.defaults_applied', message: 'Using safe default flags until remote flags are loaded.' })
   }, [featureFlagsLoading])
 
-  useEffect(() => {
-    if (featureFlagsLoading || libraryEnabled || screen !== 'library') return
-    addLog({ level: 'warn', event: 'feature_flags.library_fallback', message: 'Library screen disabled; redirecting to home.' })
-    navigate({ to: APP_SCREEN_TO_PATH.home, replace: true })
-  }, [featureFlagsLoading, libraryEnabled, navigate, screen])
-
-
-  useEffect(() => {
-    if (featureFlagsLoading || plansEnabled || screen !== 'plans') return
-    addLog({ level: 'warn', event: 'feature_flags.plans_fallback', message: 'Plans screen disabled; redirecting to home.' })
-    navigate({ to: APP_SCREEN_TO_PATH.home, replace: true })
-  }, [featureFlagsLoading, navigate, plansEnabled, screen])
-
   // ─── Loading / Auth ──────────────────────────────────────
   if (userLoading) {
     return (
@@ -5059,6 +5045,88 @@ export default function App() {
     desktop: 'top',
   }
   const navigationLayout = navigationLayoutByMode[navigationMode] || 'bottom'
+  const routeContext = useMemo(() => ({
+    analysisInitialTab,
+    analysisOnDemandOnly,
+    dayStartHour: PLAN_DAY_START_HOUR,
+    favoritesOrderingEnabled,
+    featureFlagsLoading,
+    fixedOptionMachineTaxonomyEnabled,
+    handleDeleteMachine,
+    handleDeleteSet,
+    handleLogSet,
+    handleSaveMachine,
+    handleSorenessDismiss,
+    handleSorenessSubmit,
+    homeDashboardEnabled,
+    libraryEnabled,
+    loadMachineHistory,
+    machineAutofillEnabled,
+    machineHistory,
+    machineRatingEnabled,
+    machines,
+    navigateAnalysis,
+    navigateDiagnostics,
+    navigateHistory,
+    navigateHome,
+    navigateLibrary,
+    navigateLog,
+    navigatePlans,
+    pendingSoreness: visiblePendingSoreness,
+    pinnedFavoritesEnabled,
+    plansEnabled,
+    refreshData,
+    restTimerEnabled,
+    restTimerLastSetAtMs,
+    restTimerSeconds,
+    setCentricLoggingEnabled,
+    setRestTimerEnabled,
+    sets,
+    sorenessHistory,
+    trainingBuckets,
+    user,
+    weightedMuscleProfileWorkloadEnabled,
+  }), [
+    analysisInitialTab,
+    analysisOnDemandOnly,
+    favoritesOrderingEnabled,
+    featureFlagsLoading,
+    fixedOptionMachineTaxonomyEnabled,
+    handleDeleteMachine,
+    handleDeleteSet,
+    handleLogSet,
+    handleSaveMachine,
+    handleSorenessDismiss,
+    handleSorenessSubmit,
+    homeDashboardEnabled,
+    libraryEnabled,
+    loadMachineHistory,
+    machineAutofillEnabled,
+    machineHistory,
+    machineRatingEnabled,
+    machines,
+    navigateAnalysis,
+    navigateDiagnostics,
+    navigateHistory,
+    navigateHome,
+    navigateLibrary,
+    navigateLog,
+    navigatePlans,
+    pinnedFavoritesEnabled,
+    plansEnabled,
+    refreshData,
+    restTimerEnabled,
+    restTimerLastSetAtMs,
+    restTimerSeconds,
+    setCentricLoggingEnabled,
+    setRestTimerEnabled,
+    sets,
+    sorenessHistory,
+    trainingBuckets,
+    user,
+    visiblePendingSoreness,
+    weightedMuscleProfileWorkloadEnabled,
+  ])
 
   return (
     <div className="app-shell">
@@ -5073,96 +5141,7 @@ export default function App() {
           </div>
         )}
         <main className={`app-content-slot page-transition ${navigationLayout === 'bottom' && showNavigation ? 'app-content-slot--bottom-nav' : ''}`} aria-label="Primary content">
-          {{
-            home: (
-              <HomeScreen
-                pendingSoreness={visiblePendingSoreness}
-                sets={sets}
-                machines={machines}
-                libraryEnabled={libraryEnabled}
-                plansEnabled={plansEnabled}
-                homeDashboardEnabled={homeDashboardEnabled}
-                weightedMuscleProfileWorkloadEnabled={weightedMuscleProfileWorkloadEnabled}
-                dayStartHour={PLAN_DAY_START_HOUR}
-                onLogSets={navigateLog}
-                onLibrary={navigateLibrary}
-                onHistory={navigateHistory}
-                onAnalysis={navigateAnalysis}
-                onPlans={navigatePlans}
-                onDiagnostics={navigateDiagnostics}
-                onSorenessSubmit={handleSorenessSubmit}
-                onSorenessDismiss={handleSorenessDismiss}
-                onSignOut={async () => { await signOut(); navigateHome() }}
-              />
-            ),
-            log: (
-              <LogSetScreen
-                sets={sets}
-                machines={machines}
-                machineHistory={machineHistory}
-                onLoadMachineHistory={loadMachineHistory}
-                onLogSet={handleLogSet}
-                onDeleteSet={handleDeleteSet}
-                onBack={navigateHome}
-                onOpenLibrary={navigateLibrary}
-                libraryEnabled={libraryEnabled}
-                dayStartHour={PLAN_DAY_START_HOUR}
-                setCentricLoggingEnabled={setCentricLoggingEnabled}
-                favoritesOrderingEnabled={favoritesOrderingEnabled}
-                restTimerEnabled={restTimerEnabled}
-                onSetRestTimerEnabled={setRestTimerEnabled}
-                restTimerSeconds={restTimerSeconds}
-                restTimerLastSetAtMs={restTimerLastSetAtMs}
-              />
-            ),
-            library: libraryEnabled ? (
-              <LibraryScreen
-                machines={machines}
-                onSaveMachine={handleSaveMachine}
-                onDeleteMachine={handleDeleteMachine}
-                onBack={navigateHome}
-                machineRatingEnabled={machineRatingEnabled}
-                pinnedFavoritesEnabled={pinnedFavoritesEnabled}
-                machineAutofillEnabled={machineAutofillEnabled}
-                fixedOptionMachineTaxonomyEnabled={fixedOptionMachineTaxonomyEnabled}
-              />
-            ) : null,
-            history: (
-              <HistoryScreen
-                trainingBuckets={trainingBuckets}
-                machines={machines}
-                onBack={navigateHome}
-                getMuscleColor={mc}
-              />
-            ),
-            analysis: (
-              <AnalysisScreen
-                machines={machines}
-                machineHistory={machineHistory}
-                onLoadMachineHistory={loadMachineHistory}
-                onBack={navigateHome}
-                initialTab={analysisInitialTab}
-                analysisOnDemandOnly={analysisOnDemandOnly}
-                trainingBuckets={trainingBuckets}
-                sorenessHistory={sorenessHistory}
-              />
-            ),
-            diagnostics: (
-              <DiagnosticsScreen
-                user={user}
-                machines={machines}
-                onBack={navigateHome}
-                onDataRefresh={refreshData}
-              />
-            ),
-            plans: plansEnabled ? (
-              <PlanScreen
-                machines={machines}
-                sets={sets}
-                onBack={navigateHome}
-              />
-            ) : null,
-          }[screen] ?? null}
+          <Outlet context={routeContext} />
         </main>
       </div>
     </div>
