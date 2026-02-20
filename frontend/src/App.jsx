@@ -4908,10 +4908,17 @@ export default function App() {
   const pendingSoreness = pendingSorenessQuery.data ?? []
 
   const refreshData = useCallback(async () => {
-    await Promise.all([
-      setsQuery.refetch(),
-      pendingSorenessQuery.refetch(),
-    ])
+    await setsQuery.refetch()
+
+    try {
+      await pendingSorenessQuery.refetch()
+    } catch (error) {
+      addLog({
+        level: 'warn',
+        event: 'pending_soreness.refetch_failed',
+        message: error?.message || 'Failed to refresh pending soreness after data update.',
+      })
+    }
   }, [pendingSorenessQuery, setsQuery])
 
   const buildMachineHistoryEntries = useCallback((machineId) => {
