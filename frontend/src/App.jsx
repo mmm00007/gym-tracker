@@ -4992,7 +4992,6 @@ export default function App() {
       restSeconds: rest,
       setType,
     })
-    queryClient.setQueryData(queryKeys.sets.list(userId), (prev = []) => [...prev, s])
     await queryClient.invalidateQueries({ queryKey: ['machines', 'history'] })
     const loggedAtMs = new Date(s.logged_at).getTime()
     setRestTimerLastSetAtMs(Number.isNaN(loggedAtMs) ? Date.now() : loggedAtMs)
@@ -5000,37 +4999,26 @@ export default function App() {
 
   const handleDeleteSet = async (id) => {
     await deleteSetMutation.mutateAsync(id)
-    queryClient.setQueryData(queryKeys.sets.list(userId), (prev = []) => prev.filter((s) => s.id !== id))
     await queryClient.invalidateQueries({ queryKey: ['machines', 'history'] })
   }
 
   const handleSaveMachine = async (machineData) => {
     const saved = await upsertMachineMutation.mutateAsync(machineData)
-    queryClient.setQueryData(queryKeys.machines.list(userId), (prev = []) => {
-      const exists = prev.find(m => m.id === saved.id)
-      return exists ? prev.map(m => m.id === saved.id ? saved : m) : [saved, ...prev]
-    })
     await queryClient.invalidateQueries({ queryKey: ['machines', 'history'] })
     return saved
   }
 
   const handleDeleteMachine = async (id) => {
     await deleteMachineMutation.mutateAsync(id)
-    queryClient.setQueryData(queryKeys.machines.list(userId), (prev = []) => prev.filter((m) => m.id !== id))
     await queryClient.invalidateQueries({ queryKey: ['machines', 'history'] })
   }
 
   const handleSorenessSubmit = async (trainingBucketId, reports) => {
     await submitSorenessMutation.mutateAsync({ trainingBucketId, reports })
-    queryClient.setQueryData(queryKeys.soreness.pending(userId), (prev = []) => (
-      prev.filter((s) => s.training_bucket_id !== trainingBucketId)
-    ))
   }
 
-  const handleSorenessDismiss = (trainingBucketId) => {
-    queryClient.setQueryData(queryKeys.soreness.pending(userId), (prev = []) => (
-      prev.filter((s) => s.training_bucket_id !== trainingBucketId)
-    ))
+  const handleSorenessDismiss = async () => {
+    await queryClient.invalidateQueries({ queryKey: queryKeys.soreness.pending(userId) })
   }
 
   const loadMachineHistory = useCallback(async (machineId) => {
