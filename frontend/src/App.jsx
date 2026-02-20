@@ -11,6 +11,7 @@ import {
 } from './lib/supabase'
 import { API_BASE_URL, pingHealth, getRecommendations, identifyMachine } from './lib/api'
 import { DEFAULT_FLAGS } from './lib/featureFlags'
+import { queryKeys } from './lib/queryKeys'
 import { addLog, subscribeLogs } from './lib/logs'
 import {
   TopAppBar,
@@ -4998,25 +4999,25 @@ export default function App() {
       restSeconds: rest,
       setType,
     })
-    await queryClient.invalidateQueries({ queryKey: ['machines', 'history'] })
+    await queryClient.invalidateQueries({ queryKey: queryKeys.machines.historyPrefix(userId) })
     const loggedAtMs = new Date(s.logged_at).getTime()
     setRestTimerLastSetAtMs(Number.isNaN(loggedAtMs) ? Date.now() : loggedAtMs)
   }
 
   const handleDeleteSet = async (id) => {
     await deleteSetMutation.mutateAsync(id)
-    await queryClient.invalidateQueries({ queryKey: ['machines', 'history'] })
+    await queryClient.invalidateQueries({ queryKey: queryKeys.machines.historyPrefix(userId) })
   }
 
   const handleSaveMachine = async (machineData) => {
     const saved = await upsertMachineMutation.mutateAsync(machineData)
-    await queryClient.invalidateQueries({ queryKey: ['machines', 'history'] })
+    await queryClient.invalidateQueries({ queryKey: queryKeys.machines.historyPrefix(userId) })
     return saved
   }
 
   const handleDeleteMachine = async (id) => {
     await deleteMachineMutation.mutateAsync(id)
-    await queryClient.invalidateQueries({ queryKey: ['machines', 'history'] })
+    await queryClient.invalidateQueries({ queryKey: queryKeys.machines.historyPrefix(userId) })
   }
 
   const handleSorenessSubmit = async (trainingBucketId, reports) => {
