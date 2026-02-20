@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useQueries } from '@tanstack/react-query'
 import {
   supabase, signUp, signIn, signOut, getSession,
   getMachines, upsertMachine, deleteMachine as dbDeleteMachine,
@@ -13,6 +14,7 @@ import {
 } from './lib/supabase'
 import { API_BASE_URL, pingHealth, getRecommendations, identifyMachine } from './lib/api'
 import { getFeatureFlags, DEFAULT_FLAGS } from './lib/featureFlags'
+import { queryKeys } from './lib/queryKeys'
 import { addLog, subscribeLogs } from './lib/logs'
 import {
   TopAppBar,
@@ -4907,30 +4909,87 @@ export default function App() {
     }
   }, [user])
 
+  const userId = user?.id
+
+  const [machinesQuery, setsQuery, sorenessHistoryQuery, pendingSorenessQuery] = useQueries({
+    queries: [
+      {
+        queryKey: queryKeys.machines.list(userId),
+        queryFn: async () => {
+          const data = await getMachines()
+          return Array.isArray(data) ? data : []
+        },
+        enabled: Boolean(userId),
+      },
+      {
+        queryKey: queryKeys.sets.list(userId),
+        queryFn: async () => {
+          const data = await getSets()
+          return Array.isArray(data) ? data : []
+        },
+        enabled: Boolean(userId),
+      },
+      {
+        queryKey: queryKeys.soreness.recent(userId),
+        queryFn: async () => {
+          const data = await getRecentSoreness()
+          return Array.isArray(data) ? data : []
+        },
+        enabled: Boolean(userId),
+      },
+      {
+        queryKey: queryKeys.soreness.pending(userId),
+        queryFn: async () => {
+          const data = await getPendingSoreness()
+          const safeData = Array.isArray(data) ? data : []
+          return safeData.map((entry) => ({
+            ...entry,
+            _sets: Array.isArray(entry?._sets) ? entry._sets : [],
+          }))
+        },
+        enabled: Boolean(userId),
+      },
+    ],
+  })
+
+  useEffect(() => {
+    if (!userId) return
+    bootstrapDefaultEquipmentCatalog().catch((seedError) => {
+      addLog({ level: 'warn', event: 'catalog.seed_failed', message: seedError?.message || 'Default catalog seed failed.' })
+    })
+  }, [userId])
+
+  useEffect(() => {
+    if (machinesQuery.data) setMachines(machinesQuery.data)
+  }, [machinesQuery.data])
+
+  useEffect(() => {
+    if (setsQuery.data) setSets(setsQuery.data)
+  }, [setsQuery.data])
+
+  useEffect(() => {
+    if (sorenessHistoryQuery.data) setSorenessHistory(sorenessHistoryQuery.data)
+  }, [sorenessHistoryQuery.data])
+
+  useEffect(() => {
+    if (pendingSorenessQuery.data) setPendingSoreness(pendingSorenessQuery.data)
+  }, [pendingSorenessQuery.data])
+
   const loadData = useCallback(async () => {
-    if (!user) return
-    try {
-      try {
-        await bootstrapDefaultEquipmentCatalog()
-      } catch (seedError) {
-        addLog({ level: 'warn', event: 'catalog.seed_failed', message: seedError?.message || 'Default catalog seed failed.' })
-      }
-
-      const [m, allSets, recentSoreness] = await Promise.all([getMachines(), getSets(), getRecentSoreness()])
-      setMachines(m)
-      setSets(allSets)
-      setSorenessHistory(recentSoreness || [])
-
-      const pending = await getPendingSoreness()
-      const enriched = pending.map((p) => ({ ...p, _sets: p._sets || [] }))
-      setPendingSoreness(enriched)
-    } catch (e) {
-      addLog({ level: 'error', event: 'data.load_failed', message: e?.message || 'Failed to load data.' })
-      console.error('Load error:', e)
-    }
-  }, [user])
-
-  useEffect(() => { if (user) loadData() }, [user, loadData])
+    if (!userId) return
+    await Promise.all([
+      machinesQuery.refetch(),
+      setsQuery.refetch(),
+      sorenessHistoryQuery.refetch(),
+      pendingSorenessQuery.refetch(),
+    ])
+  }, [
+    userId,
+    machinesQuery,
+    setsQuery,
+    sorenessHistoryQuery,
+    pendingSorenessQuery,
+  ])
 
   useEffect(() => {
     setMachineHistory({})
