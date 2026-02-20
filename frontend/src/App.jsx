@@ -4426,7 +4426,7 @@ function AnalysisScreen({
 
 // ─── Diagnostics Screen ────────────────────────────────────
 
-function DiagnosticsScreen({ user, machines, onBack, onRefetchSets }) {
+function DiagnosticsScreen({ user, machines, onBack, onDataRefresh }) {
   const [logs, setLogs] = useState([])
   const [healthStatus, setHealthStatus] = useState(null)
   const [authInfo, setAuthInfo] = useState({ state: 'loading', session: null, error: null })
@@ -4511,7 +4511,7 @@ function DiagnosticsScreen({ user, machines, onBack, onRefetchSets }) {
     try {
       const { error } = await supabase.from('sets').insert(rows)
       if (error) throw error
-      await onRefetchSets?.()
+      await onDataRefresh?.()
       setHistoricalSeedStatus({
         state: 'success',
         message: `Added ${rows.length} sets across ${sessionCount} training days over the last ${HISTORICAL_SAMPLE_DAYS} days.`,
@@ -4907,6 +4907,13 @@ export default function App() {
   const sorenessHistory = sorenessHistoryQuery.data ?? []
   const pendingSoreness = pendingSorenessQuery.data ?? []
 
+  const refreshData = useCallback(async () => {
+    await Promise.all([
+      setsQuery.refetch(),
+      pendingSorenessQuery.refetch(),
+    ])
+  }, [pendingSorenessQuery, setsQuery])
+
   const buildMachineHistoryEntries = useCallback((machineId) => {
     const buckets = buildTrainingBuckets(sets, machines)
     return buckets
@@ -5194,7 +5201,7 @@ export default function App() {
               user={user}
               machines={machines}
               onBack={() => setScreen('home')}
-              onRefetchSets={setsQuery.refetch}
+              onDataRefresh={refreshData}
             />
           )}
           {plansEnabled && screen === 'plans' && (
