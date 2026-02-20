@@ -2,14 +2,11 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useQueries, useQueryClient } from '@tanstack/react-query'
 import {
   supabase, signUp, signIn, signOut, getSession,
-  getMachines,
-  getSets,
   getPlans, createPlan as dbCreatePlan, updatePlan as dbUpdatePlan, deletePlan as dbDeletePlan,
   getPlanDays, upsertPlanDay as dbUpsertPlanDay, deletePlanDay as dbDeletePlanDay,
   getPlanItems, upsertPlanItem as dbUpsertPlanItem, deletePlanItem as dbDeletePlanItem,
   getTodayPlanSuggestions, getEquipmentFavorites,
   bootstrapDefaultEquipmentCatalog,
-  getPendingSoreness, getRecentSoreness,
   getAnalysisReports, getAnalysisReport,
 } from './lib/supabase'
 import { API_BASE_URL, pingHealth, getRecommendations, identifyMachine } from './lib/api'
@@ -27,6 +24,10 @@ import Accordion from './components/Accordion'
 import HistoryScreen from './screens/HistoryScreen'
 import MachineCard from './components/machines/MachineCard'
 import {
+  useMachinesQuery,
+  useSetsQuery,
+  useRecentSorenessQuery,
+  usePendingSorenessQuery,
   useDeleteMachineMutation,
   useDeleteSetMutation,
   useLogSetMutation,
@@ -4949,46 +4950,12 @@ export default function App() {
     }
   }, [userId])
 
-  const [machinesQuery, setsQuery, sorenessHistoryQuery, pendingSorenessQuery] = useQueries({
-    queries: [
-      {
-        queryKey: queryKeys.machines.list(userId),
-        queryFn: async () => {
-          const data = await getMachines()
-          return Array.isArray(data) ? data : []
-        },
-        enabled: Boolean(userId) && catalogBootstrapComplete,
-      },
-      {
-        queryKey: queryKeys.sets.list(userId),
-        queryFn: async () => {
-          const data = await getSets()
-          return Array.isArray(data) ? data : []
-        },
-        enabled: Boolean(userId),
-      },
-      {
-        queryKey: queryKeys.soreness.recent(userId),
-        queryFn: async () => {
-          const data = await getRecentSoreness()
-          return Array.isArray(data) ? data : []
-        },
-        enabled: Boolean(userId),
-      },
-      {
-        queryKey: queryKeys.soreness.pending(userId),
-        queryFn: async () => {
-          const data = await getPendingSoreness()
-          const safeData = Array.isArray(data) ? data : []
-          return safeData.map((entry) => ({
-            ...entry,
-            _sets: Array.isArray(entry?._sets) ? entry._sets : [],
-          }))
-        },
-        enabled: Boolean(userId),
-      },
-    ],
+  const machinesQuery = useMachinesQuery(userId, {
+    enabled: Boolean(userId) && catalogBootstrapComplete,
   })
+  const setsQuery = useSetsQuery(userId)
+  const sorenessHistoryQuery = useRecentSorenessQuery(userId)
+  const pendingSorenessQuery = usePendingSorenessQuery(userId)
 
   useEffect(() => {
     if (machinesQuery.data) setMachines(machinesQuery.data)
