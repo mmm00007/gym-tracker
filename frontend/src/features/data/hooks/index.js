@@ -16,6 +16,7 @@ import {
   supabase,
   upsertMachine,
 } from '../../../lib/supabase'
+export { useMachineHistoryQueries } from './useMachineHistoryQueries'
 
 const normalizeArray = (value) => (Array.isArray(value) ? value : [])
 const LOG_SET_OPTIMISTIC_UPDATES_ENABLED = false
