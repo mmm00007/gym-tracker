@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { useLocation, useNavigate } from '@tanstack/react-router'
 import {
   supabase, signUp, signIn, signOut, getSession,
   getPlans, createPlan as dbCreatePlan, updatePlan as dbUpdatePlan, deletePlan as dbDeletePlan,
@@ -47,6 +48,7 @@ import {
   computeDayAdherence,
   computeWeekAdherence,
 } from './lib/adherence'
+import { APP_PATH_TO_SCREEN, APP_SCREEN_TO_PATH } from './app/routeConfig'
 
 // ─── Helpers ───────────────────────────────────────────────
 const fmt = (d) => new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
@@ -4831,7 +4833,9 @@ function AppNavigation({
 // ─── Main App ──────────────────────────────────────────────
 
 export default function App() {
-  const [screen, setScreen] = useState('home')
+  const navigate = useNavigate()
+  const location = useLocation()
+  const screen = APP_PATH_TO_SCREEN[location.pathname] || 'home'
   const [analysisInitialTab, setAnalysisInitialTab] = useState('run')
   const [dismissedSorenessBucketIds, setDismissedSorenessBucketIds] = useState(() => new Set())
   const queryClient = useQueryClient()
@@ -5006,11 +5010,12 @@ export default function App() {
   const primaryDestinations = useMemo(() => getPrimaryDestinations(resolvedFlags), [resolvedFlags])
 
   const navigateToScreen = useCallback((nextScreen) => {
+    const nextPath = APP_SCREEN_TO_PATH[nextScreen] || APP_SCREEN_TO_PATH.home
     if (nextScreen === 'analysis') {
       setAnalysisInitialTab('run')
     }
-    setScreen(nextScreen)
-  }, [])
+    navigate({ to: nextPath })
+  }, [navigate])
 
   useEffect(() => {
     if (!featureFlagsLoading) return
@@ -5020,15 +5025,15 @@ export default function App() {
   useEffect(() => {
     if (featureFlagsLoading || libraryEnabled || screen !== 'library') return
     addLog({ level: 'warn', event: 'feature_flags.library_fallback', message: 'Library screen disabled; redirecting to home.' })
-    setScreen('home')
-  }, [featureFlagsLoading, libraryEnabled, screen])
+    navigate({ to: APP_SCREEN_TO_PATH.home })
+  }, [featureFlagsLoading, libraryEnabled, navigate, screen])
 
 
   useEffect(() => {
     if (featureFlagsLoading || plansEnabled || screen !== 'plans') return
     addLog({ level: 'warn', event: 'feature_flags.plans_fallback', message: 'Plans screen disabled; redirecting to home.' })
-    setScreen('home')
-  }, [featureFlagsLoading, plansEnabled, screen])
+    navigate({ to: APP_SCREEN_TO_PATH.home })
+  }, [featureFlagsLoading, navigate, plansEnabled, screen])
 
   // ─── Loading / Auth ──────────────────────────────────────
   if (userLoading) {
@@ -5069,7 +5074,7 @@ export default function App() {
               activeScreen={screen}
               onNavigate={navigateToScreen}
               layout={navigationLayout}
-              onOpenDiagnostics={() => setScreen('diagnostics')}
+              onOpenDiagnostics={() => navigateToScreen('diagnostics')}
             />
           </div>
         )}
@@ -5089,10 +5094,10 @@ export default function App() {
               onHistory={() => navigateToScreen('history')}
               onAnalysis={() => navigateToScreen('analysis')}
               onPlans={() => navigateToScreen('plans')}
-              onDiagnostics={() => setScreen('diagnostics')}
+              onDiagnostics={() => navigateToScreen('diagnostics')}
               onSorenessSubmit={handleSorenessSubmit}
               onSorenessDismiss={handleSorenessDismiss}
-              onSignOut={async () => { await signOut(); setScreen('home') }}
+              onSignOut={async () => { await signOut(); navigateToScreen('home') }}
             />
           )}
           {screen === 'log' && (
@@ -5103,7 +5108,7 @@ export default function App() {
               onLoadMachineHistory={loadMachineHistory}
               onLogSet={handleLogSet}
               onDeleteSet={handleDeleteSet}
-              onBack={() => setScreen('home')}
+              onBack={() => navigateToScreen('home')}
               onOpenLibrary={() => navigateToScreen('library')}
               libraryEnabled={libraryEnabled}
               dayStartHour={PLAN_DAY_START_HOUR}
@@ -5120,7 +5125,7 @@ export default function App() {
               machines={machines}
               onSaveMachine={handleSaveMachine}
               onDeleteMachine={handleDeleteMachine}
-              onBack={() => setScreen('home')}
+              onBack={() => navigateToScreen('home')}
               machineRatingEnabled={machineRatingEnabled}
               pinnedFavoritesEnabled={pinnedFavoritesEnabled}
               machineAutofillEnabled={machineAutofillEnabled}
@@ -5131,7 +5136,7 @@ export default function App() {
             <HistoryScreen
               trainingBuckets={trainingBuckets}
               machines={machines}
-              onBack={() => setScreen('home')}
+              onBack={() => navigateToScreen('home')}
               getMuscleColor={mc}
             />
           )}
@@ -5140,7 +5145,7 @@ export default function App() {
               machines={machines}
               machineHistory={machineHistory}
               onLoadMachineHistory={loadMachineHistory}
-              onBack={() => setScreen('home')}
+              onBack={() => navigateToScreen('home')}
               initialTab={analysisInitialTab}
               analysisOnDemandOnly={analysisOnDemandOnly}
               trainingBuckets={trainingBuckets}
@@ -5151,7 +5156,7 @@ export default function App() {
             <DiagnosticsScreen
               user={user}
               machines={machines}
-              onBack={() => setScreen('home')}
+              onBack={() => navigateToScreen('home')}
               onDataRefresh={refreshData}
             />
           )}
@@ -5159,7 +5164,7 @@ export default function App() {
             <PlanScreen
               machines={machines}
               sets={sets}
-              onBack={() => setScreen('home')}
+              onBack={() => navigateToScreen('home')}
             />
           )}
         </main>
