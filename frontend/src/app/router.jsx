@@ -29,7 +29,6 @@ export const rootRoute = createRootRoute({
 })
 
 const appRoutes = APP_ROUTE_ENTRIES.map((entry) => createRoute({
-  id: entry.id,
   getParentRoute: () => rootRoute,
   path: entry.path,
   component: ROUTE_COMPONENTS[entry.screen],
