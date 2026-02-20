@@ -11,15 +11,19 @@ export const queryDefaults = {
   },
   machinesList: {
     staleTime: minute * 5,
+    retry: 1,
   },
   setsList: {
     staleTime: minute,
+    retry: 1,
   },
   sorenessPending: {
     staleTime: minute,
+    retry: 1,
   },
   sorenessRecent: {
     staleTime: minute * 2,
+    retry: 1,
   },
   featureFlagsAll: {
     staleTime: minute * 5,
