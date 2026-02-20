@@ -2,6 +2,20 @@
 
 This document defines the query/mutation conventions to keep data behavior consistent while screens move to Router-based route modules.
 
+## Router readiness gate (pre-TanStack Router)
+
+Validated on this branch before starting Router work.
+
+| Checklist item | Status | Validation notes |
+| --- | --- | --- |
+| no `loadData` function remains | ✅ Pass | `rg -n "\bloadData\b"` returns no matches in repo. |
+| no local mirror state for query-backed entities | ❌ Fail | `DiagnosticsScreen` keeps local auth session mirror state via `authInfo`/`setAuthInfo` and a direct `getSession()` effect, while auth is already query-backed elsewhere. |
+| no inline `useQueries` in `App.jsx` | ✅ Pass | `useQueries` exists only in `frontend/src/features/data/hooks/useMachineHistoryQueries.js`; no matches in `frontend/src/App.jsx`. |
+| no raw query key literals | ✅ Pass | `rg -n "queryKey\s*:\s*\[" frontend/src` finds no literal query keys in query definitions; keys are sourced from `queryKeys`. |
+| auth and feature flags are query-driven | ✅ Pass | App data composition uses `useCurrentUserQuery` and `useFeatureFlagsQuery` via `useAppData`, then consumes those query objects in `App.jsx`. |
+
+**Gate outcome:** not yet fully ready for Router migration. Resolve the diagnostics auth mirror state first so all checklist items pass.
+
 ## 1) Query-key policy
 
 - Keep keys centralized in `frontend/src/lib/queryKeys.js`.
