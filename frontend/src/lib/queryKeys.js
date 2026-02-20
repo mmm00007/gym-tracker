@@ -1,0 +1,33 @@
+const resolveUserId = (userOrId) => {
+  if (userOrId && typeof userOrId === 'object') return userOrId.id ?? 'anonymous'
+  return userOrId ?? 'anonymous'
+}
+
+export const auth = {
+  user: () => ['auth', 'user'],
+}
+
+export const machines = {
+  list: (userId) => ['machines', 'list', resolveUserId(userId)],
+}
+
+export const sets = {
+  list: (userId) => ['sets', 'list', resolveUserId(userId)],
+}
+
+export const soreness = {
+  pending: (userId) => ['soreness', 'pending', resolveUserId(userId)],
+  recent: (userId) => ['soreness', 'recent', resolveUserId(userId)],
+}
+
+export const featureFlags = {
+  all: () => ['featureFlags', 'all'],
+}
+
+export const queryKeys = {
+  auth,
+  machines,
+  sets,
+  soreness,
+  featureFlags,
+}
