@@ -14,6 +14,7 @@ import {
 } from './lib/supabase'
 import { API_BASE_URL, pingHealth, getRecommendations, identifyMachine } from './lib/api'
 import { getFeatureFlags, DEFAULT_FLAGS } from './lib/featureFlags'
+import { clearUserScopedQueryCache } from './lib/queryCache'
 import { queryKeys } from './lib/queryKeys'
 import { addLog, subscribeLogs } from './lib/logs'
 import {
@@ -4867,6 +4868,8 @@ export default function App() {
     return () => clearInterval(timer)
   }, [restTimerEnabled, restTimerLastSetAtMs, screen])
 
+  const queryClient = useQueryClient()
+
   // Auth listener
   useEffect(() => {
     let active = true
@@ -4881,14 +4884,18 @@ export default function App() {
       setUser(data?.user || null)
     }
     loadUser()
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       setUser(session?.user || null)
+
+      if (event === 'SIGNED_OUT' || !session?.user) {
+        await clearUserScopedQueryCache(queryClient)
+      }
     })
     return () => {
       active = false
       subscription.unsubscribe()
     }
-  }, [])
+  }, [queryClient])
 
   useEffect(() => {
     if (user === undefined) return
@@ -4916,7 +4923,6 @@ export default function App() {
   }, [user])
 
   const userId = user?.id
-  const queryClient = useQueryClient()
 
   useEffect(() => {
     if (!userId) {
