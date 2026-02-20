@@ -26,7 +26,7 @@ This run validates parity for the TanStack Query integration against the request
 | Duplicate network storms on mount. | pass | `frontend/src/app/queryClient.js`, `frontend/src/lib/queryDefaults.js`, `frontend/src/App.jsx` | Query client applies shared defaults (`staleTime`, `retry`, disabled focus refetch) and mount queries are emitted once per key with user/catalgog gating. |
 | Stale cross-user data after sign-out/sign-in. | pass | `frontend/src/lib/queryCache.js`, `frontend/src/lib/queryKeys.js`, `frontend/src/App.jsx` | User-scoped roots (`machines`, `sets`, `soreness`) are cancelled+removed on sign-out; keys are user-partitioned so follow-up sign-in gets a distinct cache namespace. |
 | Live backend parity smoke (full auth + CRUD execution against Supabase). | blocked | N/A | This environment does not include runnable Supabase credentials/session fixtures for end-to-end auth + data mutation execution. |
-| Frontend build sanity. | pass | `frontend/package.json` | `npm run build` succeeds for current tree. |
+| Frontend build sanity. | blocked | `frontend/package.json` | `npm run build` is not validated in this environment because the command currently fails with `sh: 1: vite: not found`; this parity check remains blocked until build tooling is installed/available. |
 
 ## Execution notes
 - Validation used code-path inspection plus compile-time sanity checks.
