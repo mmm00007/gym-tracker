@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Link, Outlet, useLocation, useNavigate } from '@tanstack/react-router'
+import { AppRouteContextProvider } from './routes/useAppRouteContext'
 import {
   supabase, signUp, signIn, signOut, getSession,
   getPlans, createPlan as dbCreatePlan, updatePlan as dbUpdatePlan, deletePlan as dbDeletePlan,
@@ -5141,7 +5142,9 @@ export default function App() {
           </div>
         )}
         <main className={`app-content-slot page-transition ${navigationLayout === 'bottom' && showNavigation ? 'app-content-slot--bottom-nav' : ''}`} aria-label="Primary content">
-          <Outlet context={routeContext} />
+          <AppRouteContextProvider value={routeContext}>
+            <Outlet />
+          </AppRouteContextProvider>
         </main>
       </div>
     </div>
