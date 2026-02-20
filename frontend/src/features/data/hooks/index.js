@@ -20,6 +20,10 @@ export { useMachineHistoryQueries } from './useMachineHistoryQueries'
 
 const normalizeArray = (value) => (Array.isArray(value) ? value : [])
 const LOG_SET_OPTIMISTIC_UPDATES_ENABLED = false
+const withOperationMeta = (meta, operationName) => ({
+  ...meta,
+  operationName: meta?.operationName || operationName,
+})
 
 const callHandler = (handler, ...args) => {
   if (typeof handler === 'function') {
@@ -31,6 +35,7 @@ const callHandler = (handler, ...args) => {
 export function useCurrentUserQuery(options = {}) {
   const queryClient = useQueryClient()
   const authUserQueryKey = useMemo(() => queryKeys.auth.user(), [])
+  const { meta, ...queryOptions } = options
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -55,11 +60,14 @@ export function useCurrentUserQuery(options = {}) {
       return data?.user || null
     },
     ...withQueryDefaults(queryDefaults.authUser),
-    ...options,
+    ...queryOptions,
+    meta: withOperationMeta(meta, 'auth.getCurrentUser'),
   })
 }
 
 export function useFeatureFlagsQuery(options = {}) {
+  const { meta, ...queryOptions } = options
+
   return useQuery({
     queryKey: queryKeys.featureFlags.all(),
     queryFn: async () => {
@@ -67,41 +75,53 @@ export function useFeatureFlagsQuery(options = {}) {
       return flags || DEFAULT_FLAGS
     },
     ...withQueryDefaults(queryDefaults.featureFlagsAll),
-    ...options,
+    ...queryOptions,
+    meta: withOperationMeta(meta, 'featureFlags.getAll'),
   })
 }
 
 export function useMachinesQuery(userOrId, options = {}) {
+  const { meta, ...queryOptions } = options
+
   return useQuery({
     queryKey: queryKeys.machines.list(userOrId),
     queryFn: async () => normalizeArray(await getMachines()),
     enabled: Boolean(userOrId),
     ...withQueryDefaults(queryDefaults.machinesList),
-    ...options,
+    ...queryOptions,
+    meta: withOperationMeta(meta, 'machines.getAll'),
   })
 }
 
 export function useSetsQuery(userOrId, options = {}) {
+  const { meta, ...queryOptions } = options
+
   return useQuery({
     queryKey: queryKeys.sets.list(userOrId),
     queryFn: async () => normalizeArray(await getSets()),
     enabled: Boolean(userOrId),
     ...withQueryDefaults(queryDefaults.setsList),
-    ...options,
+    ...queryOptions,
+    meta: withOperationMeta(meta, 'sets.getAll'),
   })
 }
 
 export function useRecentSorenessQuery(userOrId, options = {}) {
+  const { meta, ...queryOptions } = options
+
   return useQuery({
     queryKey: queryKeys.soreness.recent(userOrId),
     queryFn: async () => normalizeArray(await getRecentSoreness()),
     enabled: Boolean(userOrId),
     ...withQueryDefaults(queryDefaults.sorenessRecent),
-    ...options,
+    ...queryOptions,
+    meta: withOperationMeta(meta, 'soreness.getRecent'),
   })
 }
 
 export function usePendingSorenessQuery(userOrId, options = {}) {
+  const { meta, ...queryOptions } = options
+
   return useQuery({
     queryKey: queryKeys.soreness.pending(userOrId),
     queryFn: async () => normalizeArray(await getPendingSoreness())
@@ -111,13 +131,14 @@ export function usePendingSorenessQuery(userOrId, options = {}) {
       })),
     enabled: Boolean(userOrId),
     ...withQueryDefaults(queryDefaults.sorenessPending),
-    ...options,
+    ...queryOptions,
+    meta: withOperationMeta(meta, 'soreness.getPending'),
   })
 }
 
 export function useLogSetMutation(userOrId, options = {}) {
   const queryClient = useQueryClient()
-  const { onMutate, onSuccess, onError, ...mutationOptions } = options
+  const { onMutate, onSuccess, onError, meta, ...mutationOptions } = options
 
   return useMutation({
     mutationFn: ({ sessionId = null, machineId, reps, weight, durationSeconds, restSeconds, setType = 'working' }) => (
@@ -141,16 +162,13 @@ export function useLogSetMutation(userOrId, options = {}) {
       callHandler(onError, error, variables, context)
     },
     ...mutationOptions,
-    meta: {
-      ...mutationOptions.meta,
-      operationName: mutationOptions.meta?.operationName || 'logSet',
-    },
+    meta: withOperationMeta(meta, 'sets.logSet'),
   })
 }
 
 export function useDeleteSetMutation(userOrId, options = {}) {
   const queryClient = useQueryClient()
-  const { onSuccess, onError, ...mutationOptions } = options
+  const { onSuccess, onError, meta, ...mutationOptions } = options
 
   return useMutation({
     mutationFn: (setId) => deleteSet(setId),
@@ -165,12 +183,13 @@ export function useDeleteSetMutation(userOrId, options = {}) {
       callHandler(onError, error, variables, context)
     },
     ...mutationOptions,
+    meta: withOperationMeta(meta, 'sets.delete'),
   })
 }
 
 export function useUpsertMachineMutation(userOrId, options = {}) {
   const queryClient = useQueryClient()
-  const { onSuccess, onError, ...mutationOptions } = options
+  const { onSuccess, onError, meta, ...mutationOptions } = options
 
   return useMutation({
     mutationFn: (machineData) => upsertMachine(machineData),
@@ -182,12 +201,13 @@ export function useUpsertMachineMutation(userOrId, options = {}) {
       callHandler(onError, error, variables, context)
     },
     ...mutationOptions,
+    meta: withOperationMeta(meta, 'machines.upsert'),
   })
 }
 
 export function useDeleteMachineMutation(userOrId, options = {}) {
   const queryClient = useQueryClient()
-  const { onSuccess, onError, ...mutationOptions } = options
+  const { onSuccess, onError, meta, ...mutationOptions } = options
 
   return useMutation({
     mutationFn: (machineId) => deleteMachine(machineId),
@@ -199,12 +219,13 @@ export function useDeleteMachineMutation(userOrId, options = {}) {
       callHandler(onError, error, variables, context)
     },
     ...mutationOptions,
+    meta: withOperationMeta(meta, 'machines.delete'),
   })
 }
 
 export function useSubmitSorenessMutation(userOrId, options = {}) {
   const queryClient = useQueryClient()
-  const { onSuccess, onError, ...mutationOptions } = options
+  const { onSuccess, onError, meta, ...mutationOptions } = options
 
   return useMutation({
     mutationFn: ({ trainingBucketId, reports }) => submitSoreness(trainingBucketId, reports),
@@ -219,5 +240,6 @@ export function useSubmitSorenessMutation(userOrId, options = {}) {
       callHandler(onError, error, variables, context)
     },
     ...mutationOptions,
+    meta: withOperationMeta(meta, 'soreness.submit'),
   })
 }
