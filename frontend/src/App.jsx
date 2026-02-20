@@ -4842,6 +4842,7 @@ export default function App() {
   })
   const [restTimerLastSetAtMs, setRestTimerLastSetAtMs] = useState(null)
   const [restTimerSeconds, setRestTimerSeconds] = useState(0)
+  const [dismissedSorenessBucketIds, setDismissedSorenessBucketIds] = useState(() => new Set())
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -4906,6 +4907,24 @@ export default function App() {
   const sets = setsQuery.data ?? []
   const sorenessHistory = sorenessHistoryQuery.data ?? []
   const pendingSoreness = pendingSorenessQuery.data ?? []
+  const visiblePendingSoreness = useMemo(
+    () => pendingSoreness.filter((session) => !dismissedSorenessBucketIds.has(session.training_bucket_id)),
+    [dismissedSorenessBucketIds, pendingSoreness],
+  )
+
+  useEffect(() => {
+    if (!userId) {
+      setDismissedSorenessBucketIds(new Set())
+      return
+    }
+
+    setDismissedSorenessBucketIds((previousDismissed) => {
+      if (!previousDismissed.size) return previousDismissed
+      const pendingBucketIds = new Set(pendingSoreness.map((session) => session.training_bucket_id))
+      const nextDismissed = new Set([...previousDismissed].filter((bucketId) => pendingBucketIds.has(bucketId)))
+      return nextDismissed.size === previousDismissed.size ? previousDismissed : nextDismissed
+    })
+  }, [pendingSoreness, userId])
 
   const refreshData = useCallback(async () => {
     await setsQuery.refetch()
@@ -5017,8 +5036,14 @@ export default function App() {
     await submitSorenessMutation.mutateAsync({ trainingBucketId, reports })
   }
 
-  const handleSorenessDismiss = async () => {
-    await queryClient.invalidateQueries({ queryKey: queryKeys.soreness.pending(userId) })
+  const handleSorenessDismiss = (trainingBucketId) => {
+    if (!trainingBucketId) return
+    setDismissedSorenessBucketIds((previousDismissed) => {
+      if (previousDismissed.has(trainingBucketId)) return previousDismissed
+      const nextDismissed = new Set(previousDismissed)
+      nextDismissed.add(trainingBucketId)
+      return nextDismissed
+    })
   }
 
   const loadMachineHistory = useCallback(async (machineId) => {
@@ -5120,7 +5145,7 @@ export default function App() {
         <main className={`app-content-slot page-transition ${navigationLayout === 'bottom' && showNavigation ? 'app-content-slot--bottom-nav' : ''}`} aria-label="Primary content">
           {screen === 'home' && (
             <HomeScreen
-              pendingSoreness={pendingSoreness}
+              pendingSoreness={visiblePendingSoreness}
               sets={sets}
               machines={machines}
               libraryEnabled={libraryEnabled}
