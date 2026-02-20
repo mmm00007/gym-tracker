@@ -9,6 +9,7 @@ export const auth = {
 
 export const machines = {
   list: (userId) => ['machines', 'list', resolveUserId(userId)],
+  history: (userId, machineId) => ['machines', 'history', resolveUserId(userId), machineId ?? 'unknown'],
 }
 
 export const sets = {
