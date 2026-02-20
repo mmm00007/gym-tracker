@@ -1,4 +1,4 @@
-# TanStack Query Parity Validation (Phase 1)
+# TanStack Query Parity Validation (Manual Pass)
 
 Status legend:
 - `pass`: validated in this run
@@ -6,28 +6,34 @@ Status legend:
 - `blocked`: cannot fully validate in this environment
 
 ## Scope
-This run validates parity for the TanStack Query integration against the requested flows:
-- auth/login/logout
-- machines/sets/history/soreness loading
-- log set / delete set
-- machine CRUD
-- duplicate network behavior on mount
-- stale cross-user cache behavior across sign-out/sign-in
+This pass validates the requested parity coverage from existing QA artifacts/checklists:
+- auth flows
+- machines CRUD
+- set logging/deletion
+- soreness submit/dismiss
+- machine history loading
+- analysis screen loading
+- sign-out cache-clearing behavior for user-scoped TanStack Query data
+
+## Method
+- Reviewed and traced the active TanStack Query data path (`useAppData`, data hooks, mutation invalidations, and per-screen handlers).
+- Verified user-scoped query key partitioning and sign-out cache removal logic.
+- Attempted local frontend dependency install to run runtime checks, but package registry access is blocked in this environment.
 
 ## Results
 
 | Area | Status | Evidence | Notes |
 | --- | --- | --- | --- |
-| Auth login/logout wiring updates user + clears user-scoped query cache on sign-out. | pass | `frontend/src/App.jsx`, `frontend/src/lib/queryCache.js` | Auth state listener sets `user` from session and calls `clearUserScopedQueryCache` for `SIGNED_OUT` or missing user. |
-| User-scoped data load parity (machines/sets/recent soreness/pending soreness). | pass | `frontend/src/App.jsx`, `frontend/src/lib/queryKeys.js` | App issues dedicated TanStack queries keyed by user ID for each dataset, then hydrates local screen state from query results. |
-| Machine history loading parity. | pass | `frontend/src/App.jsx`, `frontend/src/lib/queryKeys.js` | History uses per-machine query keys and deferred fetch (`enabled: false`) with explicit `refetch` via `loadMachineHistory`. |
-| Log set / delete set parity with cache refresh. | pass | `frontend/src/features/data/hooks/index.js`, `frontend/src/App.jsx` | Mutations invalidate sets + soreness pending and machine history is invalidated after handlers complete. |
-| Machine CRUD parity with cache refresh. | pass | `frontend/src/features/data/hooks/index.js`, `frontend/src/App.jsx` | Upsert/delete mutations invalidate machine list and app invalidates machine history queries to keep derived views aligned. |
-| Duplicate network storms on mount. | pass | `frontend/src/app/queryClient.js`, `frontend/src/lib/queryDefaults.js`, `frontend/src/App.jsx` | Query client applies shared defaults (`staleTime`, `retry`, disabled focus refetch) and mount queries are emitted once per key with user/catalgog gating. |
-| Stale cross-user data after sign-out/sign-in. | pass | `frontend/src/lib/queryCache.js`, `frontend/src/lib/queryKeys.js`, `frontend/src/App.jsx` | User-scoped roots (`machines`, `sets`, `soreness`) are cancelled+removed on sign-out; keys are user-partitioned so follow-up sign-in gets a distinct cache namespace. |
-| Live backend parity smoke (full auth + CRUD execution against Supabase). | blocked | N/A | This environment does not include runnable Supabase credentials/session fixtures for end-to-end auth + data mutation execution. |
-| Frontend build sanity. | blocked | `frontend/package.json` | `npm run build` is not validated in this environment because the command currently fails with `sh: 1: vite: not found`; this parity check remains blocked until build tooling is installed/available. |
+| Auth flow wiring (sign-in/session refresh/sign-out state transitions). | pass | `frontend/src/features/data/hooks/index.js`, `frontend/src/features/app/hooks/useAppData.js`, `frontend/src/App.jsx` | Auth listener updates `auth.user`, app uses it as source-of-truth, and unauthenticated state renders `AuthScreen`. |
+| **Sign-out clears user-scoped query cache** (explicit check). | pass | `frontend/src/features/data/hooks/index.js`, `frontend/src/lib/queryCache.js`, `frontend/src/lib/queryKeys.js` | On `SIGNED_OUT` or missing user session, app calls `clearUserScopedQueryCache`, which cancels/removes all `machines`/`sets`/`soreness` roots while preserving non-user roots. |
+| Machines CRUD parity + cache refresh. | pass | `frontend/src/features/data/hooks/index.js`, `frontend/src/App.jsx` | Upsert/delete mutations invalidate machine list; App also invalidates machine-history query prefix after save/delete. |
+| Set logging/deletion parity + cache refresh. | pass | `frontend/src/features/data/hooks/index.js`, `frontend/src/App.jsx` | Log/delete set mutations invalidate sets and pending soreness; App invalidates machine-history prefix after mutation completion. |
+| Soreness submit/dismiss parity. | pass | `frontend/src/features/data/hooks/index.js`, `frontend/src/App.jsx` | Submit mutation invalidates pending+recent soreness; dismiss is local UI state filter keyed by `training_bucket_id`. |
+| Machine history loading parity. | pass | `frontend/src/features/data/hooks/useMachineHistoryQueries.js`, `frontend/src/App.jsx` | History queries are keyed per machine and user, initialized with `enabled: false`, and loaded via explicit `refetch` in `loadMachineHistory`. |
+| Analysis screen loading parity. | pass | `frontend/src/App.jsx` | Navigating to analysis sets default `run` tab and renders `AnalysisScreen` with machines/history loader/training buckets/soreness inputs; on-demand analysis controls are gated by feature flag. |
+| Local runtime smoke (credentialed auth + CRUD execution). | blocked | N/A | No Supabase credentials/session fixtures available in this environment for live manual execution. |
+| Frontend build/runtime command verification. | blocked | `frontend/package.json` | `npm install` is blocked by registry policy (`403 Forbidden`), so local build/dev execution could not be completed. |
 
 ## Execution notes
-- Validation used code-path inspection plus compile-time sanity checks.
-- For full production confidence, run a credentialed E2E smoke (login, set logging, machine create/edit/delete, sign-out/sign-in as second user) in staging.
+- This parity pass confirms the intended TanStack Query behavior and handler wiring for each requested flow via source-of-truth code paths.
+- For production confidence, run a credentialed manual smoke with two distinct users to observe cache namespace separation and post-sign-out data isolation in browser devtools/network logs.
