@@ -4835,6 +4835,7 @@ export default function App() {
   const [machineHistoryStatus, setMachineHistoryStatus] = useState({})
   const [featureFlags, setFeatureFlags] = useState(DEFAULT_FLAGS)
   const [featureFlagsLoading, setFeatureFlagsLoading] = useState(true)
+  const [catalogBootstrapComplete, setCatalogBootstrapComplete] = useState(false)
   const [restTimerEnabled, setRestTimerEnabled] = useState(() => {
     if (typeof window === 'undefined') return false
     return window.localStorage.getItem(REST_TIMER_ENABLED_STORAGE_KEY) === 'true'
@@ -4911,6 +4912,31 @@ export default function App() {
 
   const userId = user?.id
 
+  useEffect(() => {
+    if (!userId) {
+      setCatalogBootstrapComplete(false)
+      return undefined
+    }
+
+    let cancelled = false
+    setCatalogBootstrapComplete(false)
+
+    const seedCatalog = async () => {
+      try {
+        await bootstrapDefaultEquipmentCatalog()
+      } catch (seedError) {
+        addLog({ level: 'warn', event: 'catalog.seed_failed', message: seedError?.message || 'Default catalog seed failed.' })
+      } finally {
+        if (!cancelled) setCatalogBootstrapComplete(true)
+      }
+    }
+
+    seedCatalog()
+    return () => {
+      cancelled = true
+    }
+  }, [userId])
+
   const [machinesQuery, setsQuery, sorenessHistoryQuery, pendingSorenessQuery] = useQueries({
     queries: [
       {
@@ -4919,7 +4945,7 @@ export default function App() {
           const data = await getMachines()
           return Array.isArray(data) ? data : []
         },
-        enabled: Boolean(userId),
+        enabled: Boolean(userId) && catalogBootstrapComplete,
       },
       {
         queryKey: queryKeys.sets.list(userId),
@@ -4951,13 +4977,6 @@ export default function App() {
       },
     ],
   })
-
-  useEffect(() => {
-    if (!userId) return
-    bootstrapDefaultEquipmentCatalog().catch((seedError) => {
-      addLog({ level: 'warn', event: 'catalog.seed_failed', message: seedError?.message || 'Default catalog seed failed.' })
-    })
-  }, [userId])
 
   useEffect(() => {
     if (machinesQuery.data) setMachines(machinesQuery.data)
