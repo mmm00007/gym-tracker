@@ -31,6 +31,8 @@ def test_machine_dto_rejects_media_fields_for_non_machine_equipment() -> None:
         **BASE_MACHINE_PAYLOAD,
         "equipment_type": "freeweight",
         "thumbnails": ["https://cdn.example.com/not-allowed.png"],
+        "instruction_image": None,
+        "source": None,
     }
 
     with pytest.raises(ValidationError):
