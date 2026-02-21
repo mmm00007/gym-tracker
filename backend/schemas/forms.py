@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 from typing_extensions import Annotated
@@ -64,22 +64,54 @@ class GroupedTrainingBucket(BaseModel):
     model_config = ConfigDict(extra="allow")
 
 
+class MachineDTO(BaseModel):
+    id: NonEmptyStr
+    user_id: NonEmptyStr
+    name: NonEmptyStr
+    movement: NonEmptyStr
+    equipment_type: Literal["machine", "freeweight", "bodyweight", "cable", "band", "other"]
+    muscle_groups: list[NonEmptyStr] = Field(min_length=1)
+    thumbnails: list[NonEmptyStr] = Field(default_factory=list)
+    instruction_image: NonEmptyStr | None = None
+    source: NonEmptyStr | None = None
+    notes: str | None = None
+
+    @field_validator("thumbnails", mode="after")
+    @classmethod
+    def validate_media_fields_for_equipment_type(cls, value: list[str], info):
+        equipment_type = info.data.get("equipment_type")
+        if equipment_type != "machine" and value:
+            raise ValueError("thumbnails must be empty unless equipment_type is 'machine'")
+        return value
+
+    @field_validator("instruction_image", "source", mode="after")
+    @classmethod
+    def validate_nullable_media_fields_for_equipment_type(cls, value: str | None, info):
+        equipment_type = info.data.get("equipment_type")
+        if equipment_type != "machine" and value is not None:
+            raise ValueError("instruction_image/source must be null unless equipment_type is 'machine'")
+        return value
+
+
 class SorenessReportEntry(BaseModel):
     model_config = ConfigDict(extra="allow")
+    training_bucket_id: NonEmptyStr
+    muscle_group: NonEmptyStr
+    level: int = Field(ge=0, le=3)
 
 
 class RecommendationRequest(BaseModel):
     # Canonical request payload (see docs/data-contract-lock.md).
     scope: RecommendationScope | None = None
     grouped_training: list[GroupedTrainingBucket] | None = None
-    equipment: dict[str, Any] | None = None
+    equipment: dict[str, MachineDTO] | None = None
     soreness_data: list[SorenessReportEntry] = Field(default_factory=list)
     scope_id: str | None = None
 
     # Backward compatibility for older clients
     current_session: dict[str, Any] | None = None
     past_sessions: list[dict[str, Any]] | None = None
-    machines: dict[str, Any] | None = None
+    machines: dict[str, MachineDTO] | None = None
 
 
 class WeeklyTrendJobRequest(BaseModel):
