@@ -247,3 +247,5 @@ export function useSubmitSorenessMutation(userOrId, options = {}) {
     meta: withOperationMeta(meta, 'soreness.submit'),
   })
 }
+
+export { useTrainingBuckets } from './useTrainingBuckets'

@@ -1,13 +1,16 @@
 import HistoryScreen from '../screens/HistoryScreen'
 import { mc } from '../App'
+import { useTrainingBuckets } from '../features/data/hooks'
 import { useAppRouteContext } from './useAppRouteContext'
 
 export default function HistoryRoute() {
   const {
     machines,
     navigateHome,
-    trainingBuckets,
+    sets,
   } = useAppRouteContext()
+
+  const trainingBuckets = useTrainingBuckets({ sets, machines })
 
   return (
     <HistoryScreen

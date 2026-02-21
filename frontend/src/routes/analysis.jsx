@@ -1,4 +1,5 @@
 import { AnalysisScreen } from '../App'
+import { useTrainingBuckets } from '../features/data/hooks'
 import { useAppRouteContext } from './useAppRouteContext'
 
 export default function AnalysisRoute() {
@@ -8,9 +9,11 @@ export default function AnalysisRoute() {
     machineHistory,
     machines,
     navigateHome,
+    sets,
     sorenessHistory,
-    trainingBuckets,
   } = useAppRouteContext()
+
+  const trainingBuckets = useTrainingBuckets({ sets, machines })
 
   return (
     <AnalysisScreen
