@@ -8,6 +8,93 @@ This document is the single source of truth for payload compatibility after the 
 - **Status:** Locked for Phase 1 rollout
 - **Compatibility goal:** Set-centric ownership and training-bucket grouping are now authoritative, with no legacy migration path.
 
+## Backend canonical DTO contracts (stabilized)
+
+Canonical backend DTOs live in `backend/schemas/forms.py`. Route handlers should reference that module and must not redefine request schema details inline.
+
+### `MachineDTO` (stabilized app payload for `machines`/equipment)
+
+> Canonical shape for machine/equipment payloads exchanged with API-adjacent workflows.
+
+- **Model name:** `MachineDTO` (documented contract for machine/equipment payloads)
+- **Required fields:**
+  - `id: uuid`
+  - `user_id: uuid`
+  - `name: non-empty string`
+  - `movement: non-empty string`
+  - `equipment_type: "machine" | "freeweight" | "bodyweight" | "cable" | "band" | "other"`
+  - `muscle_groups: string[]` (at least one muscle group)
+- **Optional fields:**
+  - `thumbnails: string[]` (default `[]`)
+  - `instruction_image: string | null` (default `null`)
+  - `source: string | null` (default `null`)
+  - `notes: string | null`
+- **Accepted ranges/enums:**
+  - `equipment_type` enum is fixed to the six values above.
+  - For non-`machine` equipment: `thumbnails` must be empty, `instruction_image` must be `null`, and `source` must be `null`.
+- **Backward-compatibility policy:**
+  - Additive-only changes are allowed (new optional fields).
+  - Existing field name/type/semantics are frozen for Phase 1 contract version.
+  - Breaking changes require explicit versioning and a changelog entry.
+
+### `RecommendationRequest` (`schemas.forms.RecommendationRequest`)
+
+- **Model name:** `RecommendationRequest`
+- **Required fields:** none globally required; valid request must provide either canonical grouped payload (`scope` + `grouped_training`) or legacy session payload (`current_session`/`past_sessions`) that is normalized server-side.
+- **Optional fields:**
+  - Canonical: `scope`, `grouped_training`, `equipment`, `soreness_data`, `scope_id`
+  - Backward-compatible legacy: `current_session`, `past_sessions`, `machines`
+- **Accepted ranges/enums:**
+  - `scope.grouping`: `training_day | cluster | training_week`
+  - `scope.included_set_types`: non-empty strings; `[]` normalizes to `["working"]`
+  - `scope.goals`: deduplicated non-empty strings
+  - `soreness_data`: array of soreness entry objects
+- **Backward-compatibility policy:**
+  - Canonical grouped contract is preferred and frozen.
+  - Legacy session fields remain supported during compatibility window and are transformed by `normalize_recommendation_request`.
+  - Removal/rename/type changes of canonical fields require versioning + changelog entry.
+
+### `SorenessReportEntry` (`schemas.forms.SorenessReportEntry`)
+
+- **Model name:** `SorenessReportEntry`
+- **Required fields (stabilized semantic contract):**
+  - `training_bucket_id: string`
+  - `muscle_group: string`
+  - `level: integer`
+- **Optional fields:** additional metadata keys are allowed and preserved.
+- **Accepted ranges/enums:**
+  - `level`: integer scale `0..3` (operational contract used by analysis/reporting)
+  - `training_bucket_id`: training-day key format (for example `training_day:YYYY-MM-DD`)
+- **Backward-compatibility policy:**
+  - Core semantic fields above are frozen.
+  - Extra additive fields are allowed.
+  - Breaking changes to soreness semantics require explicit versioning + changelog entry.
+
+### `RecommendationReportPayload` (stabilized `/api/recommendations` response payload shape)
+
+- **Model name:** `RecommendationReportPayload`
+- **Required fields:**
+  - `summary: string`
+  - `highlights: string[]`
+  - `suggestions: string[]`
+  - `nextSession: string`
+  - `progressNotes: string`
+  - `evidence: EvidenceItem[]`
+  - `report_persisted: boolean` (server-added)
+- **Optional fields:**
+  - `scope_id: uuid` (when validated)
+  - `report_id: uuid` (when persistence succeeds)
+- **Accepted ranges/enums:**
+  - `evidence[].source.grouping`: `training_day | cluster`
+  - `evidence[].source.sample_size`: integer `>= 0`
+  - `evidence[].delta`: number
+- **Backward-compatibility policy:**
+  - Existing top-level response keys are frozen.
+  - New optional keys may be added.
+  - Breaking response-shape changes require explicit API versioning and changelog entry.
+
+---
+
 ## Rollout flags contract
 
 The backend exposes `GET /api/rollout-flags`.

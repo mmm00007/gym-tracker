@@ -221,6 +221,7 @@ async def persist_analysis_report(
 
 @app.post("/api/identify-machine")
 async def identify_machine(req: IdentifyRequest, user_id: str = Depends(get_current_user_id)):
+    # Request DTO contract is defined in schemas/forms.py:IdentifyRequest.
     logger.debug("identify-machine request authorized for user_id=%s", user_id)
 
     base_prompt = """You are a gym equipment expert. Analyze these photos of a gym machine or exercise station.
@@ -335,6 +336,7 @@ def normalize_recommendation_request(req: RecommendationRequest) -> tuple[dict, 
 
 @app.post("/api/recommendations")
 async def get_recommendations(req: RecommendationRequest, user_id: str = Depends(get_current_user_id)):
+    # Request DTO contract is defined in schemas/forms.py:RecommendationRequest.
 
     logger.debug("recommendations request authorized for user_id=%s", user_id)
 
