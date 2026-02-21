@@ -34,7 +34,6 @@ import {
 import {
   useAppData,
   useCatalogBootstrap,
-  useRestTimer,
 } from './features/app/hooks'
 import {
   computeWorkloadByMuscleGroup,
@@ -4306,16 +4305,6 @@ export default function App() {
   } = useAppData({ catalogBootstrapComplete })
   const featureFlagsLoading = featureFlagsQuery.status === 'pending'
 
-  const {
-    restTimerEnabled,
-    setRestTimerEnabled,
-    restTimerLastSetAtMs,
-    setRestTimerLastSetAtMs,
-    restTimerSeconds,
-  } = useRestTimer({
-    isActiveRoute: location.pathname === ROUTE_PATHS.log,
-    sets: setsQuery.data ?? [],
-  })
   const machines = machinesQuery.data ?? []
   const sets = setsQuery.data ?? []
   const sorenessHistory = sorenessHistoryQuery.data ?? []
@@ -4401,8 +4390,7 @@ export default function App() {
       setType,
     })
     await queryClient.invalidateQueries({ queryKey: queryKeys.machines.historyPrefix(userId) })
-    const loggedAtMs = new Date(s.logged_at).getTime()
-    setRestTimerLastSetAtMs(Number.isNaN(loggedAtMs) ? Date.now() : loggedAtMs)
+    return s
   }
 
   const handleDeleteSet = async (id) => {
@@ -4504,11 +4492,7 @@ export default function App() {
     pinnedFavoritesEnabled,
     plansEnabled,
     refreshData,
-    restTimerEnabled,
-    restTimerLastSetAtMs,
-    restTimerSeconds,
     setCentricLoggingEnabled,
-    setRestTimerEnabled,
     sets,
     sorenessHistory,
     trainingBuckets,
@@ -4541,11 +4525,7 @@ export default function App() {
     pinnedFavoritesEnabled,
     plansEnabled,
     refreshData,
-    restTimerEnabled,
-    restTimerLastSetAtMs,
-    restTimerSeconds,
     setCentricLoggingEnabled,
-    setRestTimerEnabled,
     sets,
     sorenessHistory,
     trainingBuckets,
