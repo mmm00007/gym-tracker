@@ -1,4 +1,6 @@
+import { useCallback } from 'react'
 import { LogSetScreen } from '../App'
+import { useRestTimer } from '../features/app/hooks'
 import { useAppRouteContext } from './useAppRouteContext'
 
 export default function LogRoute() {
@@ -13,13 +15,26 @@ export default function LogRoute() {
     navigateLibrary,
     handleDeleteSet,
     handleLogSet,
+    setCentricLoggingEnabled,
+    sets,
+  } = useAppRouteContext()
+
+  const {
     restTimerEnabled,
     restTimerLastSetAtMs,
     restTimerSeconds,
-    setCentricLoggingEnabled,
     setRestTimerEnabled,
+    setRestTimerLastSetAtMs,
+  } = useRestTimer({
+    isActiveRoute: true,
     sets,
-  } = useAppRouteContext()
+  })
+
+  const handleLogSetWithRestTimer = useCallback(async (...args) => {
+    const loggedSet = await handleLogSet(...args)
+    const loggedAtMs = new Date(loggedSet?.logged_at ?? Date.now()).getTime()
+    setRestTimerLastSetAtMs(Number.isNaN(loggedAtMs) ? Date.now() : loggedAtMs)
+  }, [handleLogSet, setRestTimerLastSetAtMs])
 
   return (
     <LogSetScreen
@@ -27,7 +42,7 @@ export default function LogRoute() {
       machines={machines}
       machineHistory={machineHistory}
       onLoadMachineHistory={loadMachineHistory}
-      onLogSet={handleLogSet}
+      onLogSet={handleLogSetWithRestTimer}
       onDeleteSet={handleDeleteSet}
       onBack={navigateHome}
       onOpenLibrary={navigateLibrary}

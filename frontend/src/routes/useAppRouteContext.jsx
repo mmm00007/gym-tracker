@@ -35,11 +35,7 @@ import { createContext, useContext } from 'react'
  * @property {boolean} pinnedFavoritesEnabled
  * @property {boolean} plansEnabled
  * @property {() => Promise<void>} refreshData
- * @property {boolean} restTimerEnabled
- * @property {number | null} restTimerLastSetAtMs
- * @property {number} restTimerSeconds
  * @property {boolean} setCentricLoggingEnabled
- * @property {(enabled: boolean) => void} setRestTimerEnabled
  * @property {Array<unknown>} sets
  * @property {Array<unknown>} sorenessHistory
  * @property {Array<unknown>} trainingBuckets
