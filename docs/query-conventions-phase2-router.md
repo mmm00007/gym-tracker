@@ -16,6 +16,10 @@ Validated on this branch before starting Router work.
 
 **Gate outcome:** ready for Router migration. Continue enforcing the guardrails below on every extracted route.
 
+## Phase 2 router acceptance checklist
+
+- Use `docs/router-phase2-acceptance-checklist.md` as the parity gate before removing legacy screen-based navigation state from `App.jsx`.
+
 ## 1) Query-key policy
 
 - Keep keys centralized in `frontend/src/lib/queryKeys.js`.
