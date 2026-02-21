@@ -3,7 +3,6 @@ import { useAppRouteContext } from './useAppRouteContext'
 
 export default function AnalysisRoute() {
   const {
-    analysisInitialTab,
     analysisOnDemandOnly,
     loadMachineHistory,
     machineHistory,
@@ -19,7 +18,7 @@ export default function AnalysisRoute() {
       machineHistory={machineHistory}
       onLoadMachineHistory={loadMachineHistory}
       onBack={navigateHome}
-      initialTab={analysisInitialTab}
+      initialTab="run"
       analysisOnDemandOnly={analysisOnDemandOnly}
       trainingBuckets={trainingBuckets}
       sorenessHistory={sorenessHistory}
