@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Link, Outlet, useLocation, useNavigate } from '@tanstack/react-router'
+import { Outlet, useLocation, useNavigate } from '@tanstack/react-router'
 import { AppRouteContextProvider } from './routes/useAppRouteContext'
 import {
   supabase, signUp, signIn, signOut, getSession,
@@ -4675,12 +4675,24 @@ export function DiagnosticsScreen({ user, machines, onBack, onDataRefresh }) {
 
 function AppNavigation({
   destinations,
-  activeScreen,
   layout,
 }) {
+  const navigate = useNavigate()
+  const location = useLocation()
   const [isOverflowOpen, setIsOverflowOpen] = useState(false)
   const navButtonRefs = useRef([])
   const iconOnly = layout === 'bottom'
+
+  const isPathActive = useCallback((path) => {
+    if (!path) return false
+    if (path === APP_SCREEN_TO_PATH.home) return location.pathname === path
+    return location.pathname === path || location.pathname.startsWith(`${path}/`)
+  }, [location.pathname])
+
+  const handleNavigateToPath = useCallback((path) => {
+    navigate({ to: path || APP_SCREEN_TO_PATH.home })
+    setIsOverflowOpen(false)
+  }, [navigate])
 
   const focusNavButton = (index) => {
     if (!destinations.length) return
@@ -4727,15 +4739,16 @@ function AppNavigation({
     <nav aria-label="Primary" className={navClasses}>
       <div className={`u-nav-stack ${layout === 'rail' ? 'u-nav-stack--column' : 'u-nav-stack--row'}`}>
         {destinations.map((destination, index) => {
-          const active = activeScreen === destination.key
+          const destinationPath = APP_SCREEN_TO_PATH[destination.key] || APP_SCREEN_TO_PATH.home
+          const active = isPathActive(destinationPath)
           return (
-            <Link
+            <button
+              type="button"
               className={`app-navigation__button ${iconOnly ? 'app-navigation__button--icon-only' : ''}`}
               key={destination.key}
-              to={APP_SCREEN_TO_PATH[destination.key] || APP_SCREEN_TO_PATH.home}
               ref={(node) => { navButtonRefs.current[index] = node }}
               onKeyDown={(event) => onNavKeyDown(event, index)}
-              onClick={() => setIsOverflowOpen(false)}
+              onClick={() => handleNavigateToPath(destinationPath)}
               aria-label={`Go to ${destination.label}`}
               aria-current={active ? 'page' : undefined}
               style={{
@@ -4756,7 +4769,7 @@ function AppNavigation({
             >
               <span aria-hidden="true" style={{ fontSize: 16 }}>{destination.icon}</span>
               {!iconOnly && <span style={{ fontSize: 12, letterSpacing: 0.2 }}>{destination.label}</span>}
-            </Link>
+            </button>
           )
         })}
         <div className={layout === 'bottom' || layout === 'top' ? 'u-nav-item-grow' : ''} style={{ position: 'relative' }}>
@@ -4799,11 +4812,11 @@ function AppNavigation({
               padding: 6,
               zIndex: 40,
             }}>
-              <Link
+              <button
+                type="button"
                 className="app-navigation__menu-item"
-                to={APP_SCREEN_TO_PATH.diagnostics}
                 role="menuitem"
-                onClick={() => setIsOverflowOpen(false)}
+                onClick={() => handleNavigateToPath(APP_SCREEN_TO_PATH.diagnostics)}
                 aria-label="Open diagnostics"
                 style={{
                   width: '100%',
@@ -4815,7 +4828,7 @@ function AppNavigation({
                 }}
               >
                 🧰 Diagnostics
-              </Link>
+              </button>
             </div>
           )}
         </div>
@@ -5137,7 +5150,6 @@ export default function App() {
           <div className={`app-nav-slot app-nav-slot--${navigationLayout}`}>
             <AppNavigation
               destinations={primaryDestinations}
-              activeScreen={screen}
               layout={navigationLayout}
             />
           </div>
