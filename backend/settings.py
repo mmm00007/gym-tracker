@@ -1,8 +1,13 @@
 from functools import lru_cache
 from typing import Annotated
 
-from pydantic import BaseModel, Field, field_validator
+import logging
+
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+
+logger = logging.getLogger(__name__)
 
 
 class SupabaseSettings(BaseModel):
@@ -100,6 +105,52 @@ class AppSettings(BaseSettings):
         if isinstance(value, str):
             return [origin.strip() for origin in value.split(",") if origin.strip()]
         return [origin.strip() for origin in value if str(origin).strip()]
+
+
+    @field_validator(
+        "set_centric_logging",
+        "library_screen_enabled",
+        "analysis_on_demand_only",
+        "plans_enabled",
+        "favorites_ordering_enabled",
+        "home_dashboard_enabled",
+        "machine_rating_enabled",
+        "pinned_favorites_enabled",
+        "machine_autofill_enabled",
+        "weighted_muscle_profile_workload_enabled",
+        "fixed_option_machine_taxonomy_enabled",
+        mode="before",
+    )
+    @classmethod
+    def parse_rollout_flag_bool(cls, value: object, info: ValidationInfo) -> bool:
+        field = cls.model_fields[info.field_name]
+        default = bool(field.default)
+
+        if value is None:
+            return default
+
+        if isinstance(value, bool):
+            return value
+
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if not normalized:
+                logger.warning(
+                    "Invalid empty value for %s; using default %s", field.alias or info.field_name, default
+                )
+                return default
+            if normalized in {"1", "true", "yes", "on"}:
+                return True
+            if normalized in {"0", "false", "no", "off"}:
+                return False
+
+        logger.warning(
+            "Invalid value %r for %s; using default %s",
+            value,
+            field.alias or info.field_name,
+            default,
+        )
+        return default
 
     @field_validator("supabase_url", mode="before")
     @classmethod
