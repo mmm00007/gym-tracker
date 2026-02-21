@@ -16,7 +16,7 @@ Canonical backend DTOs live in `backend/schemas/forms.py`. Route handlers should
 
 > Canonical shape for machine/equipment payloads exchanged with API-adjacent workflows.
 
-- **Model name:** `MachineDTO` (documented contract for machine/equipment payloads)
+- **Model name:** `MachineDTO` (`schemas.forms.MachineDTO`)
 - **Required fields:**
   - `id: uuid`
   - `user_id: uuid`
@@ -36,6 +36,8 @@ Canonical backend DTOs live in `backend/schemas/forms.py`. Route handlers should
   - Additive-only changes are allowed (new optional fields).
   - Existing field name/type/semantics are frozen for Phase 1 contract version.
   - Breaking changes require explicit versioning and a changelog entry.
+
+`RecommendationRequest.equipment` and legacy `RecommendationRequest.machines` are typed as `dict[str, MachineDTO]` so route-level validation uses this canonical DTO.
 
 ### `RecommendationRequest` (`schemas.forms.RecommendationRequest`)
 
