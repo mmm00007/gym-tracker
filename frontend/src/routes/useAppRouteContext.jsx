@@ -16,7 +16,6 @@ import { createContext, useContext } from 'react'
  * @property {(setId: string) => Promise<void>} handleDeleteSet
  * @property {(machine: unknown) => Promise<void>} handleSaveMachine
  * @property {(machineId: string) => Promise<void>} handleDeleteMachine
- * @property {(trainingBucketId: string) => void} handleSorenessDismiss
  * @property {(payload: unknown) => Promise<void>} handleSorenessSubmit
  * @property {boolean} homeDashboardEnabled
  * @property {boolean} libraryEnabled
