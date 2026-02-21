@@ -217,8 +217,6 @@ class AppSettings(BaseSettings):
             missing.append("SUPABASE_URL")
         if not self.supabase_service_role_key:
             missing.append("SUPABASE_SERVICE_ROLE_KEY")
-        if not self.cron_shared_secret:
-            missing.append("CRON_SHARED_SECRET")
         if missing:
             missing_str = ", ".join(missing)
             raise ValueError(f"Missing required settings: {missing_str}")
