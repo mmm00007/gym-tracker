@@ -8,7 +8,7 @@ import { useAppRouteContext } from './useAppRouteContext'
 const HISTORICAL_SAMPLE_DAYS = 90
 const HISTORICAL_SPLIT_TEMPLATES = {
   push: [
-    { keywords: ['chest press', 'bench press'], fallbackMuscles: ['Chest'], startWeight: 35, weeklyIncrement: 1.25, setType: 'top', reps: [8, 8, 7] },
+    { keywords: ['chest press', 'bench press', 'bench'], fallbackMuscles: ['Chest'], startWeight: 35, weeklyIncrement: 1.25, setType: 'top', reps: [8, 8, 7] },
     { keywords: ['incline', 'pec'], fallbackMuscles: ['Chest'], startWeight: 22.5, weeklyIncrement: 1.0, reps: [12, 10, 9] },
     { keywords: ['shoulder press', 'overhead'], fallbackMuscles: ['Shoulders'], startWeight: 20, weeklyIncrement: 1.0, reps: [10, 9, 8] },
     { keywords: ['tricep', 'pushdown'], fallbackMuscles: ['Arms'], startWeight: 18, weeklyIncrement: 0.75, reps: [12, 11, 10] },
