@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 
 const REST_TIMER_ENABLED_STORAGE_KEY = 'gym-tracker.rest-timer-enabled'
 
-export function useRestTimer({ screen, sets, storageKey = REST_TIMER_ENABLED_STORAGE_KEY }) {
+export function useRestTimer({ isActiveRoute, sets, storageKey = REST_TIMER_ENABLED_STORAGE_KEY }) {
   const [restTimerEnabled, setRestTimerEnabled] = useState(() => {
     if (typeof window === 'undefined') return false
     return window.localStorage.getItem(storageKey) === 'true'
@@ -33,7 +33,7 @@ export function useRestTimer({ screen, sets, storageKey = REST_TIMER_ENABLED_STO
   }, [sets])
 
   useEffect(() => {
-    const restTimerUiActive = restTimerEnabled && screen === 'log'
+    const restTimerUiActive = restTimerEnabled && isActiveRoute
     if (!restTimerLastSetAtMs || !restTimerUiActive) {
       setRestTimerSeconds(0)
       return undefined
@@ -46,7 +46,7 @@ export function useRestTimer({ screen, sets, storageKey = REST_TIMER_ENABLED_STO
     tick()
     const timer = setInterval(tick, 1000)
     return () => clearInterval(timer)
-  }, [restTimerEnabled, restTimerLastSetAtMs, screen])
+  }, [isActiveRoute, restTimerEnabled, restTimerLastSetAtMs])
 
   return {
     restTimerEnabled,

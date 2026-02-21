@@ -49,7 +49,6 @@ import {
   computeDayAdherence,
   computeWeekAdherence,
 } from './lib/adherence'
-import { APP_PATH_TO_SCREEN, APP_SCREEN_TO_PATH } from './app/routeConfig'
 
 // ─── Helpers ───────────────────────────────────────────────
 const fmt = (d) => new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
@@ -58,6 +57,16 @@ const fmtTime = (d) => new Date(d).toLocaleTimeString('en-GB', { hour: '2-digit'
 const fmtDur = (ms) => { const m = Math.floor(ms / 60000); return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m` }
 const fmtTimer = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 const PLAN_DAY_START_HOUR = 4
+
+const ROUTE_PATHS = {
+  home: '/',
+  log: '/log',
+  library: '/library',
+  history: '/history',
+  analysis: '/analysis',
+  plans: '/plans',
+  diagnostics: '/diagnostics',
+}
 
 const getLocalDateKey = (date) => {
   const year = date.getFullYear()
@@ -4615,7 +4624,6 @@ export function DiagnosticsScreen({ user, machines, onBack, onDataRefresh }) {
 export default function App() {
   const navigate = useNavigate()
   const location = useLocation()
-  const screen = APP_PATH_TO_SCREEN[location.pathname] || 'home'
   const [analysisInitialTab, setAnalysisInitialTab] = useState('run')
   const [dismissedSorenessBucketIds, setDismissedSorenessBucketIds] = useState(() => new Set())
   const queryClient = useQueryClient()
@@ -4641,7 +4649,7 @@ export default function App() {
     setRestTimerLastSetAtMs,
     restTimerSeconds,
   } = useRestTimer({
-    screen,
+    isActiveRoute: location.pathname === ROUTE_PATHS.log,
     sets: setsQuery.data ?? [],
   })
   const machines = machinesQuery.data ?? []
@@ -4787,23 +4795,23 @@ export default function App() {
   const weightedMuscleProfileWorkloadEnabled = resolvedFlags.weightedMuscleProfileWorkloadEnabled
   const fixedOptionMachineTaxonomyEnabled = resolvedFlags.fixedOptionMachineTaxonomyEnabled
   const primaryDestinations = useMemo(() => getPrimaryDestinations(resolvedFlags), [resolvedFlags])
-  const navigateHome = useCallback(() => navigate({ to: APP_SCREEN_TO_PATH.home }), [navigate])
-  const navigateLog = useCallback(() => navigate({ to: APP_SCREEN_TO_PATH.log }), [navigate])
-  const navigateLibrary = useCallback(() => navigate({ to: APP_SCREEN_TO_PATH.library }), [navigate])
-  const navigateHistory = useCallback(() => navigate({ to: APP_SCREEN_TO_PATH.history }), [navigate])
+  const navigateHome = useCallback(() => navigate({ to: ROUTE_PATHS.home }), [navigate])
+  const navigateLog = useCallback(() => navigate({ to: ROUTE_PATHS.log }), [navigate])
+  const navigateLibrary = useCallback(() => navigate({ to: ROUTE_PATHS.library }), [navigate])
+  const navigateHistory = useCallback(() => navigate({ to: ROUTE_PATHS.history }), [navigate])
   const navigateAnalysis = useCallback(() => {
     setAnalysisInitialTab('run')
-    navigate({ to: APP_SCREEN_TO_PATH.analysis })
+    navigate({ to: ROUTE_PATHS.analysis })
   }, [navigate])
-  const navigatePlans = useCallback(() => navigate({ to: APP_SCREEN_TO_PATH.plans }), [navigate])
-  const navigateDiagnostics = useCallback(() => navigate({ to: APP_SCREEN_TO_PATH.diagnostics }), [navigate])
+  const navigatePlans = useCallback(() => navigate({ to: ROUTE_PATHS.plans }), [navigate])
+  const navigateDiagnostics = useCallback(() => navigate({ to: ROUTE_PATHS.diagnostics }), [navigate])
 
   useEffect(() => {
     if (!featureFlagsLoading) return
     addLog({ level: 'info', event: 'feature_flags.defaults_applied', message: 'Using safe default flags until remote flags are loaded.' })
   }, [featureFlagsLoading])
 
-  const showNavigation = screen !== 'diagnostics'
+  const showNavigation = location.pathname !== ROUTE_PATHS.diagnostics
   const routeContext = useMemo(() => ({
     analysisInitialTab,
     analysisOnDemandOnly,
