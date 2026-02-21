@@ -1,0 +1,447 @@
+{
+  "MachineDTO": {
+    "properties": {
+      "equipment_type": {
+        "enum": [
+          "machine",
+          "freeweight",
+          "bodyweight",
+          "cable",
+          "band",
+          "other"
+        ],
+        "title": "Equipment Type",
+        "type": "string"
+      },
+      "id": {
+        "minLength": 1,
+        "title": "Id",
+        "type": "string"
+      },
+      "instruction_image": {
+        "anyOf": [
+          {
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Instruction Image"
+      },
+      "movement": {
+        "minLength": 1,
+        "title": "Movement",
+        "type": "string"
+      },
+      "muscle_groups": {
+        "items": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "minItems": 1,
+        "title": "Muscle Groups",
+        "type": "array"
+      },
+      "name": {
+        "minLength": 1,
+        "title": "Name",
+        "type": "string"
+      },
+      "notes": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Notes"
+      },
+      "source": {
+        "anyOf": [
+          {
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Source"
+      },
+      "thumbnails": {
+        "items": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "title": "Thumbnails",
+        "type": "array"
+      },
+      "user_id": {
+        "minLength": 1,
+        "title": "User Id",
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "user_id",
+      "name",
+      "movement",
+      "equipment_type",
+      "muscle_groups"
+    ],
+    "title": "MachineDTO",
+    "type": "object"
+  },
+  "RecommendationRequest": {
+    "$defs": {
+      "GroupedTrainingBucket": {
+        "additionalProperties": true,
+        "properties": {},
+        "title": "GroupedTrainingBucket",
+        "type": "object"
+      },
+      "MachineDTO": {
+        "properties": {
+          "equipment_type": {
+            "enum": [
+              "machine",
+              "freeweight",
+              "bodyweight",
+              "cable",
+              "band",
+              "other"
+            ],
+            "title": "Equipment Type",
+            "type": "string"
+          },
+          "id": {
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "instruction_image": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Instruction Image"
+          },
+          "movement": {
+            "minLength": 1,
+            "title": "Movement",
+            "type": "string"
+          },
+          "muscle_groups": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Muscle Groups",
+            "type": "array"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Notes"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source"
+          },
+          "thumbnails": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "title": "Thumbnails",
+            "type": "array"
+          },
+          "user_id": {
+            "minLength": 1,
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "user_id",
+          "name",
+          "movement",
+          "equipment_type",
+          "muscle_groups"
+        ],
+        "title": "MachineDTO",
+        "type": "object"
+      },
+      "RecommendationGrouping": {
+        "enum": [
+          "training_day",
+          "cluster",
+          "training_week"
+        ],
+        "title": "RecommendationGrouping",
+        "type": "string"
+      },
+      "RecommendationScope": {
+        "properties": {
+          "date_end": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Date End"
+          },
+          "date_start": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Date Start"
+          },
+          "goals": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "title": "Goals",
+            "type": "array"
+          },
+          "grouping": {
+            "$ref": "#/$defs/RecommendationGrouping",
+            "default": "training_day"
+          },
+          "included_set_types": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "title": "Included Set Types",
+            "type": "array"
+          },
+          "recommendations": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Recommendations"
+          }
+        },
+        "title": "RecommendationScope",
+        "type": "object"
+      },
+      "SorenessReportEntry": {
+        "additionalProperties": true,
+        "properties": {
+          "level": {
+            "maximum": 3,
+            "minimum": 0,
+            "title": "Level",
+            "type": "integer"
+          },
+          "muscle_group": {
+            "minLength": 1,
+            "title": "Muscle Group",
+            "type": "string"
+          },
+          "training_bucket_id": {
+            "minLength": 1,
+            "title": "Training Bucket Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "training_bucket_id",
+          "muscle_group",
+          "level"
+        ],
+        "title": "SorenessReportEntry",
+        "type": "object"
+      }
+    },
+    "properties": {
+      "current_session": {
+        "anyOf": [
+          {
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Current Session"
+      },
+      "equipment": {
+        "anyOf": [
+          {
+            "additionalProperties": {
+              "$ref": "#/$defs/MachineDTO"
+            },
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Equipment"
+      },
+      "grouped_training": {
+        "anyOf": [
+          {
+            "items": {
+              "$ref": "#/$defs/GroupedTrainingBucket"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Grouped Training"
+      },
+      "machines": {
+        "anyOf": [
+          {
+            "additionalProperties": {
+              "$ref": "#/$defs/MachineDTO"
+            },
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Machines"
+      },
+      "past_sessions": {
+        "anyOf": [
+          {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Past Sessions"
+      },
+      "scope": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/RecommendationScope"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "scope_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Scope Id"
+      },
+      "soreness_data": {
+        "items": {
+          "$ref": "#/$defs/SorenessReportEntry"
+        },
+        "title": "Soreness Data",
+        "type": "array"
+      }
+    },
+    "title": "RecommendationRequest",
+    "type": "object"
+  },
+  "SorenessReportEntry": {
+    "additionalProperties": true,
+    "properties": {
+      "level": {
+        "maximum": 3,
+        "minimum": 0,
+        "title": "Level",
+        "type": "integer"
+      },
+      "muscle_group": {
+        "minLength": 1,
+        "title": "Muscle Group",
+        "type": "string"
+      },
+      "training_bucket_id": {
+        "minLength": 1,
+        "title": "Training Bucket Id",
+        "type": "string"
+      }
+    },
+    "required": [
+      "training_bucket_id",
+      "muscle_group",
+      "level"
+    ],
+    "title": "SorenessReportEntry",
+    "type": "object"
+  }
+}
