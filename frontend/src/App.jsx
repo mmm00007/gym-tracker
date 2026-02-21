@@ -4319,7 +4319,27 @@ export default function App() {
   const machines = machinesQuery.data ?? []
   const sets = setsQuery.data ?? []
   const sorenessHistory = sorenessHistoryQuery.data ?? []
-  const pendingSoreness = pendingSorenessQuery.data ?? []
+  const pendingSoreness = useMemo(() => pendingSorenessQuery.data ?? [], [pendingSorenessQuery.data])
+  const [dismissedSorenessBucketIds, setDismissedSorenessBucketIds] = useState(() => new Set())
+
+  useEffect(() => {
+    if (!user?.id) {
+      setDismissedSorenessBucketIds((previousDismissed) => (previousDismissed.size ? new Set() : previousDismissed))
+      return
+    }
+
+    setDismissedSorenessBucketIds((previousDismissed) => {
+      if (!previousDismissed.size) return previousDismissed
+      const pendingBucketIds = new Set(pendingSoreness.map((session) => session.training_bucket_id))
+      const nextDismissed = new Set([...previousDismissed].filter((bucketId) => pendingBucketIds.has(bucketId)))
+      return nextDismissed.size === previousDismissed.size ? previousDismissed : nextDismissed
+    })
+  }, [pendingSoreness, user?.id])
+
+  const visiblePendingSoreness = useMemo(
+    () => pendingSoreness.filter((session) => !dismissedSorenessBucketIds.has(session.training_bucket_id)),
+    [dismissedSorenessBucketIds, pendingSoreness],
+  )
 
   const refreshData = useCallback(async () => {
     await setsQuery.refetch()
@@ -4405,6 +4425,16 @@ export default function App() {
     await submitSorenessMutation.mutateAsync({ trainingBucketId, reports })
   }
 
+  const handleSorenessDismiss = useCallback((trainingBucketId) => {
+    if (!trainingBucketId) return
+    setDismissedSorenessBucketIds((previousDismissed) => {
+      if (previousDismissed.has(trainingBucketId)) return previousDismissed
+      const nextDismissed = new Set(previousDismissed)
+      nextDismissed.add(trainingBucketId)
+      return nextDismissed
+    })
+  }, [])
+
   const loadMachineHistory = useCallback(async (machineId) => {
     if (!machineId) return
     const machineHistoryQuery = machineHistoryById[machineId]
@@ -4454,6 +4484,7 @@ export default function App() {
     handleDeleteSet,
     handleLogSet,
     handleSaveMachine,
+    handleSorenessDismiss,
     handleSorenessSubmit,
     homeDashboardEnabled,
     libraryEnabled,
@@ -4469,7 +4500,7 @@ export default function App() {
     navigateLibrary,
     navigateLog,
     navigatePlans,
-    pendingSoreness,
+    pendingSoreness: visiblePendingSoreness,
     pinnedFavoritesEnabled,
     plansEnabled,
     refreshData,
@@ -4491,6 +4522,7 @@ export default function App() {
     handleDeleteSet,
     handleLogSet,
     handleSaveMachine,
+    handleSorenessDismiss,
     handleSorenessSubmit,
     homeDashboardEnabled,
     libraryEnabled,
@@ -4518,7 +4550,7 @@ export default function App() {
     sorenessHistory,
     trainingBuckets,
     user,
-    pendingSoreness,
+    visiblePendingSoreness,
     weightedMuscleProfileWorkloadEnabled,
   ])
 
