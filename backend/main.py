@@ -31,8 +31,6 @@ _jwks_client_url: Optional[str] = None
 _last_jwks_refresh = 0.0
 JWKS_REFRESH_SECONDS = 300
 
-ROLLOUT_FLAGS = settings.feature_flags.rollout_flags
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"] if settings.allow_all_origins else settings.allowed_origins,
@@ -723,9 +721,9 @@ async def generate_weekly_trends(req: WeeklyTrendJobRequest, x_cron_secret: Opti
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "model": settings.anthropic_model, "rollout_flags": ROLLOUT_FLAGS}
+    return settings.healthz_response
 
 
 @app.get("/api/rollout-flags")
 async def rollout_flags():
-    return ROLLOUT_FLAGS
+    return settings.feature_flags_response
