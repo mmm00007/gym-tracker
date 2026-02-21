@@ -7,7 +7,6 @@ import { createContext, useContext } from 'react'
  * Keep this surface minimal and add/remove keys intentionally.
  *
  * @typedef {Object} AppRouteContextValue
- * @property {string} analysisInitialTab
  * @property {boolean} analysisOnDemandOnly
  * @property {number} dayStartHour
  * @property {boolean} favoritesOrderingEnabled

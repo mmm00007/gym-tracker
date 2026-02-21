@@ -4290,7 +4290,6 @@ export function AnalysisScreen({
 export default function App() {
   const navigate = useNavigate()
   const location = useLocation()
-  const [analysisInitialTab, setAnalysisInitialTab] = useState('run')
   const [dismissedSorenessBucketIds, setDismissedSorenessBucketIds] = useState(() => new Set())
   const queryClient = useQueryClient()
 
@@ -4465,10 +4464,7 @@ export default function App() {
   const navigateLog = useCallback(() => navigate({ to: ROUTE_PATHS.log }), [navigate])
   const navigateLibrary = useCallback(() => navigate({ to: ROUTE_PATHS.library }), [navigate])
   const navigateHistory = useCallback(() => navigate({ to: ROUTE_PATHS.history }), [navigate])
-  const navigateAnalysis = useCallback(() => {
-    setAnalysisInitialTab('run')
-    navigate({ to: ROUTE_PATHS.analysis })
-  }, [navigate])
+  const navigateAnalysis = useCallback(() => navigate({ to: ROUTE_PATHS.analysis }), [navigate])
   const navigatePlans = useCallback(() => navigate({ to: ROUTE_PATHS.plans }), [navigate])
   const navigateDiagnostics = useCallback(() => navigate({ to: ROUTE_PATHS.diagnostics }), [navigate])
 
@@ -4479,7 +4475,6 @@ export default function App() {
 
   const showNavigation = location.pathname !== ROUTE_PATHS.diagnostics
   const routeContext = useMemo(() => ({
-    analysisInitialTab,
     analysisOnDemandOnly,
     dayStartHour: PLAN_DAY_START_HOUR,
     favoritesOrderingEnabled,
@@ -4519,7 +4514,6 @@ export default function App() {
     user,
     weightedMuscleProfileWorkloadEnabled,
   }), [
-    analysisInitialTab,
     analysisOnDemandOnly,
     favoritesOrderingEnabled,
     fixedOptionMachineTaxonomyEnabled,
