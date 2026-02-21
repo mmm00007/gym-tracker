@@ -334,6 +334,16 @@ def normalize_recommendation_request(req: RecommendationRequest) -> tuple[dict, 
     return scope, grouped, equipment
 
 
+def serialize_equipment_catalog(equipment: dict[str, Any]) -> dict[str, Any]:
+    serialized: dict[str, Any] = {}
+    for machine_id, machine in equipment.items():
+        if hasattr(machine, "model_dump"):
+            serialized[machine_id] = machine.model_dump()
+        else:
+            serialized[machine_id] = machine
+    return serialized
+
+
 @app.post("/api/recommendations")
 async def get_recommendations(req: RecommendationRequest, user_id: str = Depends(get_current_user_id)):
     # Request DTO contract is defined in schemas/forms.py:RecommendationRequest.
@@ -369,6 +379,7 @@ async def get_recommendations(req: RecommendationRequest, user_id: str = Depends
             )
 
     scope, grouped_training, equipment = normalize_recommendation_request(req)
+    serialized_equipment = serialize_equipment_catalog(equipment)
     trimmed_training = trim_history_to_token_budget(grouped_training, settings.max_history_tokens)
 
     soreness_ctx = ""
@@ -393,7 +404,7 @@ GROUPED TRAINING DATA ({len(trimmed_training)} buckets):
 {json.dumps(trimmed_training, indent=2)}
 
 EQUIPMENT CATALOG:
-{json.dumps(equipment, indent=2)}{soreness_ctx}
+{json.dumps(serialized_equipment, indent=2)}{soreness_ctx}
 
 Use the scope fields exactly as constraints. Prioritize explainable, evidence-based insights.
 Treat scope.goals as explicit user priorities and optimize recommendation ranking/order to satisfy those goals first.
