@@ -8,9 +8,9 @@ import {
 import App from '../App'
 import { APP_ROUTE_ENTRIES, APP_SCREEN_TO_PATH } from './routeConfig'
 import { getQueryClient } from './queryClient'
-import { DEFAULT_FLAGS, getFeatureFlags } from '../lib/featureFlags'
-import { queryKeys } from '../lib/queryKeys'
+import { DEFAULT_FLAGS } from '../lib/featureFlags'
 import { addLog } from '../lib/logs'
+import { getFeatureFlagsQueryOptions } from '../features/data/hooks'
 import HomeRoute from '../routes/home'
 import LogRoute from '../routes/log'
 import LibraryRoute from '../routes/library'
@@ -35,13 +35,7 @@ export const rootRoute = createRootRoute({
 
 const loadFeatureFlags = async () => {
   const queryClient = getQueryClient()
-  const flags = await queryClient.ensureQueryData({
-    queryKey: queryKeys.featureFlags.all(),
-    queryFn: async () => {
-      const resolvedFlags = await getFeatureFlags()
-      return resolvedFlags || DEFAULT_FLAGS
-    },
-  })
+  const flags = await queryClient.ensureQueryData(getFeatureFlagsQueryOptions())
 
   return flags || DEFAULT_FLAGS
 }

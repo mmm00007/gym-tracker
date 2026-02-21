@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Outlet, useLocation, useNavigate } from '@tanstack/react-router'
 import { AppRouteContextProvider } from './routes/useAppRouteContext'
 import {
-  supabase, signUp, signIn, signOut, getSession,
+  supabase, signUp, signIn, signOut,
   getPlans, createPlan as dbCreatePlan, updatePlan as dbUpdatePlan, deletePlan as dbDeletePlan,
   getPlanDays, upsertPlanDay as dbUpsertPlanDay, deletePlanDay as dbDeletePlanDay,
   getPlanItems, upsertPlanItem as dbUpsertPlanItem, deletePlanItem as dbDeletePlanItem,
@@ -4429,7 +4429,7 @@ export function AnalysisScreen({
 export function DiagnosticsScreen({ user, machines, onBack, onDataRefresh }) {
   const [logs, setLogs] = useState([])
   const [healthStatus, setHealthStatus] = useState(null)
-  const [authInfo, setAuthInfo] = useState({ state: 'loading', session: null, error: null })
+  const authState = user?.id ? 'authenticated' : 'anonymous'
   const [copyStatus, setCopyStatus] = useState(null)
   const [copyFallback, setCopyFallback] = useState('')
   const [levelFilter, setLevelFilter] = useState('all')
@@ -4439,23 +4439,6 @@ export function DiagnosticsScreen({ user, machines, onBack, onDataRefresh }) {
   useEffect(() => {
     const unsubscribe = subscribeLogs(setLogs)
     return () => unsubscribe()
-  }, [])
-
-  useEffect(() => {
-    let active = true
-    const loadSession = async () => {
-      try {
-        const session = await getSession()
-        if (!active) return
-        setAuthInfo({ state: session ? 'authenticated' : 'anonymous', session, error: null })
-      } catch (error) {
-        if (!active) return
-        addLog({ level: 'error', event: 'auth.session_error', message: error?.message || 'Failed to load session.' })
-        setAuthInfo({ state: 'error', session: null, error })
-      }
-    }
-    loadSession()
-    return () => { active = false }
   }, [])
 
   const handleHealthCheck = async () => {
@@ -4541,8 +4524,7 @@ export function DiagnosticsScreen({ user, machines, onBack, onDataRefresh }) {
     })
   }, [logs, levelFilter, eventFilter])
   const recentLogs = filteredLogs.slice(-20).reverse()
-  const session = authInfo.session
-  const expiresAt = session?.expires_at ? new Date(session.expires_at * 1000).toLocaleString() : 'n/a'
+  const expiresAt = 'n/a'
 
   return (
     <div className="screen-frame">
@@ -4556,15 +4538,9 @@ export function DiagnosticsScreen({ user, machines, onBack, onDataRefresh }) {
       <div style={{ background: 'var(--surface)', borderRadius: 14, padding: 16, border: '1px solid var(--border)', marginBottom: 16 }}>
         <div style={{ fontSize: 11, color: 'var(--text-dim)', letterSpacing: 1, fontFamily: 'var(--font-code)', marginBottom: 6 }}>AUTH STATE</div>
         <div style={{ fontSize: 14, color: 'var(--text)' }}>
-          {authInfo.state === 'loading' && 'Checking session...'}
-          {authInfo.state === 'error' && `Error: ${authInfo.error?.message || 'Unknown'}`}
-          {authInfo.state !== 'loading' && authInfo.state !== 'error' && (
-            <>
-              <div>Status: {authInfo.state}</div>
-              <div>User ID: {user?.id || 'n/a'}</div>
-              <div>Session expires: {expiresAt}</div>
-            </>
-          )}
+          <div>Status: {authState}</div>
+          <div>User ID: {user?.id || 'n/a'}</div>
+          <div>Session expires: {expiresAt}</div>
         </div>
       </div>
 
