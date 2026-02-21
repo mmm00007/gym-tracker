@@ -10,12 +10,12 @@ import time
 from typing import Any, Optional
 from fastapi import FastAPI, HTTPException, Header, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, field_validator
 import httpx
 import jwt
 from jwt import PyJWKClient
 from jwt.exceptions import InvalidTokenError, PyJWKClientError
 
+from schemas.forms import IdentifyRequest, RecommendationRequest, WeeklyTrendJobRequest
 from settings import get_settings
 
 logging.basicConfig(level=logging.INFO)
@@ -219,20 +219,8 @@ async def persist_analysis_report(
     return None
 
 
-# --- Identify Machine ---
-
-class IdentifyRequest(BaseModel):
-    images: list[dict]
-    enrich_with_web_search: bool = False
-
-
 @app.post("/api/identify-machine")
 async def identify_machine(req: IdentifyRequest, user_id: str = Depends(get_current_user_id)):
-    if not req.images or len(req.images) == 0:
-        raise HTTPException(400, "At least one image required")
-    if len(req.images) > 3:
-        raise HTTPException(400, "Maximum 3 images")
-
     logger.debug("identify-machine request authorized for user_id=%s", user_id)
 
     base_prompt = """You are a gym equipment expert. Analyze these photos of a gym machine or exercise station.
@@ -280,8 +268,8 @@ Return ONLY valid JSON (no markdown, no backticks):
             "type": "image",
             "source": {
                 "type": "base64",
-                "media_type": img.get("media_type", "image/jpeg"),
-                "data": img["data"],
+                "media_type": img.media_type,
+                "data": img.data,
             },
         })
     content.append({
@@ -294,52 +282,6 @@ Return ONLY valid JSON (no markdown, no backticks):
         return parse_json_response(text)
     except json.JSONDecodeError:
         raise HTTPException(502, "Failed to parse LLM response")
-
-
-# --- Recommendations ---
-
-class RecommendationScope(BaseModel):
-    grouping: str = "training_day"
-    date_start: Optional[str] = None
-    date_end: Optional[str] = None
-    included_set_types: list[str] = Field(default_factory=lambda: ["working"])
-    goals: list[str] = Field(default_factory=list)
-    recommendations: Optional[str] = None
-
-    @field_validator("included_set_types", "goals", mode="before")
-    @classmethod
-    def normalize_scope_lists(cls, value: Any) -> list[str]:
-        if value is None:
-            return []
-        if not isinstance(value, list):
-            raise ValueError("Must be an array of strings")
-        normalized: list[str] = []
-        for item in value:
-            if item is None:
-                continue
-            text = str(item).strip()
-            if text and text not in normalized:
-                normalized.append(text)
-        return normalized
-
-    @field_validator("included_set_types", mode="after")
-    @classmethod
-    def ensure_default_set_type(cls, value: list[str]) -> list[str]:
-        return value or ["working"]
-
-
-class RecommendationRequest(BaseModel):
-    # Phase 1 canonical payload
-    scope: Optional[RecommendationScope] = None
-    grouped_training: Optional[list[dict]] = None
-    equipment: Optional[dict] = None
-    soreness_data: list[dict] = []
-    scope_id: Optional[str] = None
-
-    # Backward compatibility for older clients
-    current_session: Optional[dict] = None
-    past_sessions: Optional[list[dict]] = None
-    machines: Optional[dict] = None
 
 
 def trim_history_to_token_budget(items: list[dict], budget: int) -> list[dict]:
@@ -358,7 +300,7 @@ def trim_history_to_token_budget(items: list[dict], budget: int) -> list[dict]:
 def normalize_recommendation_request(req: RecommendationRequest) -> tuple[dict, list[dict], dict]:
     if req.scope and req.grouped_training is not None:
         scope = req.scope.model_dump()
-        grouped_training = req.grouped_training
+        grouped_training = [bucket.model_dump() for bucket in req.grouped_training]
         equipment = req.equipment or {}
         return scope, grouped_training, equipment
 
@@ -429,7 +371,10 @@ async def get_recommendations(req: RecommendationRequest, user_id: str = Depends
 
     soreness_ctx = ""
     if req.soreness_data:
-        soreness_ctx = f"\n\nRECENT SORENESS REPORTS:\n{json.dumps(req.soreness_data, indent=2)}"
+        soreness_ctx = (
+            "\n\nRECENT SORENESS REPORTS:\n"
+            f"{json.dumps([entry.model_dump() for entry in req.soreness_data], indent=2)}"
+        )
 
     goals = scope.get("goals", [])
     goals_json = json.dumps(goals, indent=2)
@@ -526,10 +471,6 @@ Return ONLY valid JSON:
         return response
     except json.JSONDecodeError:
         raise HTTPException(502, "Failed to parse LLM response")
-
-
-class WeeklyTrendJobRequest(BaseModel):
-    user_id: Optional[str] = None
 
 
 def _bucket_week_start(training_date: str) -> Optional[str]:
