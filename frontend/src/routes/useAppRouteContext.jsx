@@ -38,7 +38,6 @@ import { createContext, useContext } from 'react'
  * @property {boolean} setCentricLoggingEnabled
  * @property {Array<unknown>} sets
  * @property {Array<unknown>} sorenessHistory
- * @property {Array<unknown>} trainingBuckets
  * @property {unknown} user
  * @property {boolean} weightedMuscleProfileWorkloadEnabled
  */

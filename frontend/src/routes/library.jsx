@@ -6,14 +6,12 @@ export default function LibraryRoute() {
     fixedOptionMachineTaxonomyEnabled,
     handleDeleteMachine,
     handleSaveMachine,
-    libraryEnabled,
     machineAutofillEnabled,
     machineRatingEnabled,
     machines,
     navigateHome,
     pinnedFavoritesEnabled,
   } = useAppRouteContext()
-  if (!libraryEnabled) return null
 
   return (
     <LibraryScreen

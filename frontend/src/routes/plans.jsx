@@ -5,10 +5,8 @@ export default function PlansRoute() {
   const {
     machines,
     navigateHome,
-    plansEnabled,
     sets,
   } = useAppRouteContext()
-  if (!plansEnabled) return null
 
   return (
     <PlanScreen
