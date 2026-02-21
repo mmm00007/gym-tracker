@@ -6,6 +6,10 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 from typing_extensions import Annotated
 
+# CONTRACT FREEZE NOTE:
+# DTOs in this module are the canonical backend API contract for request payloads.
+# Breaking field changes (rename/removal/type tightening) require explicit API versioning
+# and a matching changelog entry in docs/data-contract-lock.md before release.
 
 NonEmptyStr = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
@@ -65,7 +69,7 @@ class SorenessReportEntry(BaseModel):
 
 
 class RecommendationRequest(BaseModel):
-    # Phase 1 canonical payload
+    # Canonical request payload (see docs/data-contract-lock.md).
     scope: RecommendationScope | None = None
     grouped_training: list[GroupedTrainingBucket] | None = None
     equipment: dict[str, Any] | None = None
