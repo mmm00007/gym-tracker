@@ -4319,12 +4319,12 @@ export default function App() {
   const machines = machinesQuery.data ?? []
   const sets = setsQuery.data ?? []
   const sorenessHistory = sorenessHistoryQuery.data ?? []
-  const pendingSoreness = pendingSorenessQuery.data ?? []
+  const pendingSoreness = useMemo(() => pendingSorenessQuery.data ?? [], [pendingSorenessQuery.data])
   const [dismissedSorenessBucketIds, setDismissedSorenessBucketIds] = useState(() => new Set())
 
   useEffect(() => {
     if (!user?.id) {
-      setDismissedSorenessBucketIds(new Set())
+      setDismissedSorenessBucketIds((previousDismissed) => (previousDismissed.size ? new Set() : previousDismissed))
       return
     }
 
