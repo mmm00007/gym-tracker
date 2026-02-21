@@ -37,6 +37,15 @@ class SupabaseSettings(BaseModel):
 
 
 class FeatureFlagSettings(BaseModel):
+    """Rollout flags sourced from:
+
+    SET_CENTRIC_LOGGING, LIBRARY_SCREEN_ENABLED, ANALYSIS_ON_DEMAND_ONLY,
+    PLANS_ENABLED, FAVORITES_ORDERING_ENABLED, HOME_DASHBOARD_ENABLED,
+    MACHINE_RATING_ENABLED, PINNED_FAVORITES_ENABLED,
+    MACHINE_AUTOFILL_ENABLED, WEIGHTED_MUSCLE_PROFILE_WORKLOAD_ENABLED,
+    FIXED_OPTION_MACHINE_TAXONOMY_ENABLED.
+    """
+
     set_centric_logging: bool = True
     library_screen_enabled: bool = True
     analysis_on_demand_only: bool = True
@@ -187,6 +196,18 @@ class AppSettings(BaseSettings):
             weighted_muscle_profile_workload_enabled=self.weighted_muscle_profile_workload_enabled,
             fixed_option_machine_taxonomy_enabled=self.fixed_option_machine_taxonomy_enabled,
         )
+
+    @property
+    def feature_flags_response(self) -> dict[str, bool]:
+        return self.feature_flags.rollout_flags
+
+    @property
+    def healthz_response(self) -> dict[str, str | dict[str, bool]]:
+        return {
+            "status": "ok",
+            "model": self.anthropic_model,
+            "rollout_flags": self.feature_flags_response,
+        }
 
 
 @lru_cache
