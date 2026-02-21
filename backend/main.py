@@ -4,7 +4,6 @@ Only handles LLM calls (Anthropic API) to keep the API key server-side.
 All CRUD goes directly from frontend -> Supabase.
 """
 
-import os
 import json
 import logging
 import time
@@ -17,66 +16,27 @@ import jwt
 from jwt import PyJWKClient
 from jwt.exceptions import InvalidTokenError, PyJWKClientError
 
+from settings import get_settings
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Gym Tracker API")
 
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
-raw_allowed_origins = os.environ.get("ALLOWED_ORIGINS", "http://localhost:5173")
-ALLOWED_ORIGINS = [origin.strip() for origin in raw_allowed_origins.split(",") if origin.strip()]
-ALLOW_ALL_ORIGINS = len(ALLOWED_ORIGINS) == 1 and ALLOWED_ORIGINS[0] == "*"
-ANTHROPIC_MODEL = "claude-sonnet-4-20250514"
-MAX_HISTORY_TOKENS = 4000
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
-SUPABASE_JWT_SECRET = os.environ.get("SUPABASE_JWT_SECRET")
-SUPABASE_JWT_AUDIENCE = os.environ.get("SUPABASE_JWT_AUDIENCE")
-SUPABASE_JWT_ISSUER = os.environ.get("SUPABASE_JWT_ISSUER") or (
-    f"{SUPABASE_URL}/auth/v1" if SUPABASE_URL else None
-)
-SUPABASE_JWKS_URL = os.environ.get("SUPABASE_JWKS_URL") or (
-    f"{SUPABASE_URL}/auth/v1/.well-known/jwks.json" if SUPABASE_URL else None
-)
-SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
-CRON_SHARED_SECRET = os.environ.get("CRON_SHARED_SECRET")
+settings = get_settings()
+supabase_settings = settings.supabase
 
 _jwks_client: Optional[PyJWKClient] = None
 _jwks_client_url: Optional[str] = None
 _last_jwks_refresh = 0.0
 JWKS_REFRESH_SECONDS = 300
 
-
-def read_bool_env(name: str, default: bool = False) -> bool:
-    raw = os.environ.get(name)
-    if raw is None:
-        return default
-    normalized = raw.strip().lower()
-    if normalized in {"1", "true", "yes", "on"}:
-        return True
-    if normalized in {"0", "false", "no", "off"}:
-        return False
-    logger.warning("Invalid boolean value for %s=%r; falling back to %s", name, raw, default)
-    return default
-
-
-ROLLOUT_FLAGS = {
-    "setCentricLogging": read_bool_env("SET_CENTRIC_LOGGING", True),
-    "libraryScreenEnabled": read_bool_env("LIBRARY_SCREEN_ENABLED", True),
-    "analysisOnDemandOnly": read_bool_env("ANALYSIS_ON_DEMAND_ONLY", True),
-    "plansEnabled": read_bool_env("PLANS_ENABLED", True),
-    "favoritesOrderingEnabled": read_bool_env("FAVORITES_ORDERING_ENABLED", True),
-    "homeDashboardEnabled": read_bool_env("HOME_DASHBOARD_ENABLED", True),
-    "machineRatingEnabled": read_bool_env("MACHINE_RATING_ENABLED", True),
-    "pinnedFavoritesEnabled": read_bool_env("PINNED_FAVORITES_ENABLED", True),
-    "machineAutofillEnabled": read_bool_env("MACHINE_AUTOFILL_ENABLED", True),
-    "weightedMuscleProfileWorkloadEnabled": read_bool_env("WEIGHTED_MUSCLE_PROFILE_WORKLOAD_ENABLED", True),
-    "fixedOptionMachineTaxonomyEnabled": read_bool_env("FIXED_OPTION_MACHINE_TAXONOMY_ENABLED", True),
-}
+ROLLOUT_FLAGS = settings.feature_flags.rollout_flags
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if ALLOW_ALL_ORIGINS else ALLOWED_ORIGINS,
-    allow_credentials=False if ALLOW_ALL_ORIGINS else True,
+    allow_origins=["*"] if settings.allow_all_origins else settings.allowed_origins,
+    allow_credentials=False if settings.allow_all_origins else True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -84,16 +44,17 @@ app.add_middleware(
 
 def _get_jwks_client() -> PyJWKClient:
     global _jwks_client, _jwks_client_url, _last_jwks_refresh
-    if not SUPABASE_JWKS_URL:
+    jwks_url = supabase_settings.resolved_jwks_url
+    if not jwks_url:
         raise HTTPException(500, "SUPABASE_JWKS_URL or SUPABASE_URL must be configured")
     now = time.time()
     if (
         _jwks_client is None
-        or _jwks_client_url != SUPABASE_JWKS_URL
+        or _jwks_client_url != jwks_url
         or now - _last_jwks_refresh > JWKS_REFRESH_SECONDS
     ):
-        _jwks_client = PyJWKClient(SUPABASE_JWKS_URL)
-        _jwks_client_url = SUPABASE_JWKS_URL
+        _jwks_client = PyJWKClient(jwks_url)
+        _jwks_client_url = jwks_url
         _last_jwks_refresh = now
     return _jwks_client
 
@@ -109,21 +70,21 @@ def verify_auth(authorization: Optional[str]) -> str:
     decode_options = {
         "require": ["exp"],
         "verify_signature": True,
-        "verify_aud": bool(SUPABASE_JWT_AUDIENCE),
-        "verify_iss": bool(SUPABASE_JWT_ISSUER),
+        "verify_aud": bool(supabase_settings.jwt_audience),
+        "verify_iss": bool(supabase_settings.resolved_jwt_issuer),
     }
     decode_kwargs = {
         "algorithms": ["HS256"],
         "options": decode_options,
     }
-    if SUPABASE_JWT_AUDIENCE:
-        decode_kwargs["audience"] = SUPABASE_JWT_AUDIENCE
-    if SUPABASE_JWT_ISSUER:
-        decode_kwargs["issuer"] = SUPABASE_JWT_ISSUER
+    if supabase_settings.jwt_audience:
+        decode_kwargs["audience"] = supabase_settings.jwt_audience
+    if supabase_settings.resolved_jwt_issuer:
+        decode_kwargs["issuer"] = supabase_settings.resolved_jwt_issuer
 
-    if SUPABASE_JWT_SECRET:
-        payload = jwt.decode(token, SUPABASE_JWT_SECRET, **decode_kwargs)
-    elif SUPABASE_JWKS_URL:
+    if supabase_settings.jwt_secret:
+        payload = jwt.decode(token, supabase_settings.jwt_secret, **decode_kwargs)
+    elif supabase_settings.resolved_jwks_url:
         jwks_client = _get_jwks_client()
         signing_key = jwks_client.get_signing_key_from_jwt(token)
         decode_kwargs["algorithms"] = ["RS256", "ES256"]
@@ -166,18 +127,18 @@ def get_current_user_id(request: Request, authorization: str = Header(None)) -> 
 
 
 async def call_anthropic(messages: list, max_tokens: int = 1000) -> str:
-    if not ANTHROPIC_API_KEY:
+    if not settings.anthropic_api_key:
         raise HTTPException(500, "ANTHROPIC_API_KEY not configured")
     async with httpx.AsyncClient(timeout=60) as client:
         resp = await client.post(
             "https://api.anthropic.com/v1/messages",
             headers={
-                "x-api-key": ANTHROPIC_API_KEY,
+                "x-api-key": settings.anthropic_api_key,
                 "content-type": "application/json",
                 "anthropic-version": "2023-06-01",
             },
             json={
-                "model": ANTHROPIC_MODEL,
+                "model": settings.anthropic_model,
                 "max_tokens": max_tokens,
                 "messages": messages,
             },
@@ -191,13 +152,13 @@ async def call_anthropic(messages: list, max_tokens: int = 1000) -> str:
 
 
 def require_supabase_admin() -> tuple[str, str]:
-    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+    if not supabase_settings.url or not supabase_settings.service_role_key:
         raise HTTPException(500, "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be configured")
-    return SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+    return supabase_settings.url, supabase_settings.service_role_key
 
 
 def is_supabase_admin_configured() -> bool:
-    return bool(SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY)
+    return bool(supabase_settings.url and supabase_settings.service_role_key)
 
 
 async def supabase_admin_request(method: str, path: str, payload: Optional[Any] = None, params: Optional[dict] = None) -> Any:
@@ -466,7 +427,7 @@ async def get_recommendations(req: RecommendationRequest, user_id: str = Depends
             )
 
     scope, grouped_training, equipment = normalize_recommendation_request(req)
-    trimmed_training = trim_history_to_token_budget(grouped_training, MAX_HISTORY_TOKENS)
+    trimmed_training = trim_history_to_token_budget(grouped_training, settings.max_history_tokens)
 
     soreness_ctx = ""
     if req.soreness_data:
@@ -741,7 +702,7 @@ async def list_all_user_ids_with_sets(page_size: int = 1000) -> list[str]:
 
 @app.post("/api/jobs/generate-weekly-trends")
 async def generate_weekly_trends(req: WeeklyTrendJobRequest, x_cron_secret: Optional[str] = Header(None)):
-    if not CRON_SHARED_SECRET or x_cron_secret != CRON_SHARED_SECRET:
+    if not settings.cron_shared_secret or x_cron_secret != settings.cron_shared_secret:
         raise HTTPException(401, "Unauthorized")
 
     user_ids: list[str] = []
@@ -762,7 +723,7 @@ async def generate_weekly_trends(req: WeeklyTrendJobRequest, x_cron_secret: Opti
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "model": ANTHROPIC_MODEL, "rollout_flags": ROLLOUT_FLAGS}
+    return {"status": "ok", "model": settings.anthropic_model, "rollout_flags": ROLLOUT_FLAGS}
 
 
 @app.get("/api/rollout-flags")
