@@ -54,9 +54,19 @@ Use this checklist to confirm route-module behavior matches current production b
 - [ ] `App.jsx` contains no `navigateToScreen` function.
 - [ ] Navigation flow is fully route-driven (URL + router state), with no hidden screen switch fallback.
 
-## D) Sign-off
+## D) Required sign-off artifact (must be completed before merge)
 
-- QA owner:
-- Date:
-- Build/commit tested:
-- Notes / follow-ups:
+> This checklist is a required release artifact for any PR that extracts routing/state logic from `App.jsx`.
+
+- [ ] QA owner assigned: `@`
+- [ ] Sign-off date recorded: `YYYY-MM-DD`
+- [ ] Build/commit tested recorded: ``
+- [ ] Notes / follow-ups documented (or `None`)
+- [ ] Final parity recommendation selected: `GO` / `NO-GO`
+
+### Sign-off record
+
+| Role | Owner | Date | Decision | Notes |
+| --- | --- | --- | --- | --- |
+| QA | ⬜ | ⬜ | ⬜ GO / ⬜ NO-GO | ⬜ |
+| Engineering | ⬜ | ⬜ | ⬜ GO / ⬜ NO-GO | ⬜ |
