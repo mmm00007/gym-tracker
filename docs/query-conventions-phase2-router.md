@@ -9,12 +9,12 @@ Validated on this branch before starting Router work.
 | Checklist item | Status | Validation notes |
 | --- | --- | --- |
 | no `loadData` function remains | ✅ Pass | `rg -n "\bloadData\b" frontend/src backend` returns no matches in source files. |
-| no local mirror state for query-backed entities | ❌ Fail | `DiagnosticsScreen` keeps local auth session mirror state via `authInfo`/`setAuthInfo` and a direct `getSession()` effect, while auth is already query-backed elsewhere. |
+| no local mirror state for query-backed entities | ✅ Pass | `DiagnosticsScreen` now renders auth status from query-driven `user` route context; no local `getSession()` effect remains. |
 | no inline `useQueries` in `App.jsx` | ✅ Pass | `useQueries` exists only in `frontend/src/features/data/hooks/useMachineHistoryQueries.js`; no matches in `frontend/src/App.jsx`. |
 | no raw query key literals | ✅ Pass | `rg -n "queryKey\s*:\s*\[" frontend/src` finds no literal query keys in query definitions; keys are sourced from `queryKeys`. |
 | auth and feature flags are query-driven | ✅ Pass | App data composition uses `useCurrentUserQuery` and `useFeatureFlagsQuery` via `useAppData`, then consumes those query objects in `App.jsx`. |
 
-**Gate outcome:** not yet fully ready for Router migration. Resolve the diagnostics auth mirror state first so all checklist items pass.
+**Gate outcome:** ready for Router migration. Continue enforcing the guardrails below on every extracted route.
 
 ## 1) Query-key policy
 
@@ -42,6 +42,7 @@ Validated on this branch before starting Router work.
 ## 4) Route migration rules (Phase 2)
 
 - Co-locate route data needs behind feature hooks in `frontend/src/features/data/hooks/` instead of embedding queryFns directly in route files.
+- Route `beforeLoad` guards that prefetch query data (for example feature flags) should consume shared query option builders from the same hooks module so keys/defaults/queryFns stay canonical.
 - Prefer one canonical hook per resource + operation:
   - `useMachinesQuery`, `useSetsQuery`, `useRecentSorenessQuery`, `usePendingSorenessQuery`
   - mutation hooks for log/delete set and machine CRUD

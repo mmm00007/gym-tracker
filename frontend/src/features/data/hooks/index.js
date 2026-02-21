@@ -66,9 +66,13 @@ export function useCurrentUserQuery(options = {}) {
 }
 
 export function useFeatureFlagsQuery(options = {}) {
+  return useQuery(getFeatureFlagsQueryOptions(options))
+}
+
+export function getFeatureFlagsQueryOptions(options = {}) {
   const { meta, ...queryOptions } = options
 
-  return useQuery({
+  return {
     queryKey: queryKeys.featureFlags.all(),
     queryFn: async () => {
       const flags = await getFeatureFlags()
@@ -77,7 +81,7 @@ export function useFeatureFlagsQuery(options = {}) {
     ...withQueryDefaults(queryDefaults.featureFlagsAll),
     ...queryOptions,
     meta: withOperationMeta(meta, 'featureFlags.getAll'),
-  })
+  }
 }
 
 export function useMachinesQuery(userOrId, options = {}) {
