@@ -209,7 +209,37 @@ class AppSettings(BaseSettings):
             "rollout_flags": self.feature_flags_response,
         }
 
+    def validate_startup_requirements(self) -> None:
+        missing: list[str] = []
+        if not self.anthropic_api_key:
+            missing.append("ANTHROPIC_API_KEY")
+        if not self.supabase_url:
+            missing.append("SUPABASE_URL")
+        if not self.supabase_service_role_key:
+            missing.append("SUPABASE_SERVICE_ROLE_KEY")
+        if missing:
+            missing_str = ", ".join(missing)
+            raise ValueError(f"Missing required settings: {missing_str}")
+
+    def require_anthropic_api_key(self) -> str:
+        if not self.anthropic_api_key:
+            raise ValueError("Missing required settings: ANTHROPIC_API_KEY")
+        return self.anthropic_api_key
+
+    def require_supabase_admin(self) -> tuple[str, str]:
+        if not self.supabase_url or not self.supabase_service_role_key:
+            raise ValueError("Missing required settings: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY")
+        return self.supabase_url, self.supabase_service_role_key
+
+    def require_cron_shared_secret(self) -> str:
+        if not self.cron_shared_secret:
+            raise ValueError("Missing required settings: CRON_SHARED_SECRET")
+        return self.cron_shared_secret
+
 
 @lru_cache
 def get_settings() -> AppSettings:
     return AppSettings()
+
+
+settings = get_settings()

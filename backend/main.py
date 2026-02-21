@@ -15,15 +15,14 @@ import jwt
 from jwt import PyJWKClient
 from jwt.exceptions import InvalidTokenError, PyJWKClientError
 
-from schemas.forms import IdentifyRequest, RecommendationRequest, WeeklyTrendJobRequest
-from settings import get_settings
+from schemas.api import IdentifyRequest, RecommendationRequest, WeeklyTrendJobRequest
+from settings import settings
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Gym Tracker API")
 
-settings = get_settings()
 supabase_settings = settings.supabase
 
 _jwks_client: Optional[PyJWKClient] = None
@@ -38,6 +37,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+async def validate_settings_on_startup() -> None:
+    try:
+        settings.validate_startup_requirements()
+    except ValueError as exc:
+        logger.error("Startup settings validation failed: %s", str(exc))
+        raise RuntimeError(str(exc)) from exc
 
 
 def _get_jwks_client() -> PyJWKClient:
@@ -125,13 +133,11 @@ def get_current_user_id(request: Request, authorization: str = Header(None)) -> 
 
 
 async def call_anthropic(messages: list, max_tokens: int = 1000) -> str:
-    if not settings.anthropic_api_key:
-        raise HTTPException(500, "ANTHROPIC_API_KEY not configured")
     async with httpx.AsyncClient(timeout=60) as client:
         resp = await client.post(
             "https://api.anthropic.com/v1/messages",
             headers={
-                "x-api-key": settings.anthropic_api_key,
+                "x-api-key": settings.require_anthropic_api_key(),
                 "content-type": "application/json",
                 "anthropic-version": "2023-06-01",
             },
@@ -149,18 +155,15 @@ async def call_anthropic(messages: list, max_tokens: int = 1000) -> str:
     return text
 
 
-def require_supabase_admin() -> tuple[str, str]:
-    if not supabase_settings.url or not supabase_settings.service_role_key:
-        raise HTTPException(500, "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be configured")
-    return supabase_settings.url, supabase_settings.service_role_key
-
-
 def is_supabase_admin_configured() -> bool:
     return bool(supabase_settings.url and supabase_settings.service_role_key)
 
 
 async def supabase_admin_request(method: str, path: str, payload: Optional[Any] = None, params: Optional[dict] = None) -> Any:
-    base_url, service_key = require_supabase_admin()
+    try:
+        base_url, service_key = settings.require_supabase_admin()
+    except ValueError as exc:
+        raise HTTPException(500, str(exc)) from exc
     url = f"{base_url}/rest/v1/{path.lstrip('/')}"
     headers = {
         "apikey": service_key,
@@ -654,7 +657,12 @@ async def list_all_user_ids_with_sets(page_size: int = 1000) -> list[str]:
 
 @app.post("/api/jobs/generate-weekly-trends")
 async def generate_weekly_trends(req: WeeklyTrendJobRequest, x_cron_secret: Optional[str] = Header(None)):
-    if not settings.cron_shared_secret or x_cron_secret != settings.cron_shared_secret:
+    try:
+        cron_secret = settings.require_cron_shared_secret()
+    except ValueError as exc:
+        raise HTTPException(500, str(exc)) from exc
+
+    if x_cron_secret != cron_secret:
         raise HTTPException(401, "Unauthorized")
 
     user_ids: list[str] = []
